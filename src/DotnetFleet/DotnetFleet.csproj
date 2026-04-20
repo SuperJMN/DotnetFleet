@@ -18,6 +18,7 @@
     <PackageReference Include="ReactiveUI.SourceGenerators" />
     <PackageReference Include="DynamicData" />
     <PackageReference Include="Zafiro.Avalonia" />
+    <PackageReference Include="Zafiro.Avalonia.Generators" />
     <PackageReference Include="Zafiro.Avalonia.Dialogs" />
     <PackageReference Include="CSharpFunctionalExtensions" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />

@@ -1,7 +1,5 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:views="clr-namespace:DotnetFleet.Views"
-             xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
              x:Class="DotnetFleet.App"
              RequestedThemeVariant="Dark">
 
@@ -11,30 +9,7 @@
     </Application.Styles>
 
     <Application.DataTemplates>
-        <DataTemplate DataType="vm:ConnectViewModel">
-            <views:ConnectView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:LoginViewModel">
-            <views:LoginView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:MainViewModel">
-            <views:MainView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:ProjectsViewModel">
-            <views:ProjectsView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:AddProjectViewModel">
-            <views:AddProjectView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:ProjectDetailViewModel">
-            <views:ProjectDetailView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:JobDetailViewModel">
-            <views:JobDetailView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:WorkersViewModel">
-            <views:WorkersView />
-        </DataTemplate>
+        <DataTypeViewLocator />
     </Application.DataTemplates>
 
 </Application>
