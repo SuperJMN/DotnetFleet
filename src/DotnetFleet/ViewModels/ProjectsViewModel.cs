@@ -71,15 +71,23 @@ public partial class ProjectViewModel : ReactiveObject
         _parent = parent;
 
         OpenCommand = ReactiveCommand.Create(Open);
+        EditCommand = ReactiveCommand.Create(Edit);
         DeleteCommand = ReactiveCommand.CreateFromTask(DeleteAsync);
     }
 
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> OpenCommand { get; }
+    public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> EditCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> DeleteCommand { get; }
 
     private void Open()
     {
         var vm = new ProjectDetailViewModel(Project, _client, _main);
+        _main.NavigateTo(vm);
+    }
+
+    private void Edit()
+    {
+        var vm = new EditProjectViewModel(Project, _client, _main, _parent);
         _main.NavigateTo(vm);
     }
 

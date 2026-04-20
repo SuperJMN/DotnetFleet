@@ -7,7 +7,7 @@
     <DockPanel Margin="16">
 
         <!-- Header -->
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,16">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,0,0,16">
             <Button Grid.Column="0" Content="← Back" Command="{Binding BackCommand}" Margin="0,0,12,0" />
             <StackPanel Grid.Column="1" Spacing="2">
                 <TextBlock Text="{Binding Project.Name}" FontSize="20" FontWeight="Bold" />
@@ -17,8 +17,9 @@
                     <Run Text="{Binding Project.Branch}" />
                 </TextBlock>
             </StackPanel>
-            <Button Grid.Column="2" Content="↺" Command="{Binding RefreshCommand}" Margin="0,0,8,0" />
-            <Button Grid.Column="3" Content="🚀 Deploy Now" Command="{Binding DeployCommand}" />
+            <Button Grid.Column="2" Content="✏ Edit" Command="{Binding EditCommand}" Margin="0,0,8,0" />
+            <Button Grid.Column="3" Content="↺" Command="{Binding RefreshCommand}" Margin="0,0,8,0" />
+            <Button Grid.Column="4" Content="🚀 Deploy Now" Command="{Binding DeployCommand}" />
         </Grid>
 
         <TextBlock DockPanel.Dock="Top" Text="{Binding Error}"

@@ -90,18 +90,18 @@ public class FleetApiClient
     public async Task<List<Project>> GetProjectsAsync() =>
         await http.GetFromJsonAsync<List<Project>>("/api/projects", JsonOptions) ?? [];
 
-    public async Task<Project> CreateProjectAsync(string name, string gitUrl, string branch, int pollingIntervalMinutes = 0)
+    public async Task<Project> CreateProjectAsync(string name, string gitUrl, string branch, int pollingIntervalMinutes = 0, string? gitToken = null)
     {
         var response = await http.PostAsJsonAsync("/api/projects",
-            new { name, gitUrl, branch, pollingIntervalMinutes }, JsonOptions);
+            new { name, gitUrl, branch, pollingIntervalMinutes, gitToken }, JsonOptions);
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<Project>(JsonOptions))!;
     }
 
-    public async Task UpdateProjectAsync(Guid id, string? name = null, string? gitUrl = null, string? branch = null, int? pollingIntervalMinutes = null)
+    public async Task UpdateProjectAsync(Guid id, string? name = null, string? gitUrl = null, string? branch = null, int? pollingIntervalMinutes = null, string? gitToken = null)
     {
         var response = await http.PutAsJsonAsync($"/api/projects/{id}",
-            new { name, gitUrl, branch, pollingIntervalMinutes }, JsonOptions);
+            new { name, gitUrl, branch, pollingIntervalMinutes, gitToken }, JsonOptions);
         response.EnsureSuccessStatusCode();
     }
 

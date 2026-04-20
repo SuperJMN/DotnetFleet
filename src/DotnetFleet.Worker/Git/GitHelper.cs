@@ -14,13 +14,21 @@ public static class GitHelper
         string branch,
         string localPath,
         Func<string, Task> log,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? gitToken = null)
     {
+        var effectiveUrl = InjectToken(gitUrl, gitToken);
+        var displayUrl = gitUrl;
+
         bool isValidRepo = Directory.Exists(Path.Combine(localPath, ".git"));
 
         if (isValidRepo)
         {
-            await log($"Fetching updates for {gitUrl} → {localPath}");
+            await log($"Fetching updates for {displayUrl} → {localPath}");
+
+            if (!string.Equals(effectiveUrl, gitUrl, StringComparison.Ordinal))
+                await RunGitAsync(["remote", "set-url", "origin", effectiveUrl], localPath, log, ct);
+
             await RunGitAsync(["fetch", "--all", "--tags", "--recurse-submodules", "--prune"], localPath, log, ct);
             await RunGitAsync(["checkout", branch], localPath, log, ct);
             await RunGitAsync(["reset", "--hard", $"origin/{branch}"], localPath, log, ct);
@@ -28,7 +36,7 @@ public static class GitHelper
         }
         else
         {
-            await log($"Cloning {gitUrl} → {localPath}");
+            await log($"Cloning {displayUrl} → {localPath}");
 
             if (Directory.Exists(localPath))
                 Directory.Delete(localPath, recursive: true);
@@ -36,7 +44,7 @@ public static class GitHelper
 
             // Full history clone (no --depth) so GitVersion works; recurse submodules
             await RunGitAsync(
-                ["clone", "--recurse-submodules", "--branch", branch, gitUrl, localPath],
+                ["clone", "--recurse-submodules", "--branch", branch, effectiveUrl, localPath],
                 workingDir: null,
                 log, ct);
 
@@ -45,6 +53,27 @@ public static class GitHelper
             // Fetch all tags for GitVersion
             await RunGitAsync(["fetch", "--all", "--tags"], localPath, log, ct);
         }
+    }
+
+    /// <summary>
+    /// Injects a token into an HTTPS git URL so that <c>git</c> can authenticate
+    /// against private repositories (GitHub / GitLab / Bitbucket / Azure DevOps).
+    /// SSH and other schemes are returned unchanged.
+    /// </summary>
+    public static string InjectToken(string gitUrl, string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return gitUrl;
+        if (!Uri.TryCreate(gitUrl, UriKind.Absolute, out var uri)) return gitUrl;
+        if (uri.Scheme is not ("http" or "https")) return gitUrl;
+        if (!string.IsNullOrEmpty(uri.UserInfo)) return gitUrl;
+
+        var encoded = Uri.EscapeDataString(token);
+        var builder = new UriBuilder(uri)
+        {
+            UserName = "x-access-token",
+            Password = encoded
+        };
+        return builder.Uri.ToString();
     }
 
     /// <summary>Calculates the total size of a directory in bytes.</summary>

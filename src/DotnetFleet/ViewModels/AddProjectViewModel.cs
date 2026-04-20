@@ -15,6 +15,7 @@ public partial class AddProjectViewModel : ReactiveObject
     [Reactive] private string _gitUrl = string.Empty;
     [Reactive] private string _branch = "main";
     [Reactive] private string _pollingInterval = "0";
+    [Reactive] private string _gitToken = string.Empty;
     [Reactive] private string? _error;
     [Reactive] private bool _isBusy;
 
@@ -44,7 +45,8 @@ public partial class AddProjectViewModel : ReactiveObject
         try
         {
             int polling = int.TryParse(PollingInterval, out var p) ? p : 0;
-            await _client.CreateProjectAsync(Name, GitUrl, Branch, polling);
+            var token = string.IsNullOrWhiteSpace(GitToken) ? null : GitToken;
+            await _client.CreateProjectAsync(Name, GitUrl, Branch, polling, token);
             _projects.RefreshCommand.Execute(Unit.Default).Subscribe();
             _main.NavigateTo(_projects);
         }

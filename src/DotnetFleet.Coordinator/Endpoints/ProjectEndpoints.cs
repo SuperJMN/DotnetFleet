@@ -38,7 +38,8 @@ public static class ProjectEndpoints
             Name = req.Name,
             GitUrl = req.GitUrl,
             Branch = req.Branch,
-            PollingIntervalMinutes = req.PollingIntervalMinutes
+            PollingIntervalMinutes = req.PollingIntervalMinutes,
+            GitToken = string.IsNullOrWhiteSpace(req.GitToken) ? null : req.GitToken
         };
 
         await storage.AddProjectAsync(project);
@@ -56,6 +57,8 @@ public static class ProjectEndpoints
         project.Branch = req.Branch ?? project.Branch;
         if (req.PollingIntervalMinutes.HasValue)
             project.PollingIntervalMinutes = req.PollingIntervalMinutes.Value;
+        if (req.GitToken is not null)
+            project.GitToken = string.IsNullOrWhiteSpace(req.GitToken) ? null : req.GitToken;
 
         await storage.UpdateProjectAsync(project);
         return Results.Ok(project);
@@ -89,6 +92,6 @@ public static class ProjectEndpoints
         return Results.Ok(jobs);
     }
 
-    public record CreateProjectRequest(string Name, string GitUrl, string Branch = "main", int PollingIntervalMinutes = 0);
-    public record UpdateProjectRequest(string? Name, string? GitUrl, string? Branch, int? PollingIntervalMinutes);
+    public record CreateProjectRequest(string Name, string GitUrl, string Branch = "main", int PollingIntervalMinutes = 0, string? GitToken = null);
+    public record UpdateProjectRequest(string? Name, string? GitUrl, string? Branch, int? PollingIntervalMinutes, string? GitToken = null);
 }

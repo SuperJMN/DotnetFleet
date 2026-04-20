@@ -31,6 +31,11 @@ public partial class ProjectDetailViewModel : ReactiveObject
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadJobsAsync);
         DeployCommand = ReactiveCommand.CreateFromTask(DeployAsync);
         BackCommand = ReactiveCommand.Create(() => _main.NavigateTo(_main.Projects));
+        EditCommand = ReactiveCommand.Create(() =>
+        {
+            var vm = new EditProjectViewModel(Project, _client, _main, _main.Projects);
+            _main.NavigateTo(vm);
+        });
 
         RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         DeployCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
@@ -40,6 +45,7 @@ public partial class ProjectDetailViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> DeployCommand { get; }
     public ReactiveCommand<Unit, Unit> BackCommand { get; }
+    public ReactiveCommand<Unit, Unit> EditCommand { get; }
 
     private async Task LoadJobsAsync()
     {

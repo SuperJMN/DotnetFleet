@@ -1,13 +1,13 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
-             x:Class="DotnetFleet.Views.AddProjectView"
-             x:DataType="vm:AddProjectViewModel">
+             x:Class="DotnetFleet.Views.EditProjectView"
+             x:DataType="vm:EditProjectViewModel">
 
     <Grid RowDefinitions="*,Auto,*" HorizontalAlignment="Center" VerticalAlignment="Center" Width="480">
         <StackPanel Grid.Row="1" Spacing="16">
 
-            <TextBlock Text="Add Project" FontSize="22" FontWeight="Bold" />
+            <TextBlock Text="Edit Project" FontSize="22" FontWeight="Bold" />
 
             <StackPanel Spacing="4">
                 <TextBlock Text="Name" Opacity="0.7" FontSize="12" />
@@ -33,10 +33,18 @@
 
             <StackPanel Spacing="4">
                 <TextBlock Text="Access token (optional, for private HTTPS repos)" Opacity="0.7" FontSize="12" />
-                <TextBox Text="{Binding GitToken}"
-                         PasswordChar="●"
-                         PlaceholderText="Personal access token"
-                         IsEnabled="{Binding !IsBusy}" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Grid.Column="0" Text="{Binding GitToken}"
+                             PasswordChar="●"
+                             PlaceholderText="Personal access token"
+                             IsEnabled="{Binding !IsBusy}" />
+                    <Button Grid.Column="1" Content="Clear"
+                            Command="{Binding ClearTokenCommand}"
+                            IsEnabled="{Binding !IsBusy}"
+                            Margin="4,0,0,0" />
+                </Grid>
+                <TextBlock Text="Leave the field unchanged to keep the existing token. Clear it to remove."
+                           Opacity="0.5" FontSize="11" TextWrapping="Wrap" />
             </StackPanel>
 
             <TextBlock Text="{Binding Error}"

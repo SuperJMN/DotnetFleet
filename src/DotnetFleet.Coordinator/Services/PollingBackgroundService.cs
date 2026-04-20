@@ -63,7 +63,7 @@ public class PollingBackgroundService : BackgroundService
     {
         logger.LogDebug("Polling project {Name} ({Branch})", project.Name, project.Branch);
 
-        var latestSha = await GetLatestCommitShaAsync(project.GitUrl, project.Branch, ct);
+        var latestSha = await GetLatestCommitShaAsync(project.GitUrl, project.Branch, project.GitToken, ct);
 
         project.LastPolledAt = DateTimeOffset.UtcNow;
 
@@ -95,16 +95,22 @@ public class PollingBackgroundService : BackgroundService
         await storage.UpdateProjectAsync(project, ct);
     }
 
-    private async Task<string?> GetLatestCommitShaAsync(string gitUrl, string branch, CancellationToken ct)
+    private async Task<string?> GetLatestCommitShaAsync(string gitUrl, string branch, string? gitToken, CancellationToken ct)
     {
         try
         {
-            var psi = new ProcessStartInfo("git", $"ls-remote --heads {gitUrl} refs/heads/{branch}")
+            var effectiveUrl = InjectToken(gitUrl, gitToken);
+
+            var psi = new ProcessStartInfo("git")
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false
             };
+            psi.ArgumentList.Add("ls-remote");
+            psi.ArgumentList.Add("--heads");
+            psi.ArgumentList.Add(effectiveUrl);
+            psi.ArgumentList.Add($"refs/heads/{branch}");
 
             using var process = Process.Start(psi);
             if (process is null) return null;
@@ -121,5 +127,21 @@ public class PollingBackgroundService : BackgroundService
             logger.LogDebug(ex, "git ls-remote failed for {Url}", gitUrl);
             return null;
         }
+    }
+
+    private static string InjectToken(string gitUrl, string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return gitUrl;
+        if (!Uri.TryCreate(gitUrl, UriKind.Absolute, out var uri)) return gitUrl;
+        if (uri.Scheme is not ("http" or "https")) return gitUrl;
+        if (!string.IsNullOrEmpty(uri.UserInfo)) return gitUrl;
+
+        var encoded = Uri.EscapeDataString(token);
+        var builder = new UriBuilder(uri)
+        {
+            UserName = "x-access-token",
+            Password = encoded
+        };
+        return builder.Uri.ToString();
     }
 }

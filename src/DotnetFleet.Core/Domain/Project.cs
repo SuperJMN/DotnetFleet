@@ -7,6 +7,12 @@ public class Project
     public string GitUrl { get; set; } = "";
     public string Branch { get; set; } = "main";
 
+    /// <summary>
+    /// Optional access token for HTTPS git operations against private repositories.
+    /// Injected as the password in <c>https://x-access-token:{token}@host/...</c> when present.
+    /// </summary>
+    public string? GitToken { get; set; }
+
     /// <summary>Minutes between automatic polling checks. 0 = disabled.</summary>
     public int PollingIntervalMinutes { get; set; } = 0;
 

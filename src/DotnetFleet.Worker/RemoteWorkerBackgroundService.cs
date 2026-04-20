@@ -135,7 +135,7 @@ public class RemoteWorkerBackgroundService : BackgroundService
             await Log($"Git URL: {project.GitUrl}");
 
             await GitHelper.CloneOrFetchAsync(project.GitUrl, project.Branch, localPath,
-                msg => logBuffer.AppendAsync(msg), ct);
+                msg => logBuffer.AppendAsync(msg), ct, project.GitToken);
             await logBuffer.FlushAsync();
 
             var cacheSize = GitHelper.GetDirectorySize(localPath);
