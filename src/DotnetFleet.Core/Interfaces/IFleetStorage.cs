@@ -45,4 +45,12 @@ public interface IFleetStorage
     Task UpdateUserAsync(User user, CancellationToken ct = default);
     Task DeleteUserAsync(Guid id, CancellationToken ct = default);
     Task<bool> AnyUserExistsAsync(CancellationToken ct = default);
+
+    // Secrets
+    /// <summary>Returns global secrets when <paramref name="projectId"/> is null, or project-scoped secrets otherwise.</summary>
+    Task<IReadOnlyList<Secret>> GetSecretsAsync(Guid? projectId, CancellationToken ct = default);
+    Task<Secret?> GetSecretAsync(Guid id, CancellationToken ct = default);
+    Task AddSecretAsync(Secret secret, CancellationToken ct = default);
+    Task UpdateSecretAsync(Secret secret, CancellationToken ct = default);
+    Task DeleteSecretAsync(Guid id, CancellationToken ct = default);
 }

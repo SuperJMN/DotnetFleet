@@ -12,6 +12,7 @@ public class FleetDbContext : DbContext
     public DbSet<RepoCache> RepoCaches => Set<RepoCache>();
     public DbSet<LogEntry> LogEntries => Set<LogEntry>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<Secret> Secrets => Set<Secret>();
 
     public FleetDbContext(DbContextOptions<FleetDbContext> options) : base(options) { }
 
@@ -63,6 +64,13 @@ public class FleetDbContext : DbContext
         {
             e.HasKey(u => u.Id);
             e.HasIndex(u => u.Username).IsUnique();
+        });
+
+        modelBuilder.Entity<Secret>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.HasIndex(s => s.ProjectId);
+            e.HasIndex(s => new { s.ProjectId, s.Name }).IsUnique();
         });
     }
 }

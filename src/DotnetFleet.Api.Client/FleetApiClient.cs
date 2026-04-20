@@ -140,4 +140,52 @@ public class FleetApiClient
         DateTimeOffset? LastSeenAt,
         double MaxDiskUsageGb,
         string? RepoStoragePath);
+
+    // ── Secrets ───────────────────────────────────────────────────────────────
+
+    public async Task<List<Secret>> GetSecretsAsync() =>
+        await http.GetFromJsonAsync<List<Secret>>("/api/secrets", JsonOptions) ?? [];
+
+    public async Task<Secret> CreateSecretAsync(string name, string value)
+    {
+        var response = await http.PostAsJsonAsync("/api/secrets", new { name, value }, JsonOptions);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<Secret>(JsonOptions))!;
+    }
+
+    public async Task UpdateSecretAsync(Guid id, string name, string value)
+    {
+        var response = await http.PutAsJsonAsync($"/api/secrets/{id}", new { name, value }, JsonOptions);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteSecretAsync(Guid id)
+    {
+        var response = await http.DeleteAsync($"/api/secrets/{id}");
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<List<Secret>> GetProjectSecretsAsync(Guid projectId) =>
+        await http.GetFromJsonAsync<List<Secret>>($"/api/projects/{projectId}/secrets", JsonOptions) ?? [];
+
+    public async Task<Secret> CreateProjectSecretAsync(Guid projectId, string name, string value)
+    {
+        var response = await http.PostAsJsonAsync($"/api/projects/{projectId}/secrets",
+            new { name, value }, JsonOptions);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<Secret>(JsonOptions))!;
+    }
+
+    public async Task UpdateProjectSecretAsync(Guid projectId, Guid secretId, string name, string value)
+    {
+        var response = await http.PutAsJsonAsync($"/api/projects/{projectId}/secrets/{secretId}",
+            new { name, value }, JsonOptions);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteProjectSecretAsync(Guid projectId, Guid secretId)
+    {
+        var response = await http.DeleteAsync($"/api/projects/{projectId}/secrets/{secretId}");
+        response.EnsureSuccessStatusCode();
+    }
 }

@@ -85,6 +85,23 @@ try
         await using var db = await dbFactory.CreateDbContextAsync();
         await db.Database.EnsureCreatedAsync();
 
+        // Ensure Secrets table exists for databases created before this feature was added.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "Secrets" (
+                "Id"        TEXT NOT NULL CONSTRAINT "PK_Secrets" PRIMARY KEY,
+                "Name"      TEXT NOT NULL,
+                "Value"     TEXT NOT NULL,
+                "ProjectId" TEXT,
+                "CreatedAt" INTEGER NOT NULL,
+                "UpdatedAt" INTEGER NOT NULL
+            )
+            """);
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS \"IX_Secrets_ProjectId\" ON \"Secrets\" (\"ProjectId\")");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Secrets_ProjectId_Name\" ON \"Secrets\" (\"ProjectId\", \"Name\")");
+
+
         var storage = app.Services.GetRequiredService<IFleetStorage>();
         if (!await storage.AnyUserExistsAsync())
         {
@@ -133,6 +150,7 @@ try
     app.MapProjectEndpoints();
     app.MapJobEndpoints();
     app.MapWorkerEndpoints();
+    app.MapSecretEndpoints();
 
     await app.RunAsync();
 }

@@ -162,6 +162,16 @@ public class WorkerBackgroundService : BackgroundService
 
             // Run deployer
             await Log("=== Invoking DotnetDeployer ===");
+
+            // Load secrets: globals first, then project-specific (project wins on collision)
+            var globalSecrets = await storage.GetSecretsAsync(null, ct);
+            var projectSecrets = await storage.GetSecretsAsync(project.Id, ct);
+
+            var envVars = globalSecrets
+                .Concat(projectSecrets)
+                .GroupBy(s => s.Name)
+                .ToDictionary(g => g.Key, g => g.Last().Value);
+
             var (success, error) = await DeployerRunner.RunAsync(
                 localPath,
                 onLine: async line =>
@@ -170,6 +180,7 @@ public class WorkerBackgroundService : BackgroundService
                     if (logBuffer.Count >= 20)
                         await FlushLogs();
                 },
+                envVars: envVars,
                 ct);
 
             await FlushLogs();

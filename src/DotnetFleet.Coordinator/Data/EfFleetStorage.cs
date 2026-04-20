@@ -230,4 +230,46 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory) : IFleetS
         await using var db = await factory.CreateDbContextAsync(ct);
         return await db.Users.AnyAsync(ct);
     }
+
+    // Secrets
+    public async Task<IReadOnlyList<Secret>> GetSecretsAsync(Guid? projectId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.Secrets
+            .Where(s => s.ProjectId == projectId)
+            .OrderBy(s => s.Name)
+            .ToListAsync(ct);
+    }
+
+    public async Task<Secret?> GetSecretAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.Secrets.FindAsync([id], ct);
+    }
+
+    public async Task AddSecretAsync(Secret secret, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        db.Secrets.Add(secret);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateSecretAsync(Secret secret, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        db.Secrets.Update(secret);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteSecretAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var s = await db.Secrets.FindAsync([id], ct);
+        if (s != null)
+        {
+            db.Secrets.Remove(s);
+            await db.SaveChangesAsync(ct);
+        }
+    }
 }
+

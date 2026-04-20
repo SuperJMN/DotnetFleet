@@ -21,6 +21,9 @@
                     <Button Content="Workers"
                             Command="{Binding SelectWorkersCommand}"
                             Classes="tab" />
+                    <Button Content="Secrets"
+                            Command="{Binding SelectSecretsCommand}"
+                            Classes="tab" />
                 </StackPanel>
                 <Button Grid.Column="2" Content="Sign out"
                         Command="{Binding LogoutCommand}"

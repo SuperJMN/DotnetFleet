@@ -13,6 +13,7 @@ public partial class ProjectDetailViewModel : ReactiveObject
     private readonly MainViewModel _main;
 
     public Project Project { get; }
+    public ProjectSecretsViewModel ProjectSecrets { get; }
 
     [Reactive] private bool _isLoading;
     [Reactive] private string? _error;
@@ -24,6 +25,8 @@ public partial class ProjectDetailViewModel : ReactiveObject
         Project = project;
         _client = client;
         _main = main;
+
+        ProjectSecrets = new ProjectSecretsViewModel(project.Id, client);
 
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadJobsAsync);
         DeployCommand = ReactiveCommand.CreateFromTask(DeployAsync);

@@ -14,6 +14,7 @@ public partial class MainViewModel : ReactiveObject
 
     public ProjectsViewModel Projects { get; }
     public WorkersViewModel Workers { get; }
+    public SecretsViewModel Secrets { get; }
 
     public MainViewModel(FleetApiClient client, ISettingsService settings, AppViewModel app)
     {
@@ -23,17 +24,20 @@ public partial class MainViewModel : ReactiveObject
 
         Projects = new ProjectsViewModel(client, this);
         Workers = new WorkersViewModel(client);
+        Secrets = new SecretsViewModel(client);
 
         CurrentContent = Projects;
 
         LogoutCommand = ReactiveCommand.Create(Logout);
         SelectProjectsCommand = ReactiveCommand.Create(() => NavigateTo(Projects));
         SelectWorkersCommand = ReactiveCommand.Create(() => NavigateTo(Workers));
+        SelectSecretsCommand = ReactiveCommand.Create(() => NavigateTo(Secrets));
     }
 
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> LogoutCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> SelectProjectsCommand { get; }
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> SelectWorkersCommand { get; }
+    public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> SelectSecretsCommand { get; }
 
     public void NavigateTo(object viewModel) => CurrentContent = viewModel;
 
