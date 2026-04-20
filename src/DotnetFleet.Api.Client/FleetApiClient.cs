@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DotnetFleet.Core.Domain;
@@ -15,25 +17,60 @@ public class FleetApiClient
     };
 
     private readonly HttpClient http;
+    // Long-lived streams (SSE) need an HttpClient with no Timeout, since HttpClient.Timeout
+    // covers the entire response — including body reads — even with ResponseHeadersRead.
+    private readonly HttpClient streamingHttp;
+    private readonly BehaviorSubject<Uri?> _baseAddressSubject;
     private string? token;
 
-    public FleetApiClient(HttpClient http) => this.http = http;
+    public FleetApiClient(HttpClient http, HttpClient streamingHttp)
+        : this(http, streamingHttp, Observable.Empty<System.Reactive.Unit>())
+    {
+    }
+
+    public FleetApiClient(HttpClient http, HttpClient streamingHttp, IObservable<System.Reactive.Unit> unauthorizedSignal)
+    {
+        this.http = http;
+        this.streamingHttp = streamingHttp;
+        _baseAddressSubject = new BehaviorSubject<Uri?>(http.BaseAddress);
+        Unauthorized = unauthorizedSignal;
+    }
+
+    /// <summary>
+    /// Emits whenever the server rejects a request with 401 Unauthorized — meaning the
+    /// stored token is no longer valid (expired, signed with a different secret, etc.).
+    /// Subscribers should clear any persisted token and return to the login screen.
+    /// </summary>
+    public IObservable<System.Reactive.Unit> Unauthorized { get; }
+
+    public Uri? BaseAddress => http.BaseAddress;
+
+    /// <summary>
+    /// Emits whenever <see cref="BaseAddress"/> changes (and once on subscribe with the current value).
+    /// </summary>
+    public IObservable<Uri?> BaseAddressChanges => _baseAddressSubject.AsObservable();
 
     public void SetBaseAddress(string baseUrl)
     {
-        http.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+        var uri = new Uri(baseUrl.TrimEnd('/') + "/");
+        http.BaseAddress = uri;
+        streamingHttp.BaseAddress = uri;
+        _baseAddressSubject.OnNext(uri);
     }
 
     public void SetToken(string jwt)
     {
         token = jwt;
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwt);
+        var auth = new AuthenticationHeaderValue("Bearer", jwt);
+        http.DefaultRequestHeaders.Authorization = auth;
+        streamingHttp.DefaultRequestHeaders.Authorization = auth;
     }
 
     public void ClearToken()
     {
         token = null;
         http.DefaultRequestHeaders.Authorization = null;
+        streamingHttp.DefaultRequestHeaders.Authorization = null;
     }
 
     public bool IsAuthenticated => token is not null;
@@ -100,22 +137,36 @@ public class FleetApiClient
         Guid jobId,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
-        using var response = await http.GetAsync($"/api/jobs/{jobId}/logs",
+        // Use the dedicated streamingHttp (no Timeout) so the SSE connection stays open.
+        using var response = await streamingHttp.GetAsync($"/api/jobs/{jobId}/logs",
             HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
 
-        using var stream = await response.Content.ReadAsStreamAsync(ct);
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var reader = new System.IO.StreamReader(stream);
 
-        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        while (!ct.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync(ct);
             if (line is null) break;
 
-            // SSE data lines start with "data: "
+            // SSE: skip comment/keep-alive lines (start with ':') and blank separators
+            if (line.Length == 0 || line[0] == ':') continue;
+
             if (line.StartsWith("data: "))
                 yield return line[6..];
         }
+    }
+
+    /// <summary>
+    /// Sends a request bypassing <c>HttpClient.Timeout</c> so the response body can be streamed indefinitely.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendStreamingAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        // Linking with a CTS that we never cancel effectively disables the per-call timeout.
+        var noTimeoutCts = new CancellationTokenSource();
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, noTimeoutCts.Token);
+        return await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linked.Token);
     }
 
     // ── Workers ───────────────────────────────────────────────────────────────

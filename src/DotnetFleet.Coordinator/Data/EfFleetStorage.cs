@@ -85,13 +85,30 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory) : IFleetS
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<DeploymentJob?> DequeueNextJobAsync(CancellationToken ct = default)
+    public async Task<DeploymentJob?> ClaimNextJobAsync(Guid workerId, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.DeploymentJobs
+        // Serializable on Microsoft.Data.Sqlite maps to BEGIN IMMEDIATE, which acquires the
+        // write lock up-front. This serializes concurrent claims so the SELECT+UPDATE pair
+        // behaves atomically across workers.
+        await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
+
+        var job = await db.DeploymentJobs
             .Where(j => j.Status == JobStatus.Queued)
             .OrderBy(j => j.EnqueuedAt)
             .FirstOrDefaultAsync(ct);
+
+        if (job is null)
+        {
+            await tx.CommitAsync(ct);
+            return null;
+        }
+
+        job.Status = JobStatus.Assigned;
+        job.WorkerId = workerId;
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return job;
     }
 
     // Logs

@@ -18,8 +18,13 @@ public interface IFleetStorage
     Task AddJobAsync(DeploymentJob job, CancellationToken ct = default);
     Task UpdateJobAsync(DeploymentJob job, CancellationToken ct = default);
 
-    /// <summary>Returns the oldest Queued job that has not been assigned yet, or null.</summary>
-    Task<DeploymentJob?> DequeueNextJobAsync(CancellationToken ct = default);
+    /// <summary>
+    /// Atomically claims the oldest Queued job for the given worker.
+    /// Transitions the job to <see cref="JobStatus.Assigned"/> and sets <c>WorkerId</c> in a single
+    /// serialized transaction so concurrent workers cannot pick the same job.
+    /// Returns the claimed job, or null if none was available.
+    /// </summary>
+    Task<DeploymentJob?> ClaimNextJobAsync(Guid workerId, CancellationToken ct = default);
 
     // Logs
     Task<IReadOnlyList<LogEntry>> GetLogsAsync(Guid jobId, CancellationToken ct = default);

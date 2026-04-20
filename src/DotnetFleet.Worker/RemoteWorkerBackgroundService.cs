@@ -1,60 +1,65 @@
 using DotnetFleet.Core.Domain;
 using DotnetFleet.Core.Interfaces;
+using DotnetFleet.WorkerService.Coordinator;
 using DotnetFleet.WorkerService.Execution;
 using DotnetFleet.WorkerService.Git;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace DotnetFleet.WorkerService;
 
 /// <summary>
-/// Background service that polls for deployment jobs and executes them.
-/// Can run embedded inside the Coordinator or as a standalone process.
+/// Standalone worker host loop:
+///   - heartbeats the coordinator
+///   - polls for the next assigned job
+///   - clones/fetches the repo, runs DotnetDeployer, streams logs and final status
+///   - reports cached repos and evicts old ones to respect the disk budget
+/// All coordinator interaction goes through HTTP — there is no shared DB.
 /// </summary>
-public class WorkerBackgroundService : BackgroundService
+public class RemoteWorkerBackgroundService : BackgroundService
 {
     private readonly IWorkerJobSource jobSource;
-    private readonly IFleetStorage storage;
-    private readonly IConfiguration config;
-    private readonly ILogger<WorkerBackgroundService> logger;
+    private readonly IWorkerCoordinatorClient coordinator;
+    private readonly WorkerOptions options;
+    private readonly ILogger<RemoteWorkerBackgroundService> logger;
 
     private Guid workerId;
     private string repoStoragePath = "fleet-repos";
-    private TimeSpan heartbeatInterval;
-    private TimeSpan pollInterval;
 
-    public WorkerBackgroundService(
+    public RemoteWorkerBackgroundService(
         IWorkerJobSource jobSource,
-        IFleetStorage storage,
-        IConfiguration config,
-        ILogger<WorkerBackgroundService> logger)
+        IWorkerCoordinatorClient coordinator,
+        IOptions<WorkerOptions> options,
+        ILogger<RemoteWorkerBackgroundService> logger)
     {
         this.jobSource = jobSource;
-        this.storage = storage;
-        this.config = config;
+        this.coordinator = coordinator;
+        this.options = options.Value;
         this.logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        heartbeatInterval = TimeSpan.FromSeconds(
-            config.GetValue("Worker:HeartbeatIntervalSeconds", 30));
-        pollInterval = TimeSpan.FromSeconds(
-            config.GetValue("Worker:PollIntervalSeconds", 10));
-        repoStoragePath = config["Worker:RepoStoragePath"] ?? "fleet-repos";
-
-        if (!Guid.TryParse(config["Worker:EmbeddedWorkerId"], out workerId))
+        if (this.options.Id is not { } id)
         {
-            logger.LogWarning("Worker:EmbeddedWorkerId not configured; worker will not execute jobs.");
+            logger.LogError("Worker has no Id assigned. Bootstrap should have populated it.");
             return;
         }
-
+        workerId = id;
+        repoStoragePath = this.options.RepoStoragePath;
         Directory.CreateDirectory(repoStoragePath);
-        logger.LogInformation("Worker {Id} started. Repos stored in {Path}", workerId, repoStoragePath);
 
-        using var heartbeatTimer = new PeriodicTimer(heartbeatInterval);
-        using var pollTimer = new PeriodicTimer(pollInterval);
+        logger.LogInformation(
+            "Worker {Id} started. Coordinator: {Url}. Repos: {Path}",
+            workerId, this.options.CoordinatorBaseUrl, repoStoragePath);
+
+        // Initial registration of self with the coordinator (status=Online).
+        try { await coordinator.UpdateStatusAsync(workerId, WorkerStatus.Online, stoppingToken); }
+        catch (Exception ex) { logger.LogWarning(ex, "Initial status announce failed."); }
+
+        using var heartbeatTimer = new PeriodicTimer(TimeSpan.FromSeconds(this.options.HeartbeatIntervalSeconds));
+        using var pollTimer = new PeriodicTimer(TimeSpan.FromSeconds(this.options.PollIntervalSeconds));
 
         var heartbeatTask = HeartbeatLoopAsync(heartbeatTimer, stoppingToken);
         var pollTask = PollLoopAsync(pollTimer, stoppingToken);
@@ -68,12 +73,7 @@ public class WorkerBackgroundService : BackgroundService
         {
             try
             {
-                var worker = await storage.GetWorkerAsync(workerId, ct);
-                if (worker is null) continue;
-                worker.LastSeenAt = DateTimeOffset.UtcNow;
-                if (worker.Status == WorkerStatus.Offline)
-                    worker.Status = WorkerStatus.Online;
-                await storage.UpdateWorkerAsync(worker, ct);
+                await coordinator.SendHeartbeatAsync(workerId, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -90,7 +90,6 @@ public class WorkerBackgroundService : BackgroundService
             {
                 var job = await jobSource.GetNextJobAsync(workerId, ct);
                 if (job is null) continue;
-
                 await ExecuteJobAsync(job, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -107,7 +106,7 @@ public class WorkerBackgroundService : BackgroundService
         await SetWorkerBusy(true, ct);
         await jobSource.ReportJobStartedAsync(job.Id, workerId, ct);
 
-        var project = await storage.GetProjectAsync(job.ProjectId, ct);
+        var project = await coordinator.GetProjectAsync(job.ProjectId, ct);
         if (project is null)
         {
             await jobSource.ReportJobCompletedAsync(job.Id, false, "Project not found", ct);
@@ -115,26 +114,18 @@ public class WorkerBackgroundService : BackgroundService
             return;
         }
 
-        // Manage disk space before cloning
         await ManageDiskSpaceAsync(ct);
 
         var localPath = Path.Combine(repoStoragePath, SanitizeName(project.Name));
 
-        var logBuffer = new List<string>();
-
-        async Task FlushLogs()
-        {
-            if (logBuffer.Count == 0) return;
-            await jobSource.SendLogChunkAsync(job.Id, logBuffer.ToArray(), ct);
-            logBuffer.Clear();
-        }
+        await using var logBuffer = new LogChunkBuffer(
+            send: (chunk, token) => jobSource.SendLogChunkAsync(job.Id, chunk, token),
+            ct: ct);
 
         async Task Log(string line)
         {
             logger.LogInformation("[Job {Id}] {Line}", job.Id, line);
-            logBuffer.Add(line);
-            if (logBuffer.Count >= 20)
-                await FlushLogs();
+            await logBuffer.AppendAsync(line);
         }
 
         try
@@ -143,29 +134,32 @@ public class WorkerBackgroundService : BackgroundService
             await Log($"Project: {project.Name} | Branch: {project.Branch}");
             await Log($"Git URL: {project.GitUrl}");
 
-            // Clone or fetch
             await GitHelper.CloneOrFetchAsync(project.GitUrl, project.Branch, localPath,
-                async msg => { logBuffer.Add(msg); if (logBuffer.Count >= 20) await FlushLogs(); }, ct);
-            await FlushLogs();
+                msg => logBuffer.AppendAsync(msg), ct);
+            await logBuffer.FlushAsync();
 
-            // Update repo cache metadata
             var cacheSize = GitHelper.GetDirectorySize(localPath);
-            await storage.UpsertRepoCacheAsync(new RepoCache
+            try
             {
-                WorkerId = workerId,
-                ProjectId = project.Id,
-                LocalPath = localPath,
-                SizeBytes = cacheSize,
-                LastUsedAt = DateTimeOffset.UtcNow,
-                LastKnownCommitSha = job.TriggerCommitSha
-            }, ct);
+                await coordinator.UpsertRepoCacheAsync(workerId, new RepoCache
+                {
+                    WorkerId = workerId,
+                    ProjectId = project.Id,
+                    LocalPath = localPath,
+                    SizeBytes = cacheSize,
+                    LastUsedAt = DateTimeOffset.UtcNow,
+                    LastKnownCommitSha = job.TriggerCommitSha
+                }, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to upsert repo cache metadata.");
+            }
 
-            // Run deployer
             await Log("=== Invoking DotnetDeployer ===");
 
-            // Load secrets: globals first, then project-specific (project wins on collision)
-            var globalSecrets = await storage.GetSecretsAsync(null, ct);
-            var projectSecrets = await storage.GetSecretsAsync(project.Id, ct);
+            var globalSecrets = await coordinator.GetGlobalSecretsAsync(ct);
+            var projectSecrets = await coordinator.GetProjectSecretsAsync(project.Id, ct);
 
             var envVars = globalSecrets
                 .Concat(projectSecrets)
@@ -174,16 +168,11 @@ public class WorkerBackgroundService : BackgroundService
 
             var (success, error) = await DeployerRunner.RunAsync(
                 localPath,
-                onLine: async line =>
-                {
-                    logBuffer.Add(line);
-                    if (logBuffer.Count >= 20)
-                        await FlushLogs();
-                },
+                onLine: line => logBuffer.AppendAsync(line),
                 envVars: envVars,
                 ct);
 
-            await FlushLogs();
+            await logBuffer.FlushAsync();
 
             if (success)
             {
@@ -199,7 +188,7 @@ public class WorkerBackgroundService : BackgroundService
         catch (Exception ex)
         {
             await Log($"[EXCEPTION] {ex.Message}");
-            await FlushLogs();
+            await logBuffer.FlushAsync();
             await jobSource.ReportJobCompletedAsync(job.Id, false, ex.Message, ct);
         }
         finally
@@ -210,19 +199,27 @@ public class WorkerBackgroundService : BackgroundService
 
     private async Task ManageDiskSpaceAsync(CancellationToken ct)
     {
-        var worker = await storage.GetWorkerAsync(workerId, ct);
-        if (worker is null || worker.MaxDiskUsageBytes <= 0) return;
+        if (!options.MaxDiskUsageBytes.HasValue || options.MaxDiskUsageBytes.Value <= 0) return;
+        var budget = options.MaxDiskUsageBytes.Value;
 
-        var caches = (await storage.GetRepoCachesAsync(workerId, ct))
-            .OrderBy(c => c.LastUsedAt)
-            .ToList();
-
-        var totalSize = caches.Sum(c => c.SizeBytes);
-
-        while (totalSize > worker.MaxDiskUsageBytes && caches.Count > 0)
+        IReadOnlyList<RepoCache> caches;
+        try
         {
-            var oldest = caches[0];
-            caches.RemoveAt(0);
+            caches = await coordinator.GetRepoCachesAsync(workerId, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not fetch repo caches; skipping disk-space management.");
+            return;
+        }
+
+        var ordered = caches.OrderBy(c => c.LastUsedAt).ToList();
+        var totalSize = ordered.Sum(c => c.SizeBytes);
+
+        while (totalSize > budget && ordered.Count > 0)
+        {
+            var oldest = ordered[0];
+            ordered.RemoveAt(0);
 
             logger.LogInformation("Evicting cached repo {Path} ({SizeMb:F1} MB) to free disk space",
                 oldest.LocalPath, oldest.SizeBytes / 1024.0 / 1024);
@@ -237,17 +234,26 @@ public class WorkerBackgroundService : BackgroundService
                 logger.LogWarning(ex, "Failed to delete cached repo {Path}", oldest.LocalPath);
             }
 
-            await storage.DeleteRepoCacheAsync(oldest.Id, ct);
+            try { await coordinator.DeleteRepoCacheAsync(workerId, oldest.Id, ct); }
+            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete cache record {Id}", oldest.Id); }
+
             totalSize -= oldest.SizeBytes;
         }
     }
 
     private async Task SetWorkerBusy(bool busy, CancellationToken ct)
     {
-        var worker = await storage.GetWorkerAsync(workerId, ct);
-        if (worker is null) return;
-        worker.Status = busy ? WorkerStatus.Busy : WorkerStatus.Online;
-        await storage.UpdateWorkerAsync(worker, ct);
+        try
+        {
+            await coordinator.UpdateStatusAsync(
+                workerId,
+                busy ? WorkerStatus.Busy : WorkerStatus.Online,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to update worker status to {Busy}", busy);
+        }
     }
 
     private static string SanitizeName(string name) =>

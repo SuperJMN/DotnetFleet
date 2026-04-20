@@ -42,13 +42,17 @@ public partial class ConnectViewModel : ReactiveObject
         try
         {
             var url = EndpointUrl.TrimEnd('/');
-            _client.SetBaseAddress(url);
 
-            // Probe connectivity — we expect 401 (not 404 or timeout)
-            using var probe = new HttpClient { BaseAddress = new Uri(url) };
-            var response = await probe.GetAsync("/api/projects");
-            if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.OK)
+            // Probe the dedicated health endpoint with a short timeout.
+            using var probe = new HttpClient
             {
+                BaseAddress = new Uri(url + "/"),
+                Timeout = TimeSpan.FromSeconds(3)
+            };
+            var response = await probe.GetAsync("health");
+            if (response.IsSuccessStatusCode)
+            {
+                _client.SetBaseAddress(url);
                 _settings.SetEndpoint(url);
                 _connected.OnNext(Unit.Default);
             }
@@ -56,6 +60,10 @@ public partial class ConnectViewModel : ReactiveObject
             {
                 Error = $"Unexpected response: {(int)response.StatusCode} {response.ReasonPhrase}";
             }
+        }
+        catch (TaskCanceledException)
+        {
+            Error = "Cannot connect: timeout reaching the coordinator.";
         }
         catch (Exception ex)
         {

@@ -2,6 +2,7 @@ using DotnetFleet.Coordinator.Services;
 using DotnetFleet.Core.Domain;
 using DotnetFleet.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using System.Threading.Channels;
 
 namespace DotnetFleet.Coordinator.Endpoints;
 
@@ -71,12 +72,29 @@ public static class JobEndpoints
         var channel = broadcaster.Subscribe(id);
         try
         {
-            await foreach (var line in channel.Reader.ReadAllAsync(ct))
+            var heartbeatInterval = TimeSpan.FromSeconds(15);
+            while (!ct.IsCancellationRequested)
             {
-                await WriteEventAsync(httpContext.Response, line, ct);
+                var readTask = channel.Reader.ReadAsync(ct).AsTask();
+                var delayTask = Task.Delay(heartbeatInterval, ct);
+                var winner = await Task.WhenAny(readTask, delayTask);
+
+                if (winner == readTask)
+                {
+                    var line = await readTask;
+                    await WriteEventAsync(httpContext.Response, line, ct);
+                }
+                else
+                {
+                    // Heartbeat: SSE comment line, ignored by clients but keeps proxies/intermediaries
+                    // from closing the idle connection.
+                    await httpContext.Response.WriteAsync(": keep-alive\n\n", ct);
+                    await httpContext.Response.Body.FlushAsync(ct);
+                }
             }
         }
         catch (OperationCanceledException) { /* client disconnected */ }
+        catch (ChannelClosedException) { /* job finished */ }
         finally
         {
             broadcaster.Unsubscribe(id, channel);
@@ -92,31 +110,30 @@ public static class JobEndpoints
     // Worker-facing endpoints
 
     private static async Task<IResult> GetNextJob(
-        [FromHeader(Name = "X-Worker-Id")] Guid workerId,
+        HttpContext httpContext,
         IFleetStorage storage)
     {
-        var job = await storage.DequeueNextJobAsync();
-        if (job is null)
-            return Results.NoContent();
+        if (!TryGetWorkerId(httpContext, out var workerId))
+            return Results.Forbid();
 
-        job.WorkerId = workerId;
-        job.Status = JobStatus.Assigned;
-        await storage.UpdateJobAsync(job);
-
-        return Results.Ok(job);
+        var job = await storage.ClaimNextJobAsync(workerId);
+        return job is null ? Results.NoContent() : Results.Ok(job);
     }
 
     private static async Task<IResult> ReportStarted(
         Guid id,
-        [FromHeader(Name = "X-Worker-Id")] Guid workerId,
+        HttpContext httpContext,
         IFleetStorage storage)
     {
+        if (!TryGetWorkerId(httpContext, out var workerId))
+            return Results.Forbid();
+
         var job = await storage.GetJobAsync(id);
         if (job is null) return Results.NotFound();
+        if (job.WorkerId != workerId) return Results.Forbid();
 
         job.Status = JobStatus.Running;
         job.StartedAt = DateTimeOffset.UtcNow;
-        job.WorkerId = workerId;
         await storage.UpdateJobAsync(job);
         return Results.Ok();
     }
@@ -124,9 +141,17 @@ public static class JobEndpoints
     private static async Task<IResult> AppendLogs(
         Guid id,
         [FromBody] AppendLogsRequest req,
+        HttpContext httpContext,
         IFleetStorage storage,
         LogBroadcaster broadcaster)
     {
+        if (!TryGetWorkerId(httpContext, out var workerId))
+            return Results.Forbid();
+
+        var job = await storage.GetJobAsync(id);
+        if (job is null) return Results.NotFound();
+        if (job.WorkerId != workerId) return Results.Forbid();
+
         var entries = req.Lines.Select(line => new LogEntry
         {
             JobId = id,
@@ -145,11 +170,16 @@ public static class JobEndpoints
     private static async Task<IResult> ReportCompleted(
         Guid id,
         [FromBody] CompleteJobRequest req,
+        HttpContext httpContext,
         IFleetStorage storage,
         LogBroadcaster broadcaster)
     {
+        if (!TryGetWorkerId(httpContext, out var workerId))
+            return Results.Forbid();
+
         var job = await storage.GetJobAsync(id);
         if (job is null) return Results.NotFound();
+        if (job.WorkerId != workerId) return Results.Forbid();
 
         job.Status = req.Success ? JobStatus.Succeeded : JobStatus.Failed;
         job.FinishedAt = DateTimeOffset.UtcNow;
@@ -162,4 +192,10 @@ public static class JobEndpoints
 
     public record AppendLogsRequest(string[] Lines);
     public record CompleteJobRequest(bool Success, string? ErrorMessage);
+
+    private static bool TryGetWorkerId(HttpContext ctx, out Guid workerId)
+    {
+        var raw = ctx.User.FindFirst("worker_id")?.Value;
+        return Guid.TryParse(raw, out workerId);
+    }
 }

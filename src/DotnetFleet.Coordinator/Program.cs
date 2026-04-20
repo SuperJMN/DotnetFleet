@@ -6,7 +6,6 @@ using DotnetFleet.Coordinator.Endpoints;
 using DotnetFleet.Coordinator.Services;
 using DotnetFleet.Core.Domain;
 using DotnetFleet.Core.Interfaces;
-using DotnetFleet.WorkerService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -56,7 +55,7 @@ try
 
     builder.Services.AddAuthorizationBuilder()
         .AddPolicy("Admin", policy => policy.RequireRole("Admin"))
-        .AddPolicy("Worker", policy => policy.RequireAuthenticatedUser()); // workers use JWT too
+        .AddPolicy("Worker", policy => policy.RequireRole("Worker"));
 
     // ── Services ─────────────────────────────────────────────────────────────
     builder.Services.AddSingleton<LogBroadcaster>();
@@ -65,13 +64,6 @@ try
     // ── CORS ─────────────────────────────────────────────────────────────────
     builder.Services.AddCors(opt => opt.AddDefaultPolicy(p =>
         p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
-
-    // ── Embedded worker (all-in-one mode) ────────────────────────────────────
-    if (builder.Configuration.GetValue<bool>("EmbedWorker", defaultValue: true))
-    {
-        builder.Services.AddSingleton<IWorkerJobSource, LocalWorkerJobSource>();
-        builder.Services.AddHostedService<WorkerBackgroundService>();
-    }
 
     var app = builder.Build();
 
@@ -115,37 +107,10 @@ try
             await storage.AddUserAsync(admin);
             Log.Information("Seeded default admin user (username: admin)");
         }
-
-        // Register embedded worker in DB if not already registered
-        if (app.Configuration.GetValue<bool>("EmbedWorker", defaultValue: true))
-        {
-            var workers = await storage.GetWorkersAsync();
-            if (!workers.Any(w => w.IsEmbedded))
-            {
-                var worker = new Worker
-                {
-                    Name = "Embedded Worker",
-                    SecretHash = HashPassword("embedded"),
-                    IsEmbedded = true,
-                    Status = WorkerStatus.Online,
-                    RepoStoragePath = Path.Combine(
-                        app.Configuration["Worker:RepoStoragePath"] ?? "fleet-repos")
-                };
-                await storage.AddWorkerAsync(worker);
-                Log.Information("Registered embedded worker with id {Id}", worker.Id);
-
-                // Persist worker id for the background service to use
-                app.Configuration["Worker:EmbeddedWorkerId"] = worker.Id.ToString();
-            }
-            else
-            {
-                var embedded = workers.First(w => w.IsEmbedded);
-                app.Configuration["Worker:EmbeddedWorkerId"] = embedded.Id.ToString();
-            }
-        }
     }
 
     // ── Endpoints ─────────────────────────────────────────────────────────────
+    app.MapHealthEndpoints();
     app.MapAuthEndpoints();
     app.MapProjectEndpoints();
     app.MapJobEndpoints();

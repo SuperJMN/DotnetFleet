@@ -1,3 +1,4 @@
+using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
@@ -16,17 +17,24 @@ public class App : Application
     {
         var services = new ServiceCollection();
 
-        var httpClient = new HttpClient();
-        var fleetClient = new FleetApiClient(httpClient);
+        var httpHandler = new UnauthorizedHandler();
+        var streamingHandler = new UnauthorizedHandler();
+        var unauthorizedSignal = httpHandler.Unauthorized.Merge(streamingHandler.Unauthorized);
+
+        var httpClient = new HttpClient(httpHandler) { Timeout = TimeSpan.FromSeconds(15) };
+        var streamingClient = new HttpClient(streamingHandler) { Timeout = Timeout.InfiniteTimeSpan };
+        var fleetClient = new FleetApiClient(httpClient, streamingClient, unauthorizedSignal);
         services.AddSingleton(fleetClient);
         services.AddSingleton<ISettingsService>(
             OperatingSystem.IsBrowser() ? new InMemorySettingsService() : new FileSettingsService());
+        services.AddSingleton<IBackendHealthMonitor, BackendHealthMonitor>();
 
         services.AddSingleton<AppViewModel>();
 
         var provider = services.BuildServiceProvider();
 
         var appVm = provider.GetRequiredService<AppViewModel>();
+        provider.GetRequiredService<IBackendHealthMonitor>().Start();
 
         this.Connect(
             () => new Views.MainShell(),

@@ -18,6 +18,5 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DotnetFleet.Core\DotnetFleet.Core.csproj" />
-    <ProjectReference Include="..\DotnetFleet.Worker\DotnetFleet.Worker.csproj" />
   </ItemGroup>
 </Project>
