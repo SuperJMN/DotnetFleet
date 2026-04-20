@@ -93,6 +93,15 @@ try
         await db.Database.ExecuteSqlRawAsync(
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Secrets_ProjectId_Name\" ON \"Secrets\" (\"ProjectId\", \"Name\")");
 
+        // Add GitToken column to Projects for databases created before this feature was added.
+        var hasGitToken = (await db.Database
+            .SqlQueryRaw<long>("SELECT COUNT(*) AS \"Value\" FROM pragma_table_info('Projects') WHERE name='GitToken'")
+            .ToListAsync()).FirstOrDefault() > 0;
+        if (!hasGitToken)
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Projects\" ADD COLUMN \"GitToken\" TEXT NULL");
+        }
+
 
         var storage = app.Services.GetRequiredService<IFleetStorage>();
         if (!await storage.AnyUserExistsAsync())
