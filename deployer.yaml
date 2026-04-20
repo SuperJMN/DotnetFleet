@@ -1,0 +1,21 @@
+version: 1
+
+github:
+  enabled: true
+  owner: SuperJMN
+  repo: DotnetFleet
+  token:
+    from: env
+    name: GITHUB_TOKEN
+  outputDir: artifacts
+  packages:
+    - project: src/DotnetFleet.Desktop/DotnetFleet.Desktop.csproj
+      formats:
+        - type: appimage
+          arch: [x64, arm64]
+        - type: deb
+          arch: [x64]
+        - type: exe-setup
+          arch: [x64]
+        - type: dmg
+          arch: [x64, arm64]

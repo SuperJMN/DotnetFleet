@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="ReactiveUI" />
+    <PackageReference Include="ReactiveUI.Avalonia" />
+    <PackageReference Include="ReactiveUI.SourceGenerators" />
+    <PackageReference Include="DynamicData" />
+    <PackageReference Include="Zafiro.Avalonia" />
+    <PackageReference Include="Zafiro.Avalonia.Dialogs" />
+    <PackageReference Include="CSharpFunctionalExtensions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DotnetFleet.Core\DotnetFleet.Core.csproj" />
+    <ProjectReference Include="..\DotnetFleet.Api.Client\DotnetFleet.Api.Client.csproj" />
+  </ItemGroup>
+</Project>

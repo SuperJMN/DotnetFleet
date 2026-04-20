@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             x:Class="DotnetFleet.Views.ConnectView"
+             x:DataType="vm:ConnectViewModel">
+
+    <Grid RowDefinitions="*,Auto,*" HorizontalAlignment="Center" VerticalAlignment="Center" Width="400">
+        <StackPanel Grid.Row="1" Spacing="16">
+
+            <TextBlock Text="DotnetFleet" FontSize="28" FontWeight="Bold"
+                       HorizontalAlignment="Center" Margin="0,0,0,8" />
+
+            <TextBlock Text="Enter the coordinator endpoint URL:" Opacity="0.7" />
+
+            <TextBox Text="{Binding EndpointUrl}"
+                     PlaceholderText="http://localhost:5000"
+                     IsEnabled="{Binding !IsBusy}" />
+
+            <TextBlock Text="{Binding Error}"
+                       Foreground="Red"
+                       IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       TextWrapping="Wrap" />
+
+            <Button Content="Connect"
+                    Command="{Binding ConnectCommand}"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    IsEnabled="{Binding !IsBusy}" />
+
+        </StackPanel>
+    </Grid>
+
+</UserControl>

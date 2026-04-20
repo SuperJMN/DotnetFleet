@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             x:Class="DotnetFleet.Views.LoginView"
+             x:DataType="vm:LoginViewModel">
+
+    <Grid RowDefinitions="*,Auto,*" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
+        <StackPanel Grid.Row="1" Spacing="16">
+
+            <TextBlock Text="Sign In" FontSize="24" FontWeight="Bold"
+                       HorizontalAlignment="Center" Margin="0,0,0,8" />
+
+            <TextBox Text="{Binding Username}"
+                     PlaceholderText="Username"
+                     IsEnabled="{Binding !IsBusy}" />
+
+            <TextBox Text="{Binding Password}"
+                     PlaceholderText="Password"
+                     PasswordChar="●"
+                     IsEnabled="{Binding !IsBusy}" />
+
+            <TextBlock Text="{Binding Error}"
+                       Foreground="Red"
+                       IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       TextWrapping="Wrap" />
+
+            <Button Content="Sign In"
+                    Command="{Binding LoginCommand}"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    IsEnabled="{Binding !IsBusy}" />
+
+        </StackPanel>
+    </Grid>
+
+</UserControl>

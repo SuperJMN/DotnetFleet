@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnetfleet-coordinator</UserSecretsId>
+    <!-- Exclude cloned repos and any other runtime-generated directories -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);fleet-repos\**;fleet.db</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="BCrypt.Net-Next" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DotnetFleet.Core\DotnetFleet.Core.csproj" />
+    <ProjectReference Include="..\DotnetFleet.Worker\DotnetFleet.Worker.csproj" />
+  </ItemGroup>
+</Project>

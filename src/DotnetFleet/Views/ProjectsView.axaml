@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             x:Class="DotnetFleet.Views.ProjectsView"
+             x:DataType="vm:ProjectsViewModel">
+
+    <DockPanel Margin="16">
+
+        <!-- Toolbar -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+            <TextBlock Text="Projects" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" />
+            <Button Content="＋ Add Project" Command="{Binding AddProjectCommand}" />
+            <Button Content="↺ Refresh" Command="{Binding RefreshCommand}" />
+        </StackPanel>
+
+        <!-- Loading indicator -->
+        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True"
+                     IsVisible="{Binding IsLoading}" Height="4" Margin="0,0,0,8" />
+
+        <!-- Project list -->
+        <ListBox ItemsSource="{Binding Projects}" Background="Transparent">
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:ProjectViewModel">
+                    <Border Padding="12,8" Margin="0,2"
+                            Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                            CornerRadius="4">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Spacing="4">
+                                <TextBlock Text="{Binding Project.Name}"
+                                           FontWeight="SemiBold" FontSize="14" />
+                                <TextBlock Text="{Binding Project.GitUrl}"
+                                           Opacity="0.6" FontSize="12" />
+                                <TextBlock FontSize="11" Opacity="0.5">
+                                    <Run Text="Branch: " />
+                                    <Run Text="{Binding Project.Branch}" />
+                                    <Run Text="  |  Polling: " />
+                                    <Run Text="{Binding Project.PollingIntervalMinutes}" />
+                                    <Run Text=" min" />
+                                </TextBlock>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button Content="Open" Command="{Binding OpenCommand}" />
+                                <Button Content="Delete" Command="{Binding DeleteCommand}"
+                                        Foreground="Red" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+    </DockPanel>
+
+</UserControl>

@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             x:Class="DotnetFleet.Views.ProjectDetailView"
+             x:DataType="vm:ProjectDetailViewModel">
+
+    <DockPanel Margin="16">
+
+        <!-- Header -->
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,16">
+            <Button Grid.Column="0" Content="← Back" Command="{Binding BackCommand}" Margin="0,0,12,0" />
+            <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock Text="{Binding Project.Name}" FontSize="20" FontWeight="Bold" />
+                <TextBlock FontSize="12" Opacity="0.6">
+                    <Run Text="{Binding Project.GitUrl}" />
+                    <Run Text=" @ " />
+                    <Run Text="{Binding Project.Branch}" />
+                </TextBlock>
+            </StackPanel>
+            <Button Grid.Column="2" Content="↺" Command="{Binding RefreshCommand}" Margin="0,0,8,0" />
+            <Button Grid.Column="3" Content="🚀 Deploy Now" Command="{Binding DeployCommand}" />
+        </Grid>
+
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Error}"
+                   Foreground="Red" Margin="0,0,0,8"
+                   IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True"
+                     IsVisible="{Binding IsLoading}" Height="4" Margin="0,0,0,8" />
+
+        <!-- Job list -->
+        <ListBox ItemsSource="{Binding Jobs}" Background="Transparent">
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:JobViewModel">
+                    <Border Padding="12,8" Margin="0,2"
+                            Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                            CornerRadius="4">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding StatusBadge}"
+                                       FontFamily="Consolas,monospace" VerticalAlignment="Center"
+                                       MinWidth="140" />
+                            <StackPanel Grid.Column="1" Spacing="2" Margin="12,0">
+                                <TextBlock FontSize="12" Opacity="0.6">
+                                    <Run Text="Queued: " />
+                                    <Run Text="{Binding Job.EnqueuedAt}" />
+                                </TextBlock>
+                                <TextBlock FontSize="12" Opacity="0.5"
+                                           IsVisible="{Binding Job.TriggerCommitSha, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <Run Text="SHA: " />
+                                    <Run Text="{Binding Job.TriggerCommitSha}" />
+                                </TextBlock>
+                            </StackPanel>
+                            <Button Grid.Column="2" Content="View Logs" Command="{Binding OpenCommand}" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+    </DockPanel>
+
+</UserControl>

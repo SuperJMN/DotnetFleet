@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             x:Class="DotnetFleet.Views.WorkersView"
+             x:DataType="vm:WorkersViewModel">
+
+    <DockPanel Margin="16">
+
+        <!-- Toolbar -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+            <TextBlock Text="Workers" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" />
+            <Button Content="↺ Refresh" Command="{Binding RefreshCommand}" />
+        </StackPanel>
+
+        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True"
+                     IsVisible="{Binding IsLoading}" Height="4" Margin="0,0,0,8" />
+
+        <ListBox ItemsSource="{Binding Workers}" Background="Transparent">
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:WorkerItemViewModel">
+                    <Border Padding="12,8" Margin="0,2"
+                            Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                            CornerRadius="4">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Spacing="4">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{Binding Worker.Name}"
+                                               FontWeight="SemiBold" FontSize="14" />
+                                    <TextBlock Text="{Binding EmbeddedLabel}"
+                                               Opacity="0.5" FontSize="12"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding StatusLabel}" FontSize="12" />
+                                <TextBlock FontSize="11" Opacity="0.6">
+                                    <Run Text="Last seen: " />
+                                    <Run Text="{Binding Worker.LastSeenAt}" />
+                                </TextBlock>
+                            </StackPanel>
+
+                            <!-- Disk config -->
+                            <StackPanel Grid.Column="1" Spacing="4" MinWidth="220">
+                                <TextBlock Text="Max disk (GB)" FontSize="11" Opacity="0.7" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <NumericUpDown Grid.Column="0"
+                                                   Value="{Binding MaxDiskUsageGb}"
+                                                   Minimum="1" Maximum="500" Increment="1"
+                                                   FormatString="N0" />
+                                    <Button Grid.Column="1"
+                                            Content="Save"
+                                            Command="{Binding SaveConfigCommand}"
+                                            IsEnabled="{Binding !IsSaving}" />
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+    </DockPanel>
+
+</UserControl>

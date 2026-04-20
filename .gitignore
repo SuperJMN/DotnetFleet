@@ -1,0 +1,22 @@
+## .NET
+bin/
+obj/
+*.user
+.vs/
+.idea/
+.tmp/
+artifacts/
+*.nupkg
+*.snupkg
+*.suo
+
+## Local secrets / storage
+fleet.db
+fleet.db-shm
+fleet.db-wal
+deployer.secrets.yaml
+worker-config.json
+
+## OS
+.DS_Store
+Thumbs.db

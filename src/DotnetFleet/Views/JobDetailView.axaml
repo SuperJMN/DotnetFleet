@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             x:Class="DotnetFleet.Views.JobDetailView"
+             x:DataType="vm:JobDetailViewModel">
+
+    <DockPanel Margin="16">
+
+        <!-- Header -->
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12">
+            <Button Grid.Column="0" Content="← Back" Command="{Binding BackCommand}" Margin="0,0,12,0" />
+            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                <TextBlock FontSize="16" FontWeight="Bold">
+                    <Run Text="Job — " />
+                    <Run Text="{Binding Job.Id}" />
+                </TextBlock>
+                <TextBlock FontSize="13">
+                    <Run Text="Status: " />
+                    <Run Text="{Binding StatusText}" FontWeight="SemiBold" />
+                </TextBlock>
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <ProgressBar Width="80" Height="8" IsIndeterminate="True"
+                             IsVisible="{Binding IsStreaming}" />
+                <TextBlock Text="Streaming…" FontSize="11" Opacity="0.6"
+                           IsVisible="{Binding IsStreaming}" VerticalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Log output -->
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Logs}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}"
+                                   FontFamily="Consolas,Courier New,monospace"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource SystemBaseHighColor}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+    </DockPanel>
+
+</UserControl>

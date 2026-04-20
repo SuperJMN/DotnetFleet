@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DotnetFleet.Core\DotnetFleet.Core.csproj" />
+    <ProjectReference Include="..\..\src\DotnetFleet.Coordinator\DotnetFleet.Coordinator.csproj" />
+    <ProjectReference Include="..\..\src\DotnetFleet.Worker\DotnetFleet.Worker.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             x:Class="DotnetFleet.Views.AddProjectView"
+             x:DataType="vm:AddProjectViewModel">
+
+    <Grid RowDefinitions="*,Auto,*" HorizontalAlignment="Center" VerticalAlignment="Center" Width="480">
+        <StackPanel Grid.Row="1" Spacing="16">
+
+            <TextBlock Text="Add Project" FontSize="22" FontWeight="Bold" />
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Name" Opacity="0.7" FontSize="12" />
+                <TextBox Text="{Binding Name}" PlaceholderText="My App" IsEnabled="{Binding !IsBusy}" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Git URL" Opacity="0.7" FontSize="12" />
+                <TextBox Text="{Binding GitUrl}"
+                         PlaceholderText="https://github.com/org/repo.git"
+                         IsEnabled="{Binding !IsBusy}" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Branch" Opacity="0.7" FontSize="12" />
+                <TextBox Text="{Binding Branch}" PlaceholderText="main" IsEnabled="{Binding !IsBusy}" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Polling interval (minutes, 0 = manual only)" Opacity="0.7" FontSize="12" />
+                <TextBox Text="{Binding PollingInterval}" PlaceholderText="0" IsEnabled="{Binding !IsBusy}" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding Error}"
+                       Foreground="Red"
+                       IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       TextWrapping="Wrap" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Content="Cancel" Command="{Binding CancelCommand}" IsEnabled="{Binding !IsBusy}" />
+                <Button Content="Save"
+                        Command="{Binding SaveCommand}" IsEnabled="{Binding !IsBusy}" />
+            </StackPanel>
+
+        </StackPanel>
+    </Grid>
+
+</UserControl>
