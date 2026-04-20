@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             xmlns:logging="clr-namespace:DotnetFleet.Views.Logging"
              x:Class="DotnetFleet.Views.JobDetailView"
              x:DataType="vm:JobDetailViewModel">
 
@@ -27,18 +28,46 @@
             </StackPanel>
         </Grid>
 
-        <!-- Log output -->
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Logs}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding}"
-                                   FontFamily="Consolas,Courier New,monospace"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource SystemBaseHighColor}" />
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+        <!-- Search / filter toolbar -->
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                Padding="8" Margin="0,0,0,8" CornerRadius="4">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+                <TextBox Grid.Column="0"
+                         Text="{Binding SearchText}"
+                         PlaceholderText="Search in logs (case-insensitive)…" />
+                <Button Grid.Column="1" Content="✕"
+                        Command="{Binding ClearSearchCommand}"
+                        ToolTip.Tip="Clear search" />
+                <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="11" Opacity="0.7">
+                    <Run Text="{Binding MatchCount}" />
+                    <Run Text=" matches" />
+                </TextBlock>
+                <Button Grid.Column="3" Content="◀"
+                        Command="{Binding PrevMatchCommand}"
+                        ToolTip.Tip="Previous match" />
+                <Button Grid.Column="4" Content="▶"
+                        Command="{Binding NextMatchCommand}"
+                        ToolTip.Tip="Next match" />
+                <ComboBox Grid.Column="5"
+                          ItemsSource="{Binding AvailableSeverities}"
+                          SelectedItem="{Binding MinSeverity}"
+                          MinWidth="120"
+                          ToolTip.Tip="Minimum severity to show" />
+            </Grid>
+        </Border>
+
+        <!-- Log output: a single SelectableTextBlock supports multi-line selection. -->
+        <ScrollViewer Name="LogScroll"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto">
+            <SelectableTextBlock Name="LogText"
+                                 FontFamily="Consolas,Courier New,monospace"
+                                 FontSize="12"
+                                 TextWrapping="NoWrap"
+                                 logging:LogTextPresenter.Lines="{Binding FilteredLogs}"
+                                 logging:LogTextPresenter.SearchText="{Binding SearchText}"
+                                 logging:LogTextPresenter.MatchCount="{Binding MatchCount, Mode=OneWayToSource}" />
         </ScrollViewer>
 
     </DockPanel>
