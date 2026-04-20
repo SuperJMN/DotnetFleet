@@ -3,6 +3,7 @@ using DotnetFleet.Core.Interfaces;
 using DotnetFleet.WorkerService.Coordinator;
 using DotnetFleet.WorkerService.Execution;
 using DotnetFleet.WorkerService.Git;
+using DotnetFleet.WorkerService.RepoStorage;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -49,9 +50,10 @@ public class RemoteWorkerBackgroundService : BackgroundService
         workerId = id;
         repoStoragePath = this.options.RepoStoragePath;
         Directory.CreateDirectory(repoStoragePath);
+        RepoStorageIsolator.EnsureBarrierFiles(repoStoragePath);
 
         logger.LogInformation(
-            "Worker {Id} started. Coordinator: {Url}. Repos: {Path}",
+            "Worker {Id} started. Coordinator: {Url}. Repos: {Path} (CPM-isolated)",
             workerId, this.options.CoordinatorBaseUrl, repoStoragePath);
 
         // Initial registration of self with the coordinator (status=Online).
