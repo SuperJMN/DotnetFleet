@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
-             xmlns:logging="clr-namespace:DotnetFleet.Views.Logging"
+             xmlns:ae="https://github.com/avaloniaui/avaloniaedit"
              x:Class="DotnetFleet.Views.JobDetailView"
              x:DataType="vm:JobDetailViewModel">
 
@@ -28,47 +28,31 @@
             </StackPanel>
         </Grid>
 
-        <!-- Search / filter toolbar -->
+        <!-- Filter toolbar -->
         <Border DockPanel.Dock="Top"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 Padding="8" Margin="0,0,0,8" CornerRadius="4">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
-                <TextBox Grid.Column="0"
-                         Text="{Binding SearchText}"
-                         PlaceholderText="Search in logs (case-insensitive)…" />
-                <Button Grid.Column="1" Content="✕"
-                        Command="{Binding ClearSearchCommand}"
-                        ToolTip.Tip="Clear search" />
-                <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="11" Opacity="0.7">
-                    <Run Text="{Binding MatchCount}" />
-                    <Run Text=" matches" />
-                </TextBlock>
-                <Button Grid.Column="3" Content="◀"
-                        Command="{Binding PrevMatchCommand}"
-                        ToolTip.Tip="Previous match" />
-                <Button Grid.Column="4" Content="▶"
-                        Command="{Binding NextMatchCommand}"
-                        ToolTip.Tip="Next match" />
-                <ComboBox Grid.Column="5"
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="11" Opacity="0.7"
+                           Text="Ctrl+F to search" />
+                <ComboBox Grid.Column="1"
                           ItemsSource="{Binding AvailableSeverities}"
                           SelectedItem="{Binding MinSeverity}"
                           MinWidth="120"
+                          HorizontalAlignment="Right"
                           ToolTip.Tip="Minimum severity to show" />
             </Grid>
         </Border>
 
-        <!-- Log output: a single SelectableTextBlock supports multi-line selection. -->
-        <ScrollViewer Name="LogScroll"
-                      HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Auto">
-            <SelectableTextBlock Name="LogText"
-                                 FontFamily="Consolas,Courier New,monospace"
-                                 FontSize="12"
-                                 TextWrapping="NoWrap"
-                                 logging:LogTextPresenter.Lines="{Binding FilteredLogs}"
-                                 logging:LogTextPresenter.SearchText="{Binding SearchText}"
-                                 logging:LogTextPresenter.MatchCount="{Binding MatchCount, Mode=OneWayToSource}" />
-        </ScrollViewer>
+        <!-- Log output: AvaloniaEdit with line virtualization and severity colouring. -->
+        <ae:TextEditor Name="LogEditor"
+                       FontFamily="Consolas,Courier New,monospace"
+                       FontSize="12"
+                       IsReadOnly="True"
+                       ShowLineNumbers="False"
+                       WordWrap="False"
+                       HorizontalScrollBarVisibility="Auto"
+                       VerticalScrollBarVisibility="Auto" />
 
     </DockPanel>
 

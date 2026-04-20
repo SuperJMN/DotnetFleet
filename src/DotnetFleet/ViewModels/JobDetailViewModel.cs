@@ -23,10 +23,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 
     [Reactive] private string _statusText = string.Empty;
     [Reactive] private bool _isStreaming;
-    [Reactive] private string _searchText = string.Empty;
     [Reactive] private LogSeverity _minSeverity = LogSeverity.None;
-    [Reactive] private int _matchCount;
-    [Reactive] private int _currentMatchIndex;
 
     public ReadOnlyObservableCollection<LogLine> FilteredLogs { get; }
 
@@ -49,11 +46,6 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         _statusText = job.Status.ToString();
 
         BackCommand = ReactiveCommand.Create(GoBack);
-        ClearSearchCommand = ReactiveCommand.Create(() => SearchText = string.Empty);
-
-        var canNavigate = this.WhenAnyValue(x => x.MatchCount).Select(c => c > 0);
-        NextMatchCommand = ReactiveCommand.Create(MoveToNextMatch, canNavigate);
-        PrevMatchCommand = ReactiveCommand.Create(MoveToPrevMatch, canNavigate);
 
         var minSeverityChanges = this.WhenAnyValue(x => x.MinSeverity);
 
@@ -72,9 +64,6 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     }
 
     public ReactiveCommand<Unit, Unit> BackCommand { get; }
-    public ReactiveCommand<Unit, string> ClearSearchCommand { get; }
-    public ReactiveCommand<Unit, Unit> NextMatchCommand { get; }
-    public ReactiveCommand<Unit, Unit> PrevMatchCommand { get; }
 
     private async Task LoadLogsAsync()
     {
@@ -94,10 +83,28 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 
     private async Task StreamLogsAsync(CancellationToken ct)
     {
+        const int maxBatchSize = 200;
+        var buffer = new List<LogLine>(maxBatchSize);
+        var lastFlush = Environment.TickCount64;
+
         await foreach (var line in _client.StreamJobLogsAsync(Job.Id, ct))
         {
-            var entry = LogLine.FromText(line);
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => _logs.Add(entry));
+            buffer.Add(LogLine.FromText(line));
+
+            var elapsed = Environment.TickCount64 - lastFlush;
+            if (buffer.Count < maxBatchSize && elapsed < 100)
+                continue;
+
+            var batch = buffer.ToList();
+            buffer.Clear();
+            lastFlush = Environment.TickCount64;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => _logs.AddRange(batch));
+        }
+
+        if (buffer.Count > 0)
+        {
+            var remaining = buffer.ToList();
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => _logs.AddRange(remaining));
         }
 
         var updated = await _client.GetJobAsync(Job.Id);
@@ -109,18 +116,6 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     {
         _cts?.Cancel();
         _main.NavigateTo((object?)_parentProject ?? _main.Projects);
-    }
-
-    private void MoveToNextMatch()
-    {
-        if (MatchCount <= 0) return;
-        CurrentMatchIndex = (CurrentMatchIndex + 1) % MatchCount;
-    }
-
-    private void MoveToPrevMatch()
-    {
-        if (MatchCount <= 0) return;
-        CurrentMatchIndex = (CurrentMatchIndex - 1 + MatchCount) % MatchCount;
     }
 
     public void Dispose()
