@@ -1,22 +1,20 @@
-## .NET
+# Build outputs
 bin/
 obj/
+artifacts/
+
+# Database & cloned repos (coordinator runtime data)
+fleet-repos/
+fleet.db
+*.db-shm
+*.db-wal
+nohup.out
+/tmp/
+
+# Secrets
+deployer.secrets.yaml
+
+# .NET
 *.user
 .vs/
 .idea/
-.tmp/
-artifacts/
-*.nupkg
-*.snupkg
-*.suo
-
-## Local secrets / storage
-fleet.db
-fleet.db-shm
-fleet.db-wal
-deployer.secrets.yaml
-worker-config.json
-
-## OS
-.DS_Store
-Thumbs.db
