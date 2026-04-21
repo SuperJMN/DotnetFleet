@@ -143,6 +143,20 @@ public class FleetApiClient
         Guid jobId,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
+        await foreach (var evt in StreamJobEventsAsync(jobId, ct))
+        {
+            if (evt.Type == SseEventType.Log)
+                yield return evt.Data;
+        }
+    }
+
+    /// <summary>
+    /// Returns an async enumerable of SSE events (log lines and status updates).
+    /// </summary>
+    public async IAsyncEnumerable<SseEvent> StreamJobEventsAsync(
+        Guid jobId,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
         // Use the dedicated streamingHttp (no Timeout) so the SSE connection stays open.
         using var response = await streamingHttp.GetAsync($"/api/jobs/{jobId}/logs",
             HttpCompletionOption.ResponseHeadersRead, ct);
@@ -151,18 +165,36 @@ public class FleetApiClient
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var reader = new System.IO.StreamReader(stream);
 
+        string? currentEventType = null;
+
         while (!ct.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync(ct);
             if (line is null) break;
 
-            // SSE: skip comment/keep-alive lines (start with ':') and blank separators
-            if (line.Length == 0 || line[0] == ':') continue;
+            // SSE: skip comment/keep-alive lines (start with ':')
+            if (line.Length > 0 && line[0] == ':') continue;
+
+            // Blank line = end of event block; reset event type for next block
+            if (line.Length == 0) { currentEventType = null; continue; }
+
+            if (line.StartsWith("event: "))
+            {
+                currentEventType = line[7..];
+                continue;
+            }
 
             if (line.StartsWith("data: "))
-                yield return line[6..];
+            {
+                var data = line[6..];
+                var type = currentEventType == "status" ? SseEventType.Status : SseEventType.Log;
+                yield return new SseEvent(type, data);
+            }
         }
     }
+
+    public enum SseEventType { Log, Status }
+    public record SseEvent(SseEventType Type, string Data);
 
     /// <summary>
     /// Sends a request bypassing <c>HttpClient.Timeout</c> so the response body can be streamed indefinitely.

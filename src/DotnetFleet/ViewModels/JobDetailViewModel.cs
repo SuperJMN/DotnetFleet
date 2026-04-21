@@ -53,7 +53,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         _client = client;
         _main = main;
         _parentProject = parentProject;
-        _statusText = job.Status.ToString();
+        _statusText = FormatStatus(job.Status);
 
         BackCommand = ReactiveCommand.Create(GoBack);
         CopyLogsCommand = ReactiveCommand.CreateFromTask(CopyLogsToClipboard);
@@ -167,9 +167,16 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         var buffer = new List<LogLine>(maxBatchSize);
         var lastFlush = Environment.TickCount64;
 
-        await foreach (var line in _client.StreamJobLogsAsync(Job.Id, ct))
+        await foreach (var evt in _client.StreamJobEventsAsync(Job.Id, ct))
         {
-            buffer.Add(LogLine.FromText(line));
+            if (evt.Type == FleetApiClient.SseEventType.Status)
+            {
+                if (Enum.TryParse<JobStatus>(evt.Data, out var status))
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => StatusText = FormatStatus(status));
+                continue;
+            }
+
+            buffer.Add(LogLine.FromText(evt.Data));
 
             var elapsed = Environment.TickCount64 - lastFlush;
             if (buffer.Count < maxBatchSize && elapsed < 100)
@@ -198,8 +205,19 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 
         var updated = await _client.GetJobAsync(Job.Id);
         if (updated is not null)
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => StatusText = updated.Status.ToString());
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => StatusText = FormatStatus(updated.Status));
     }
+
+    private static string FormatStatus(JobStatus status) => status switch
+    {
+        JobStatus.Queued => "⏳ Queued — Waiting for worker",
+        JobStatus.Assigned => "🔄 Assigned",
+        JobStatus.Running => "🚀 Running",
+        JobStatus.Succeeded => "✅ Succeeded",
+        JobStatus.Failed => "❌ Failed",
+        JobStatus.Cancelled => "🚫 Cancelled",
+        _ => status.ToString()
+    };
 
     private void FeedBatchToTerminal(List<LogLine> batch)
     {
