@@ -10,6 +10,7 @@ public interface IWorkerCoordinatorClient
 {
     Task<Worker?> GetSelfAsync(CancellationToken ct = default);
     Task SendHeartbeatAsync(Guid workerId, CancellationToken ct = default);
+    Task SendHeartbeatAsync(Guid workerId, string? version, CancellationToken ct = default);
     Task UpdateStatusAsync(Guid workerId, WorkerStatus status, CancellationToken ct = default);
 
     Task<Project?> GetProjectAsync(Guid projectId, CancellationToken ct = default);
