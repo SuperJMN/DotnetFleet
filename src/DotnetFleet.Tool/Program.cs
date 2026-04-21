@@ -111,6 +111,9 @@ coordInstallCommand.Options.Add(noMdnsOption);
 
 coordInstallCommand.SetAction(async (parseResult, _) =>
 {
+    var elevated = SudoElevation.ReExecAsRootIfNeeded();
+    if (elevated.HasValue) Environment.Exit(elevated.Value);
+
     var port = parseResult.GetValue(portOption);
     var dataDir = parseResult.GetValue(coordDataDirOption) ?? FleetConfig.GetDefaultDataDir("coordinator");
     await ServiceInstaller.InstallCoordinatorAsync(new ServiceInstaller.CoordinatorInstallOptions(
@@ -127,6 +130,9 @@ coordInstallCommand.SetAction(async (parseResult, _) =>
 var coordUninstallCommand = new Command("uninstall", "Remove the coordinator systemd service");
 coordUninstallCommand.SetAction(async (_, _) =>
 {
+    var elevated = SudoElevation.ReExecAsRootIfNeeded();
+    if (elevated.HasValue) Environment.Exit(elevated.Value);
+
     await ServiceInstaller.UninstallCoordinatorAsync();
 });
 
@@ -248,6 +254,9 @@ workerInstallCommand.Options.Add(noDiscoverOption);
 
 workerInstallCommand.SetAction(async (parseResult, _) =>
 {
+    var elevated = SudoElevation.ReExecAsRootIfNeeded();
+    if (elevated.HasValue) return elevated.Value;
+
     var workerName = parseResult.GetValue(nameOption) ?? Environment.MachineName;
     var dataDir = parseResult.GetValue(workerDataDirOption)
                   ?? FleetConfig.GetDefaultDataDir($"worker-{workerName}");
@@ -277,6 +286,9 @@ var uninstallNameOption = new Option<string?>("--name", "-n")
 workerUninstallCommand.Options.Add(uninstallNameOption);
 workerUninstallCommand.SetAction(async (parseResult, _) =>
 {
+    var elevated = SudoElevation.ReExecAsRootIfNeeded();
+    if (elevated.HasValue) Environment.Exit(elevated.Value);
+
     var workerName = parseResult.GetValue(uninstallNameOption) ?? Environment.MachineName;
     await ServiceInstaller.UninstallWorkerAsync(workerName);
 });
@@ -321,6 +333,9 @@ updateCommand.Options.Add(updatePrereleaseOption);
 
 updateCommand.SetAction(async (parseResult, _) =>
 {
+    var elevated = SudoElevation.ReExecAsRootIfNeeded();
+    if (elevated.HasValue) return elevated.Value;
+
     try
     {
         await ServiceInstaller.UpdateLocalServicesAsync(new ServiceInstaller.UpdateOptions(

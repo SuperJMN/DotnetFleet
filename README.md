@@ -226,36 +226,24 @@ You have two equivalent ways to install. Pick whichever you prefer.
 
 #### Option A — Zero-install (recommended for first-time setup)
 
-If you just installed .NET and don't yet have anything else, you can do the whole thing in one command using `dnx` (.NET 10's tool runner):
+If you just installed .NET and don't yet have anything else, you can do the whole thing in one command using `dnx` (.NET 10's tool runner). **You don't need `sudo` — the tool re-executes itself under `sudo` automatically**, preserving `PATH`, `DOTNET_ROOT` and `HOME` so root can still find your per-user .NET install:
 
 ```bash
-sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
-  dnx dotnetfleet.tool coordinator install --port 5000
+dnx dotnetfleet.tool coordinator install --port 5000
 ```
 
-What's going on in that command:
-
-| Fragment | Why it's there |
-|---|---|
-| `sudo` | systemd unit files live under `/etc/systemd/system`, so root is required |
-| `env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT"` | `sudo` strips the user's environment by default. We re-export `PATH` (so `dnx` and `dotnet` are found) and `DOTNET_ROOT` (so the runtime is located when .NET is installed under `~/.dotnet`) |
-| `dnx dotnetfleet.tool` | Downloads and runs the latest `DotnetFleet.Tool` package. No prior `dotnet tool install` needed |
-| `coordinator install` | The actual `fleet` subcommand |
-
-The first time you do this, the installer detects it's running from `dnx`'s ephemeral cache and **automatically performs `dotnet tool install -g DotnetFleet.Tool`** for the calling user, so the systemd unit's `ExecStart=` points at the stable global-tool path (`~/.dotnet/tools/fleet`) instead of a cache location that may disappear later.
+You'll be prompted once for your sudo password. The first time you do this, the installer also detects it's running from `dnx`'s ephemeral cache and **automatically performs `dotnet tool install -g DotnetFleet.Tool`** for the calling user, so the systemd unit's `ExecStart=` points at the stable global-tool path (`~/.dotnet/tools/fleet`) instead of a cache location that may disappear later.
 
 A worker on the same machine looks the same — and thanks to local auto-discovery you don't need `--coordinator` or `--token`:
 
 ```bash
-sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
-  dnx dotnetfleet.tool worker install --name build-01
+dnx dotnetfleet.tool worker install --name build-01
 ```
 
 For a worker on a **different** machine, mDNS finds the coordinator's URL automatically — you only have to supply the token:
 
 ```bash
-sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
-  dnx dotnetfleet.tool worker install --token <token> --name build-01
+dnx dotnetfleet.tool worker install --token <token> --name build-01
 ```
 
 #### Option B — Install the global tool first, then use `fleet` directly
@@ -264,22 +252,21 @@ sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
 # One-time:
 dotnet tool install -g DotnetFleet.Tool
 
-# Then:
-sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
-  "$(which fleet)" coordinator install --port 5000
+# Then (no sudo needed — fleet re-execs itself with sudo when required):
+fleet coordinator install --port 5000
 
 # Worker on the same machine — auto-discovered:
-sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
-  "$(which fleet)" worker install --name build-01
+fleet worker install --name build-01
 
 # Worker on a remote host — pass the token (URL is discovered via mDNS):
-sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
-  "$(which fleet)" worker install --token <token> --name build-01
+fleet worker install --token <token> --name build-01
 ```
 
-The `$(which fleet)` resolves the path **before** `sudo` strips `PATH`, so root can find the binary.
-
-> **Tip:** If .NET is installed system-wide (e.g., via `apt`) and `fleet` is on the system `PATH`, you can drop the `env` wrapper and just run `sudo fleet ...`. The wrapper is only needed for per-user .NET installs (the typical `dotnet-install.sh` setup).
+> **Manual sudo fallback.** If the automatic re-exec doesn't work for your setup (e.g., passwordless policies, custom sudoers), you can always run the commands explicitly yourself. The tool detects it's already root and skips the re-exec:
+> ```bash
+> sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" "HOME=$HOME" \
+>   dnx dotnetfleet.tool coordinator install --port 5000
+> ```
 
 #### Managing the services
 
@@ -368,10 +355,10 @@ Upgrading DotnetFleet replaces only the tool binary — **all data is preserved*
 If the coordinator and/or workers run as systemd services on this machine, a single command updates the global tool and restarts every local fleet service:
 
 ```bash
-sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" fleet update
+fleet update
 ```
 
-(The `env` wrapper is only needed when .NET is installed per-user — see the [systemd install section](#install-as-systemd-services) for the explanation. With a system-wide .NET install, plain `sudo fleet update` works.)
+`fleet update` (with no `sudo`) re-executes itself with `sudo` automatically, preserving `PATH`, `DOTNET_ROOT` and `HOME`. You'll be prompted for your password once.
 
 Options:
 
