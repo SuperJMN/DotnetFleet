@@ -6,7 +6,7 @@
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Zafiro.Avalonia/Styles.axaml" />
-        <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+        <StyleInclude Source="avares://AvaloniaTerminal/Styles/Colors.axaml" />
     </Application.Styles>
 
     <Application.DataTemplates>

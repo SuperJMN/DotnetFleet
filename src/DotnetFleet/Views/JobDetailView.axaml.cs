@@ -2,8 +2,7 @@ using System.Collections.Specialized;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
-using Avalonia.VisualTree;
-using AvaloniaEdit;
+using AvaloniaTerminal;
 using DotnetFleet.Core.Logging;
 using DotnetFleet.ViewModels;
 using DotnetFleet.Views.Logging;
@@ -12,19 +11,14 @@ namespace DotnetFleet.Views;
 
 public partial class JobDetailView : UserControl
 {
-    private const double AutoScrollEpsilon = 8.0;
     private NotifyCollectionChangedEventHandler? _logsHandler;
     private JobDetailViewModel? _attachedVm;
-    private LogSeverityColorizer? _colorizer;
-    private readonly List<LogSeverity> _severities = new();
 
     public JobDetailView()
     {
         AvaloniaXamlLoader.Load(this);
         DataContextChanged += OnDataContextChanged;
     }
-
-    private TextEditor? Editor => this.FindControl<TextEditor>("LogEditor");
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
@@ -34,72 +28,51 @@ public partial class JobDetailView : UserControl
 
         _attachedVm = vm;
 
-        var editor = Editor;
-        if (editor is null) return;
+        var terminal = LogTerminal;
+        if (terminal is null) return;
 
-        _severities.Clear();
-        _colorizer = new LogSeverityColorizer(_severities);
-        editor.TextArea.TextView.LineTransformers.Add(_colorizer);
+        vm.SetTerminalModel(terminal.Model);
 
-        RebuildDocument(editor, vm);
+        // Feed existing lines
+        FeedLines(vm.TerminalModel, vm.FilteredLogs);
 
-        _logsHandler = (_, args) => Dispatcher.UIThread.Post(() => OnLogsChanged(editor, vm, args));
+        _logsHandler = (_, args) =>
+        {
+            if (args.Action == NotifyCollectionChangedAction.Add && args.NewItems is not null)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    var model = vm.TerminalModel;
+                    if (model is null) return;
+
+                    foreach (LogLine line in args.NewItems)
+                        model.Feed(LogAnsi.Format(line) + "\r\n");
+                });
+            }
+            else
+            {
+                // Reset/filter change — rebuild terminal content
+                Dispatcher.UIThread.Post(() => RebuildTerminal(vm));
+            }
+        };
         ((INotifyCollectionChanged)vm.FilteredLogs).CollectionChanged += _logsHandler;
     }
 
-    private void OnLogsChanged(TextEditor editor, JobDetailViewModel vm, NotifyCollectionChangedEventArgs args)
+    private void RebuildTerminal(JobDetailViewModel vm)
     {
-        if (args.Action == NotifyCollectionChangedAction.Add && args.NewItems is not null)
-        {
-            AppendLines(editor, args.NewItems.Cast<LogLine>());
-            MaybeAutoScroll(editor);
-        }
-        else
-        {
-            RebuildDocument(editor, vm);
-        }
+        var model = vm.TerminalModel;
+        if (model is null) return;
+
+        // Clear and re-feed: reset terminal with escape code
+        model.Feed("\x1b[2J\x1b[H");
+        FeedLines(model, vm.FilteredLogs);
     }
 
-    private void AppendLines(TextEditor editor, IEnumerable<LogLine> newLines)
+    private static void FeedLines(TerminalControlModel? model, IEnumerable<LogLine> lines)
     {
-        var doc = editor.Document;
-        doc.BeginUpdate();
-        try
-        {
-            foreach (var line in newLines)
-            {
-                _severities.Add(line.Severity);
-                var text = doc.TextLength == 0 ? line.Text : "\n" + line.Text;
-                doc.Insert(doc.TextLength, text);
-            }
-        }
-        finally
-        {
-            doc.EndUpdate();
-        }
-
-        editor.TextArea.TextView.Redraw();
-    }
-
-    private void RebuildDocument(TextEditor editor, JobDetailViewModel vm)
-    {
-        _severities.Clear();
-        var lines = vm.FilteredLogs;
+        if (model is null) return;
         foreach (var line in lines)
-            _severities.Add(line.Severity);
-
-        editor.Document.Text = string.Join("\n", lines.Select(l => l.Text));
-        editor.TextArea.TextView.Redraw();
-    }
-
-    private static void MaybeAutoScroll(TextEditor editor)
-    {
-        var scrollViewer = editor.FindDescendantOfType<ScrollViewer>();
-        if (scrollViewer is null) return;
-
-        var distanceFromBottom = scrollViewer.Extent.Height - scrollViewer.Viewport.Height - scrollViewer.Offset.Y;
-        if (distanceFromBottom <= AutoScrollEpsilon)
-            editor.ScrollToEnd();
+            model.Feed(LogAnsi.Format(line) + "\r\n");
     }
 
     private void DetachFromVm()
@@ -107,12 +80,7 @@ public partial class JobDetailView : UserControl
         if (_attachedVm is not null && _logsHandler is not null)
             ((INotifyCollectionChanged)_attachedVm.FilteredLogs).CollectionChanged -= _logsHandler;
 
-        var editor = Editor;
-        if (editor is not null && _colorizer is not null)
-            editor.TextArea.TextView.LineTransformers.Remove(_colorizer);
-
         _attachedVm = null;
         _logsHandler = null;
-        _colorizer = null;
     }
 }

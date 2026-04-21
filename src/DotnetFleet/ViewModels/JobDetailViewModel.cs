@@ -1,11 +1,16 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Linq;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input.Platform;
+using AvaloniaTerminal;
 using DynamicData;
 using DynamicData.Binding;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using DotnetFleet.Core.Logging;
+using DotnetFleet.Views.Logging;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 
@@ -24,8 +29,12 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     [Reactive] private string _statusText = string.Empty;
     [Reactive] private bool _isStreaming;
     [Reactive] private LogSeverity _minSeverity = LogSeverity.None;
+    [Reactive] private string _searchText = string.Empty;
+    [Reactive] private string _searchResultText = string.Empty;
 
     public ReadOnlyObservableCollection<LogLine> FilteredLogs { get; }
+
+    public TerminalControlModel? TerminalModel { get; private set; }
 
     public IReadOnlyList<LogSeverity> AvailableSeverities { get; } = new[]
     {
@@ -46,6 +55,8 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         _statusText = job.Status.ToString();
 
         BackCommand = ReactiveCommand.Create(GoBack);
+        CopyLogsCommand = ReactiveCommand.CreateFromTask(CopyLogsToClipboard);
+        NextSearchResultCommand = ReactiveCommand.Create(NavigateNextSearchResult);
 
         var minSeverityChanges = this.WhenAnyValue(x => x.MinSeverity);
 
@@ -57,6 +68,13 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 
         FilteredLogs = filtered;
 
+        // Drive terminal search from SearchText changes
+        this.WhenAnyValue(x => x.SearchText)
+            .Throttle(TimeSpan.FromMilliseconds(300))
+            .DistinctUntilChanged()
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(OnSearchTextChanged);
+
         if (job.Status is JobStatus.Running or JobStatus.Queued or JobStatus.Assigned)
             StartStreaming();
         else
@@ -64,6 +82,43 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     }
 
     public ReactiveCommand<Unit, Unit> BackCommand { get; }
+    public ReactiveCommand<Unit, Unit> CopyLogsCommand { get; }
+    public ReactiveCommand<Unit, Unit> NextSearchResultCommand { get; }
+
+    public void SetTerminalModel(TerminalControlModel model) => TerminalModel = model;
+
+    private void OnSearchTextChanged(string? text)
+    {
+        if (TerminalModel is null) return;
+
+        if (string.IsNullOrEmpty(text))
+        {
+            SearchResultText = $"{FilteredLogs.Count} lines";
+            return;
+        }
+
+        var count = TerminalModel.Search(text);
+        SearchResultText = count > 0 ? $"{count} matches" : "No matches";
+        if (count > 0)
+            TerminalModel.SelectNextSearchResult();
+    }
+
+    private void NavigateNextSearchResult()
+    {
+        TerminalModel?.SelectNextSearchResult();
+    }
+
+    private async Task CopyLogsToClipboard()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+            return;
+
+        var clipboard = desktop.MainWindow?.Clipboard;
+        if (clipboard is null) return;
+
+        var text = string.Join(Environment.NewLine, FilteredLogs.Select(l => l.Text));
+        await clipboard.SetTextAsync(text);
+    }
 
     private async Task LoadLogsAsync()
     {
@@ -98,18 +153,34 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             var batch = buffer.ToList();
             buffer.Clear();
             lastFlush = Environment.TickCount64;
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => _logs.AddRange(batch));
+
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                _logs.AddRange(batch);
+                FeedBatchToTerminal(batch);
+            });
         }
 
         if (buffer.Count > 0)
         {
             var remaining = buffer.ToList();
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => _logs.AddRange(remaining));
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                _logs.AddRange(remaining);
+                FeedBatchToTerminal(remaining);
+            });
         }
 
         var updated = await _client.GetJobAsync(Job.Id);
         if (updated is not null)
             Avalonia.Threading.Dispatcher.UIThread.Post(() => StatusText = updated.Status.ToString());
+    }
+
+    private void FeedBatchToTerminal(List<LogLine> batch)
+    {
+        if (TerminalModel is null) return;
+        foreach (var line in batch)
+            TerminalModel.Feed(LogAnsi.Format(line) + "\r\n");
     }
 
     private void GoBack()
