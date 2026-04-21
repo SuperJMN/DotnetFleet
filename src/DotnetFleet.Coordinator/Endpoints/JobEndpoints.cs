@@ -91,18 +91,19 @@ public static class JobEndpoints
             // Stream new log lines as they arrive, polling job status on each heartbeat
             // so the client gets timely feedback during the Queued→Running transition.
             var statusPollInterval = TimeSpan.FromSeconds(5);
-            ValueTask<string> pendingRead = channel.Reader.ReadAsync(ct);
+            // Convert ValueTask to Task exactly once per ReadAsync call.
+            // ValueTask must never be awaited / AsTask'd more than once.
+            var pendingRead = channel.Reader.ReadAsync(ct).AsTask();
             while (!ct.IsCancellationRequested)
             {
-                var readTask = pendingRead.AsTask();
                 var delayTask = Task.Delay(statusPollInterval, ct);
-                var winner = await Task.WhenAny(readTask, delayTask);
+                var winner = await Task.WhenAny(pendingRead, delayTask);
 
-                if (winner == readTask)
+                if (winner == pendingRead)
                 {
-                    var line = await readTask;
+                    var line = await pendingRead;
                     await WriteEventAsync(httpContext.Response, line, ct);
-                    pendingRead = channel.Reader.ReadAsync(ct);
+                    pendingRead = channel.Reader.ReadAsync(ct).AsTask();
                 }
                 else
                 {
