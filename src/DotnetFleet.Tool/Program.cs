@@ -44,6 +44,7 @@ coordinatorCommand.Options.Add(jwtSecretOption);
 coordinatorCommand.Options.Add(adminPasswordOption);
 coordinatorCommand.Options.Add(urlsOption);
 
+// Default action: run coordinator in foreground
 coordinatorCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     var port = parseResult.GetValue(portOption);
@@ -91,6 +92,46 @@ coordinatorCommand.SetAction(async (parseResult, cancellationToken) =>
     return 0;
 });
 
+// ── fleet coordinator install ────────────────────────────────────────────
+var coordInstallCommand = new Command("install", "Install coordinator as a systemd service");
+coordInstallCommand.Options.Add(portOption);
+coordInstallCommand.Options.Add(coordDataDirOption);
+coordInstallCommand.Options.Add(tokenOption);
+coordInstallCommand.Options.Add(jwtSecretOption);
+coordInstallCommand.Options.Add(adminPasswordOption);
+coordInstallCommand.Options.Add(urlsOption);
+
+coordInstallCommand.SetAction(async (parseResult, _) =>
+{
+    var port = parseResult.GetValue(portOption);
+    var dataDir = parseResult.GetValue(coordDataDirOption) ?? FleetConfig.GetDefaultDataDir("coordinator");
+    await ServiceInstaller.InstallCoordinatorAsync(new ServiceInstaller.CoordinatorInstallOptions(
+        Port: port,
+        DataDir: dataDir,
+        Token: parseResult.GetValue(tokenOption),
+        JwtSecret: parseResult.GetValue(jwtSecretOption),
+        AdminPassword: parseResult.GetValue(adminPasswordOption),
+        Urls: parseResult.GetValue(urlsOption)));
+});
+
+// ── fleet coordinator uninstall ──────────────────────────────────────────
+var coordUninstallCommand = new Command("uninstall", "Remove the coordinator systemd service");
+coordUninstallCommand.SetAction(async (_, _) =>
+{
+    await ServiceInstaller.UninstallCoordinatorAsync();
+});
+
+// ── fleet coordinator status ─────────────────────────────────────────────
+var coordStatusCommand = new Command("status", "Show coordinator service status");
+coordStatusCommand.SetAction(async (_, _) =>
+{
+    await ServiceInstaller.CoordinatorStatusAsync();
+});
+
+coordinatorCommand.Subcommands.Add(coordInstallCommand);
+coordinatorCommand.Subcommands.Add(coordUninstallCommand);
+coordinatorCommand.Subcommands.Add(coordStatusCommand);
+
 // ── fleet worker ─────────────────────────────────────────────────────────────
 
 var workerCommand = new Command("worker", "Start a DotnetFleet worker that connects to a coordinator");
@@ -128,6 +169,7 @@ workerCommand.Options.Add(workerDataDirOption);
 workerCommand.Options.Add(pollIntervalOption);
 workerCommand.Options.Add(maxDiskOption);
 
+// Default action: run worker in foreground
 workerCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     var coordinatorUrl = parseResult.GetValue(coordinatorUrlOption)!;
@@ -176,6 +218,59 @@ workerCommand.SetAction(async (parseResult, cancellationToken) =>
 
     return 0;
 });
+
+// ── fleet worker install ─────────────────────────────────────────────────
+var workerInstallCommand = new Command("install", "Install worker as a systemd service");
+workerInstallCommand.Options.Add(coordinatorUrlOption);
+workerInstallCommand.Options.Add(workerTokenOption);
+workerInstallCommand.Options.Add(nameOption);
+workerInstallCommand.Options.Add(workerDataDirOption);
+workerInstallCommand.Options.Add(pollIntervalOption);
+workerInstallCommand.Options.Add(maxDiskOption);
+
+workerInstallCommand.SetAction(async (parseResult, _) =>
+{
+    var workerName = parseResult.GetValue(nameOption) ?? Environment.MachineName;
+    var dataDir = parseResult.GetValue(workerDataDirOption)
+                  ?? FleetConfig.GetDefaultDataDir($"worker-{workerName}");
+    await ServiceInstaller.InstallWorkerAsync(new ServiceInstaller.WorkerInstallOptions(
+        CoordinatorUrl: parseResult.GetValue(coordinatorUrlOption)!,
+        Token: parseResult.GetValue(workerTokenOption),
+        Name: workerName,
+        DataDir: dataDir,
+        PollInterval: parseResult.GetValue(pollIntervalOption),
+        MaxDisk: parseResult.GetValue(maxDiskOption)));
+});
+
+// ── fleet worker uninstall ───────────────────────────────────────────────
+var workerUninstallCommand = new Command("uninstall", "Remove a worker systemd service");
+var uninstallNameOption = new Option<string?>("--name", "-n")
+{
+    Description = "Worker name to uninstall (default: hostname)"
+};
+workerUninstallCommand.Options.Add(uninstallNameOption);
+workerUninstallCommand.SetAction(async (parseResult, _) =>
+{
+    var workerName = parseResult.GetValue(uninstallNameOption) ?? Environment.MachineName;
+    await ServiceInstaller.UninstallWorkerAsync(workerName);
+});
+
+// ── fleet worker status ──────────────────────────────────────────────────
+var workerStatusCommand = new Command("status", "Show worker service status");
+var statusNameOption = new Option<string?>("--name", "-n")
+{
+    Description = "Worker name to check (default: hostname)"
+};
+workerStatusCommand.Options.Add(statusNameOption);
+workerStatusCommand.SetAction(async (parseResult, _) =>
+{
+    var workerName = parseResult.GetValue(statusNameOption) ?? Environment.MachineName;
+    await ServiceInstaller.WorkerStatusAsync(workerName);
+});
+
+workerCommand.Subcommands.Add(workerInstallCommand);
+workerCommand.Subcommands.Add(workerUninstallCommand);
+workerCommand.Subcommands.Add(workerStatusCommand);
 
 // ── fleet version ────────────────────────────────────────────────────────────
 

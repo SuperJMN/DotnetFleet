@@ -141,7 +141,11 @@ screen, then log in.
 ### CLI Reference
 
 ```
-fleet coordinator [options]
+fleet coordinator [options]          # Run coordinator in foreground
+fleet coordinator install [options]  # Install as systemd service (Linux, requires sudo)
+fleet coordinator uninstall          # Remove systemd service
+fleet coordinator status             # Show service status
+
   --port, -p <port>           HTTP port (default: 5000)
   --data-dir <path>           Data directory (default: ~/.fleet/coordinator)
   --token, -t <token>         Registration token (auto-generated)
@@ -149,7 +153,11 @@ fleet coordinator [options]
   --admin-password <pass>     Admin password (default: admin)
   --urls <urls>               ASP.NET Core URLs override
 
-fleet worker [options]
+fleet worker [options]               # Run worker in foreground
+fleet worker install [options]       # Install as systemd service (Linux, requires sudo)
+fleet worker uninstall [--name <n>]  # Remove systemd service
+fleet worker status [--name <n>]     # Show service status
+
   --coordinator, -c <url>     Coordinator URL (required)
   --token, -t <token>         Registration token (required on first run)
   --name, -n <name>           Worker display name (default: hostname)
@@ -159,6 +167,36 @@ fleet worker [options]
 
 fleet version
 ```
+
+### Service Installation (Linux)
+
+For production environments, install the coordinator and workers as **systemd services** so they start
+automatically on boot and restart on failure:
+
+```bash
+# Install coordinator as a service
+sudo fleet coordinator install --port 5000
+#  → Creates and starts fleet-coordinator.service
+#  → Shows the registration token for workers
+
+# Install a worker as a service
+sudo fleet worker install --coordinator http://myserver:5000 --token <token> --name build-01
+
+# Check status
+sudo fleet coordinator status
+sudo fleet worker status --name build-01
+
+# View logs
+journalctl -u fleet-coordinator -f
+journalctl -u fleet-worker-build-01 -f
+
+# Uninstall
+sudo fleet coordinator uninstall
+sudo fleet worker uninstall --name build-01
+```
+
+> **Note**: Service installation currently supports Linux with systemd. On other platforms, use the
+> foreground commands (`fleet coordinator`, `fleet worker`) with a process manager of your choice.
 
 ### Development (from source)
 
