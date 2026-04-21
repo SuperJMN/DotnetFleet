@@ -155,6 +155,74 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory) : IFleetS
         await db.SaveChangesAsync(ct);
     }
 
+    // Stale detection
+    public async Task<int> MarkOfflineWorkersAsync(TimeSpan staleThreshold, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var cutoff = DateTimeOffset.UtcNow - staleThreshold;
+
+        var staleWorkers = await db.Workers
+            .Where(w => w.Status != WorkerStatus.Offline && w.LastSeenAt != null && w.LastSeenAt < cutoff)
+            .ToListAsync(ct);
+
+        foreach (var worker in staleWorkers)
+            worker.Status = WorkerStatus.Offline;
+
+        if (staleWorkers.Count > 0)
+            await db.SaveChangesAsync(ct);
+
+        return staleWorkers.Count;
+    }
+
+    public async Task<IReadOnlyList<Guid>> FailStaleJobsAsync(TimeSpan staleThreshold, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var cutoff = DateTimeOffset.UtcNow - staleThreshold;
+
+        var staleJobs = await db.DeploymentJobs
+            .Where(j => (j.Status == JobStatus.Running || j.Status == JobStatus.Assigned)
+                        && j.WorkerId != null)
+            .Join(db.Workers.Where(w => w.LastSeenAt != null && w.LastSeenAt < cutoff),
+                  j => j.WorkerId, w => w.Id, (j, _) => j)
+            .ToListAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var job in staleJobs)
+        {
+            job.Status = JobStatus.Failed;
+            job.FinishedAt = now;
+            job.ErrorMessage = "Worker unresponsive — marked as failed by stale job reaper.";
+        }
+
+        if (staleJobs.Count > 0)
+            await db.SaveChangesAsync(ct);
+
+        return staleJobs.Select(j => j.Id).ToList();
+    }
+
+    public async Task<IReadOnlyList<Guid>> FailTimedOutJobsAsync(TimeSpan queuedTimeout, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var cutoff = DateTimeOffset.UtcNow - queuedTimeout;
+
+        var timedOutJobs = await db.DeploymentJobs
+            .Where(j => j.Status == JobStatus.Queued && j.EnqueuedAt < cutoff)
+            .ToListAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var job in timedOutJobs)
+        {
+            job.Status = JobStatus.Failed;
+            job.FinishedAt = now;
+            job.ErrorMessage = "Timed out — no worker claimed this job within the allowed window.";
+        }
+
+        if (timedOutJobs.Count > 0)
+            await db.SaveChangesAsync(ct);
+
+        return timedOutJobs.Select(j => j.Id).ToList();
+    }
+
     // Repo caches
     public async Task<IReadOnlyList<RepoCache>> GetRepoCachesAsync(Guid workerId, CancellationToken ct = default)
     {
