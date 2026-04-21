@@ -16,25 +16,35 @@ public class FleetApiClient
         Converters = { new JsonStringEnumConverter() }
     };
 
-    private readonly HttpClient http;
+    private readonly HttpMessageHandler _httpHandler;
+    private readonly HttpMessageHandler _streamingHandler;
+    private readonly BehaviorSubject<Uri?> _baseAddressSubject;
+    private HttpClient http;
     // Long-lived streams (SSE) need an HttpClient with no Timeout, since HttpClient.Timeout
     // covers the entire response — including body reads — even with ResponseHeadersRead.
-    private readonly HttpClient streamingHttp;
-    private readonly BehaviorSubject<Uri?> _baseAddressSubject;
+    private HttpClient streamingHttp;
     private string? token;
 
-    public FleetApiClient(HttpClient http, HttpClient streamingHttp)
-        : this(http, streamingHttp, Observable.Empty<System.Reactive.Unit>())
+    public FleetApiClient(HttpMessageHandler httpHandler, HttpMessageHandler streamingHandler)
+        : this(httpHandler, streamingHandler, Observable.Empty<System.Reactive.Unit>())
     {
     }
 
-    public FleetApiClient(HttpClient http, HttpClient streamingHttp, IObservable<System.Reactive.Unit> unauthorizedSignal)
+    public FleetApiClient(HttpMessageHandler httpHandler, HttpMessageHandler streamingHandler, IObservable<System.Reactive.Unit> unauthorizedSignal)
     {
-        this.http = http;
-        this.streamingHttp = streamingHttp;
-        _baseAddressSubject = new BehaviorSubject<Uri?>(http.BaseAddress);
+        _httpHandler = httpHandler;
+        _streamingHandler = streamingHandler;
+        http = CreateHttpClient(httpHandler);
+        streamingHttp = CreateStreamingClient(streamingHandler);
+        _baseAddressSubject = new BehaviorSubject<Uri?>(null);
         Unauthorized = unauthorizedSignal;
     }
+
+    private static HttpClient CreateHttpClient(HttpMessageHandler handler, Uri? baseAddress = null) =>
+        new(handler, disposeHandler: false) { BaseAddress = baseAddress, Timeout = TimeSpan.FromSeconds(15) };
+
+    private static HttpClient CreateStreamingClient(HttpMessageHandler handler, Uri? baseAddress = null) =>
+        new(handler, disposeHandler: false) { BaseAddress = baseAddress, Timeout = Timeout.InfiniteTimeSpan };
 
     /// <summary>
     /// Emits whenever the server rejects a request with 401 Unauthorized — meaning the
@@ -53,8 +63,19 @@ public class FleetApiClient
     public void SetBaseAddress(string baseUrl)
     {
         var uri = new Uri(baseUrl.TrimEnd('/') + "/");
-        http.BaseAddress = uri;
-        streamingHttp.BaseAddress = uri;
+
+        // HttpClient.BaseAddress is immutable after the first request,
+        // so we create fresh instances that reuse the same handlers.
+        http = CreateHttpClient(_httpHandler, uri);
+        streamingHttp = CreateStreamingClient(_streamingHandler, uri);
+
+        if (token is not null)
+        {
+            var auth = new AuthenticationHeaderValue("Bearer", token);
+            http.DefaultRequestHeaders.Authorization = auth;
+            streamingHttp.DefaultRequestHeaders.Authorization = auth;
+        }
+
         _baseAddressSubject.OnNext(uri);
     }
 

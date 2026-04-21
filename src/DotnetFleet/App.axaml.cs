@@ -21,9 +21,7 @@ public class App : Application
         var streamingHandler = new UnauthorizedHandler();
         var unauthorizedSignal = httpHandler.Unauthorized.Merge(streamingHandler.Unauthorized);
 
-        var httpClient = new HttpClient(httpHandler) { Timeout = TimeSpan.FromSeconds(15) };
-        var streamingClient = new HttpClient(streamingHandler) { Timeout = Timeout.InfiniteTimeSpan };
-        var fleetClient = new FleetApiClient(httpClient, streamingClient, unauthorizedSignal);
+        var fleetClient = new FleetApiClient(httpHandler, streamingHandler, unauthorizedSignal);
         services.AddSingleton(fleetClient);
         services.AddSingleton<ISettingsService>(
             OperatingSystem.IsBrowser() ? new InMemorySettingsService() : new FileSettingsService());
