@@ -272,6 +272,43 @@ workerCommand.Subcommands.Add(workerInstallCommand);
 workerCommand.Subcommands.Add(workerUninstallCommand);
 workerCommand.Subcommands.Add(workerStatusCommand);
 
+// ── fleet update ─────────────────────────────────────────────────────────────
+
+var updateCommand = new Command("update", "Update DotnetFleet.Tool and restart local coordinator/worker services");
+
+var skipToolUpdateOption = new Option<bool>("--skip-tool-update")
+{
+    Description = "Only restart installed services; skip 'dotnet tool update'"
+};
+var updateVersionOption = new Option<string?>("--version")
+{
+    Description = "Pin a specific DotnetFleet.Tool version (default: latest)"
+};
+var updatePrereleaseOption = new Option<bool>("--prerelease")
+{
+    Description = "Allow prerelease versions when updating the tool"
+};
+
+updateCommand.Options.Add(skipToolUpdateOption);
+updateCommand.Options.Add(updateVersionOption);
+updateCommand.Options.Add(updatePrereleaseOption);
+
+updateCommand.SetAction(async (parseResult, _) =>
+{
+    try
+    {
+        await ServiceInstaller.UpdateLocalServicesAsync(new ServiceInstaller.UpdateOptions(
+            SkipToolUpdate: parseResult.GetValue(skipToolUpdateOption),
+            Version: parseResult.GetValue(updateVersionOption),
+            IncludePrerelease: parseResult.GetValue(updatePrereleaseOption)));
+        return 0;
+    }
+    catch (Exception)
+    {
+        return 1;
+    }
+});
+
 // ── fleet version ────────────────────────────────────────────────────────────
 
 var versionCommand = new Command("version", "Show DotnetFleet version");
@@ -285,6 +322,7 @@ versionCommand.SetAction(_ =>
 
 rootCommand.Subcommands.Add(coordinatorCommand);
 rootCommand.Subcommands.Add(workerCommand);
+rootCommand.Subcommands.Add(updateCommand);
 rootCommand.Subcommands.Add(versionCommand);
 
 return rootCommand.Parse(args).Invoke();

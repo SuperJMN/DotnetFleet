@@ -198,6 +198,184 @@ public static class ServiceInstaller
         await ShowStatusAsync(WorkerServiceName(workerName));
     }
 
+    // ── Update ───────────────────────────────────────────────────────────────
+
+    public record UpdateOptions(bool SkipToolUpdate, string? Version, bool IncludePrerelease);
+
+    /// <summary>
+    /// Updates the DotnetFleet.Tool global tool and restarts any locally installed
+    /// fleet-coordinator / fleet-worker-* systemd services so they pick up the new binary.
+    /// </summary>
+    public static async Task UpdateLocalServicesAsync(UpdateOptions opts)
+    {
+        EnsureLinux();
+        EnsureRoot();
+
+        var installedServices = DiscoverInstalledFleetServices();
+
+        Console.WriteLine();
+        Console.WriteLine("  Updating DotnetFleet on this machine");
+        Console.WriteLine("  ────────────────────────────────────");
+        if (installedServices.Count == 0)
+        {
+            Console.WriteLine("  (no local fleet services found)");
+        }
+        else
+        {
+            foreach (var svc in installedServices)
+                Console.WriteLine($"    • {svc}");
+        }
+        Console.WriteLine();
+
+        if (!opts.SkipToolUpdate)
+        {
+            var exitCode = await RunDotnetToolUpdateAsync(opts.Version, opts.IncludePrerelease);
+            if (exitCode != 0)
+            {
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("  ✗ 'dotnet tool update' failed. Services were not restarted.");
+                Console.Error.WriteLine("    Re-run with --skip-tool-update to only restart services.");
+                throw new InvalidOperationException("dotnet tool update failed.");
+            }
+        }
+        else
+        {
+            Console.WriteLine("  • Skipping 'dotnet tool update' (--skip-tool-update)");
+        }
+
+        if (installedServices.Count == 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  ✓ Tool updated. No services to restart.");
+            Console.WriteLine();
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Restarting services...");
+
+        var failures = new List<string>();
+        foreach (var svc in installedServices)
+        {
+            var (_, code) = await RunSystemctlAsync("restart", svc, throwOnError: false);
+            if (code != 0)
+            {
+                failures.Add(svc);
+                Console.Error.WriteLine($"    ✗ {svc} (systemctl restart exit {code})");
+                continue;
+            }
+
+            await Task.Delay(800);
+            var (active, _) = await RunSystemctlAsync("is-active", svc, throwOnError: false);
+            var status = active.Trim();
+            if (status == "active")
+                Console.WriteLine($"    ✓ {svc}");
+            else
+            {
+                failures.Add(svc);
+                Console.Error.WriteLine($"    ✗ {svc} (status: {status})");
+            }
+        }
+
+        Console.WriteLine();
+        if (failures.Count == 0)
+        {
+            Console.WriteLine("  ✓ All fleet services updated and restarted.");
+        }
+        else
+        {
+            Console.Error.WriteLine($"  ⚠ {failures.Count} service(s) failed to restart cleanly:");
+            foreach (var svc in failures)
+                Console.Error.WriteLine($"      journalctl -u {svc} -n 50 --no-pager");
+            throw new InvalidOperationException("Some services failed to restart.");
+        }
+        Console.WriteLine();
+    }
+
+    private static List<string> DiscoverInstalledFleetServices()
+    {
+        var services = new List<string>();
+        if (!Directory.Exists(SystemdDir))
+            return services;
+
+        var coordinatorUnit = Path.Combine(SystemdDir, $"{CoordinatorServiceName}.service");
+        if (File.Exists(coordinatorUnit))
+            services.Add(CoordinatorServiceName);
+
+        foreach (var path in Directory.EnumerateFiles(SystemdDir, "fleet-worker-*.service"))
+        {
+            var name = Path.GetFileNameWithoutExtension(path);
+            if (!string.IsNullOrEmpty(name))
+                services.Add(name);
+        }
+
+        return services;
+    }
+
+    private static async Task<int> RunDotnetToolUpdateAsync(string? version, bool includePrerelease)
+    {
+        var runAsUser = ResolveRunAsUser();
+        var runningAsRoot = geteuid() == 0;
+
+        var toolArgs = new List<string> { "tool", "update", "-g", "DotnetFleet.Tool" };
+        if (!string.IsNullOrWhiteSpace(version))
+        {
+            toolArgs.Add("--version");
+            toolArgs.Add(version);
+        }
+        if (includePrerelease)
+            toolArgs.Add("--prerelease");
+
+        string fileName;
+        string arguments;
+
+        if (runningAsRoot && !string.Equals(runAsUser, "root", StringComparison.Ordinal))
+        {
+            fileName = "sudo";
+            var sudoArgs = new List<string> { "-u", runAsUser, "-H", "dotnet" };
+            sudoArgs.AddRange(toolArgs);
+            arguments = string.Join(" ", sudoArgs.Select(QuoteIfNeeded));
+        }
+        else
+        {
+            fileName = "dotnet";
+            arguments = string.Join(" ", toolArgs.Select(QuoteIfNeeded));
+        }
+
+        Console.WriteLine($"  • Running: {fileName} {arguments}");
+        Console.WriteLine();
+
+        var psi = new ProcessStartInfo(fileName, arguments)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = false
+        };
+
+        var dotnetRoot = ResolveDotnetRoot();
+        if (dotnetRoot != null)
+        {
+            psi.Environment["DOTNET_ROOT"] = dotnetRoot;
+            var path = Environment.GetEnvironmentVariable("PATH") ?? DefaultSystemPath;
+            if (!path.Split(':').Contains(dotnetRoot))
+                psi.Environment["PATH"] = $"{dotnetRoot}:{path}";
+        }
+
+        try
+        {
+            using var proc = Process.Start(psi)!;
+            await proc.WaitForExitAsync();
+            return proc.ExitCode;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"  ✗ Failed to invoke '{fileName}': {ex.Message}");
+            return 1;
+        }
+    }
+
+    private static string QuoteIfNeeded(string value) =>
+        value.Contains(' ') ? $"\"{value}\"" : value;
+
     // ── Systemd helpers ──────────────────────────────────────────────────────
 
     private const string DefaultSystemPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
