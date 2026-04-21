@@ -15,6 +15,8 @@
     <PackageTags>ci;cd;deploy;fleet;dotnet</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/SuperJMN/DotnetFleet</RepositoryUrl>
+    <!-- Coordinator and Worker both ship appsettings.json; allow last-writer-wins during pack/publish -->
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
   <ItemGroup>
