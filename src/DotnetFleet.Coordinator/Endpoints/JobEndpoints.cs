@@ -56,28 +56,31 @@ public static class JobEndpoints
 
         await httpContext.Response.Body.FlushAsync(ct);
 
-        // Send existing logs first
-        var existing = await storage.GetLogsAsync(id, ct);
-        foreach (var entry in existing)
-        {
-            await WriteEventAsync(httpContext.Response, entry.Line, ct);
-        }
-
-        // If job is already in a terminal state, close the stream
-        var job = await storage.GetJobAsync(id, ct);
-        bool isTerminal = job is null
-            || job.Status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled;
-
-        if (isTerminal) return;
-
-        // Subscribe to new log lines (only for running / queued jobs)
+        // Subscribe BEFORE reading existing logs so no messages are lost
+        // in the window between the DB read and the subscription.
         var channel = broadcaster.Subscribe(id);
         try
         {
+            // Send existing logs first
+            var existing = await storage.GetLogsAsync(id, ct);
+            foreach (var entry in existing)
+            {
+                await WriteEventAsync(httpContext.Response, entry.Line, ct);
+            }
+
+            // If job is already in a terminal state, close the stream
+            var job = await storage.GetJobAsync(id, ct);
+            bool isTerminal = job is null
+                || job.Status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled;
+
+            if (isTerminal) return;
+
+            // Stream new log lines as they arrive
             var heartbeatInterval = TimeSpan.FromSeconds(15);
+            ValueTask<string> pendingRead = channel.Reader.ReadAsync(ct);
             while (!ct.IsCancellationRequested)
             {
-                var readTask = channel.Reader.ReadAsync(ct).AsTask();
+                var readTask = pendingRead.AsTask();
                 var delayTask = Task.Delay(heartbeatInterval, ct);
                 var winner = await Task.WhenAny(readTask, delayTask);
 
@@ -85,6 +88,7 @@ public static class JobEndpoints
                 {
                     var line = await readTask;
                     await WriteEventAsync(httpContext.Response, line, ct);
+                    pendingRead = channel.Reader.ReadAsync(ct);
                 }
                 else
                 {

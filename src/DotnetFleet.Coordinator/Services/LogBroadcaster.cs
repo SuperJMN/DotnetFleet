@@ -6,6 +6,7 @@ namespace DotnetFleet.Coordinator.Services;
 /// <summary>
 /// In-memory pub/sub for real-time log streaming via SSE.
 /// Workers publish lines; SSE handlers subscribe to receive them.
+/// All subscriber-list access is synchronized via lock.
 /// </summary>
 public class LogBroadcaster
 {
@@ -19,28 +20,36 @@ public class LogBroadcaster
             SingleWriter = false
         });
 
-        subscribers.GetOrAdd(jobId, _ => []).Add(channel);
+        var list = subscribers.GetOrAdd(jobId, _ => []);
+        lock (list) { list.Add(channel); }
         return channel;
     }
 
     public void Unsubscribe(Guid jobId, Channel<string> channel)
     {
         if (subscribers.TryGetValue(jobId, out var list))
-            list.Remove(channel);
+            lock (list) { list.Remove(channel); }
     }
 
     public void Publish(Guid jobId, string line)
     {
         if (!subscribers.TryGetValue(jobId, out var list)) return;
-        foreach (var channel in list)
+
+        Channel<string>[] snapshot;
+        lock (list) { snapshot = [.. list]; }
+
+        foreach (var channel in snapshot)
             channel.Writer.TryWrite(line);
     }
 
     public void Complete(Guid jobId)
     {
-        if (!subscribers.TryGetValue(jobId, out var list)) return;
-        foreach (var channel in list)
+        if (!subscribers.TryRemove(jobId, out var list)) return;
+
+        Channel<string>[] snapshot;
+        lock (list) { snapshot = [.. list]; }
+
+        foreach (var channel in snapshot)
             channel.Writer.TryComplete();
-        subscribers.TryRemove(jobId, out _);
     }
 }
