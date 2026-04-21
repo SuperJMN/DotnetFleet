@@ -29,6 +29,10 @@
                                     <TextBlock Text="{Binding EmbeddedLabel}"
                                                Opacity="0.5" FontSize="12"
                                                VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Worker.Version, StringFormat='v{0}'}"
+                                               IsVisible="{Binding Worker.Version, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                               Opacity="0.6" FontSize="11"
+                                               VerticalAlignment="Center" />
                                 </StackPanel>
                                 <TextBlock Text="{Binding StatusLabel}" FontSize="12" />
                                 <TextBlock FontSize="11" Opacity="0.6">

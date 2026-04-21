@@ -16,4 +16,11 @@ public class Worker
     public long MaxDiskUsageBytes { get; set; } = 10L * 1024 * 1024 * 1024; // 10 GB default
 
     public string? RepoStoragePath { get; set; }
+
+    /// <summary>
+    /// Informational version of the running worker binary (e.g. "1.2.3+abcdef0").
+    /// Reported by the worker on each heartbeat; null until the first heartbeat
+    /// from a version-aware worker arrives.
+    /// </summary>
+    public string? Version { get; set; }
 }

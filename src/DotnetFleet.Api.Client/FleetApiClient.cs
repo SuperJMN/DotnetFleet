@@ -249,7 +249,8 @@ public class FleetApiClient
         bool IsEmbedded,
         DateTimeOffset? LastSeenAt,
         double MaxDiskUsageGb,
-        string? RepoStoragePath);
+        string? RepoStoragePath,
+        string? Version = null);
 
     // ── Secrets ───────────────────────────────────────────────────────────────
 

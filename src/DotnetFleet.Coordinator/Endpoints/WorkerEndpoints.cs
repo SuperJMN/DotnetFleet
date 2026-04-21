@@ -43,7 +43,8 @@ public static class WorkerEndpoints
         {
             w.Id, w.Name, w.Status, w.IsEmbedded, w.LastSeenAt,
             maxDiskUsageGb = w.MaxDiskUsageBytes / (1024.0 * 1024 * 1024),
-            w.RepoStoragePath
+            w.RepoStoragePath,
+            w.Version
         }));
     }
 
@@ -95,7 +96,8 @@ public static class WorkerEndpoints
     private static async Task<IResult> Heartbeat(
         Guid id,
         HttpContext httpContext,
-        IFleetStorage storage)
+        IFleetStorage storage,
+        [FromBody] HeartbeatRequest? req = null)
     {
         var claimedId = httpContext.User.FindFirst("worker_id")?.Value;
         if (!Guid.TryParse(claimedId, out var tokenWorkerId) || tokenWorkerId != id)
@@ -107,6 +109,8 @@ public static class WorkerEndpoints
         worker.LastSeenAt = DateTimeOffset.UtcNow;
         if (worker.Status == WorkerStatus.Offline)
             worker.Status = WorkerStatus.Online;
+        if (!string.IsNullOrWhiteSpace(req?.Version))
+            worker.Version = req.Version;
         await storage.UpdateWorkerAsync(worker);
         return Results.Ok();
     }
@@ -201,4 +205,5 @@ public static class WorkerEndpoints
     public record UpdateWorkerConfigRequest(double? MaxDiskUsageGb, string? RepoStoragePath);
     public record WorkerLoginRequest(Guid WorkerId, string Secret);
     public record UpdateWorkerStatusRequest(WorkerStatus Status);
+    public record HeartbeatRequest(string? Version);
 }

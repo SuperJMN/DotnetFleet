@@ -7,6 +7,7 @@ using DotnetFleet.WorkerService.RepoStorage;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Reflection;
 
 namespace DotnetFleet.WorkerService;
 
@@ -20,6 +21,12 @@ namespace DotnetFleet.WorkerService;
 /// </summary>
 public class RemoteWorkerBackgroundService : BackgroundService
 {
+    private static readonly string WorkerVersion =
+        typeof(RemoteWorkerBackgroundService).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        ?? typeof(RemoteWorkerBackgroundService).Assembly.GetName().Version?.ToString()
+        ?? "unknown";
+
     private readonly IWorkerJobSource jobSource;
     private readonly IWorkerCoordinatorClient coordinator;
     private readonly WorkerOptions options;
@@ -98,7 +105,7 @@ public class RemoteWorkerBackgroundService : BackgroundService
         {
             try
             {
-                await coordinator.SendHeartbeatAsync(workerId, ct);
+                await coordinator.SendHeartbeatAsync(workerId, WorkerVersion, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

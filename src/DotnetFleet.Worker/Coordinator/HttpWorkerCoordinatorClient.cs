@@ -24,8 +24,19 @@ public class HttpWorkerCoordinatorClient : IWorkerCoordinatorClient
     }
 
     public async Task SendHeartbeatAsync(Guid workerId, CancellationToken ct = default)
+        => await SendHeartbeatAsync(workerId, version: null, ct);
+
+    public async Task SendHeartbeatAsync(Guid workerId, string? version, CancellationToken ct = default)
     {
-        var resp = await http.PostAsync($"/api/workers/{workerId}/heartbeat", content: null, ct);
+        HttpResponseMessage resp;
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            resp = await http.PostAsync($"/api/workers/{workerId}/heartbeat", content: null, ct);
+        }
+        else
+        {
+            resp = await http.PostAsJsonAsync($"/api/workers/{workerId}/heartbeat", new { version }, ct);
+        }
         if (!resp.IsSuccessStatusCode)
             logger.LogWarning("Heartbeat returned {Status}", (int)resp.StatusCode);
     }
