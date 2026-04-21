@@ -42,6 +42,8 @@ public static class JobEndpoints
     /// Server-Sent Events stream of log lines for a given job.
     /// Existing logs are sent first, then new lines are pushed as they arrive.
     /// For completed jobs the stream closes immediately after existing logs.
+    /// While the job is waiting to be picked up, periodic status events are sent
+    /// so the client can show feedback (e.g. "Waiting for an available worker…").
     /// </summary>
     private static async Task StreamLogs(
         Guid id,
@@ -73,15 +75,27 @@ public static class JobEndpoints
             bool isTerminal = job is null
                 || job.Status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled;
 
-            if (isTerminal) return;
+            if (isTerminal)
+            {
+                await WriteStatusEventAsync(httpContext.Response, job?.Status ?? JobStatus.Failed, ct);
+                return;
+            }
 
-            // Stream new log lines as they arrive
-            var heartbeatInterval = TimeSpan.FromSeconds(15);
+            // Send initial status so the client shows feedback immediately
+            var lastKnownStatus = job!.Status;
+            await WriteStatusEventAsync(httpContext.Response, lastKnownStatus, ct);
+
+            if (lastKnownStatus == JobStatus.Queued)
+                await WriteEventAsync(httpContext.Response, "⏳ Waiting for an available worker…", ct);
+
+            // Stream new log lines as they arrive, polling job status on each heartbeat
+            // so the client gets timely feedback during the Queued→Running transition.
+            var statusPollInterval = TimeSpan.FromSeconds(5);
             ValueTask<string> pendingRead = channel.Reader.ReadAsync(ct);
             while (!ct.IsCancellationRequested)
             {
                 var readTask = pendingRead.AsTask();
-                var delayTask = Task.Delay(heartbeatInterval, ct);
+                var delayTask = Task.Delay(statusPollInterval, ct);
                 var winner = await Task.WhenAny(readTask, delayTask);
 
                 if (winner == readTask)
@@ -92,10 +106,35 @@ public static class JobEndpoints
                 }
                 else
                 {
-                    // Heartbeat: SSE comment line, ignored by clients but keeps proxies/intermediaries
-                    // from closing the idle connection.
-                    await httpContext.Response.WriteAsync(": keep-alive\n\n", ct);
-                    await httpContext.Response.Body.FlushAsync(ct);
+                    // Poll job status — send an update when it changes, otherwise keep-alive
+                    var current = await storage.GetJobAsync(id, ct);
+
+                    if (current is null
+                        || current.Status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled)
+                    {
+                        await WriteStatusEventAsync(httpContext.Response, current?.Status ?? JobStatus.Failed, ct);
+                        break;
+                    }
+
+                    if (current.Status != lastKnownStatus)
+                    {
+                        lastKnownStatus = current.Status;
+                        await WriteStatusEventAsync(httpContext.Response, lastKnownStatus, ct);
+
+                        var transitionMsg = lastKnownStatus switch
+                        {
+                            JobStatus.Assigned => "🔄 Worker assigned, preparing deployment…",
+                            JobStatus.Running => "🚀 Deployment started",
+                            _ => null
+                        };
+                        if (transitionMsg is not null)
+                            await WriteEventAsync(httpContext.Response, transitionMsg, ct);
+                    }
+                    else
+                    {
+                        await httpContext.Response.WriteAsync(": keep-alive\n\n", ct);
+                        await httpContext.Response.Body.FlushAsync(ct);
+                    }
                 }
             }
         }
@@ -110,6 +149,12 @@ public static class JobEndpoints
     private static async Task WriteEventAsync(HttpResponse response, string data, CancellationToken ct)
     {
         await response.WriteAsync($"data: {data}\n\n", ct);
+        await response.Body.FlushAsync(ct);
+    }
+
+    private static async Task WriteStatusEventAsync(HttpResponse response, JobStatus status, CancellationToken ct)
+    {
+        await response.WriteAsync($"event: status\ndata: {status}\n\n", ct);
         await response.Body.FlushAsync(ct);
     }
 

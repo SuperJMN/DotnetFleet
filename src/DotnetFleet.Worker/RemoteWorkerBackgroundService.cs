@@ -56,9 +56,9 @@ public class RemoteWorkerBackgroundService : BackgroundService
             "Worker {Id} started. Coordinator: {Url}. Repos: {Path} (CPM-isolated)",
             workerId, this.options.CoordinatorBaseUrl, repoStoragePath);
 
-        // Initial registration of self with the coordinator (status=Online).
-        try { await coordinator.UpdateStatusAsync(workerId, WorkerStatus.Online, stoppingToken); }
-        catch (Exception ex) { logger.LogWarning(ex, "Initial status announce failed."); }
+        // Announce ourselves as Online with retries — the coordinator may still
+        // be starting up, so we tolerate transient failures.
+        await AnnounceOnlineWithRetryAsync(stoppingToken);
 
         using var heartbeatTimer = new PeriodicTimer(TimeSpan.FromSeconds(this.options.HeartbeatIntervalSeconds));
         using var pollTimer = new PeriodicTimer(TimeSpan.FromSeconds(this.options.PollIntervalSeconds));
@@ -67,6 +67,29 @@ public class RemoteWorkerBackgroundService : BackgroundService
         var pollTask = PollLoopAsync(pollTimer, stoppingToken);
 
         await Task.WhenAll(heartbeatTask, pollTask);
+    }
+
+    private async Task AnnounceOnlineWithRetryAsync(CancellationToken ct)
+    {
+        const int maxAttempts = 5;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await coordinator.UpdateStatusAsync(workerId, WorkerStatus.Online, ct);
+                logger.LogInformation("Worker announced as Online (attempt {Attempt})", attempt);
+                return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Status announce attempt {Attempt}/{Max} failed", attempt, maxAttempts);
+                if (attempt < maxAttempts)
+                    await Task.Delay(TimeSpan.FromSeconds(2 * attempt), ct);
+            }
+        }
+        logger.LogError(
+            "Could not announce Online after {Max} attempts — heartbeat will retry in the background",
+            maxAttempts);
     }
 
     private async Task HeartbeatLoopAsync(PeriodicTimer timer, CancellationToken ct)
