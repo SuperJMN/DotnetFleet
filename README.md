@@ -198,32 +198,40 @@ To auto-deploy on new commits, set a **polling interval** (in minutes) on the pr
 
 ### Install as systemd Services
 
-For production, install the coordinator and workers as **systemd services** so they start on boot and restart on failure:
+For production, install the coordinator and workers as **systemd services** so they start on boot and restart on failure.
+
+> **Note:** `sudo` resets `PATH`, so you need to pass the full path to `fleet` and set `DOTNET_ROOT` if .NET is installed per-user (e.g., via `dotnet-install.sh`). The examples below use `$(which fleet)` to resolve the path before `sudo` takes over.
 
 ```bash
 # Install the coordinator
-sudo fleet coordinator install --port 5000
+sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
+  "$(which fleet)" coordinator install --port 5000
 #  → Creates and enables fleet-coordinator.service
 #  → Prints the registration token
 
 # Install a worker
-sudo fleet worker install \
+sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
+  "$(which fleet)" worker install \
   --coordinator http://myserver:5000 \
   --token <token> \
   --name build-01
 
 # Check status
-sudo fleet coordinator status
-sudo fleet worker status --name build-01
+sudo systemctl status fleet-coordinator
+sudo systemctl status fleet-worker-build-01
 
 # View logs
 journalctl -u fleet-coordinator -f
 journalctl -u fleet-worker-build-01 -f
 
 # Uninstall when needed
-sudo fleet coordinator uninstall
-sudo fleet worker uninstall --name build-01
+sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
+  "$(which fleet)" coordinator uninstall
+sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
+  "$(which fleet)" worker uninstall --name build-01
 ```
+
+> **Tip:** If .NET is installed system-wide (e.g., via `apt`), `DOTNET_ROOT` is typically already set and `fleet` may be in the system PATH — in that case, plain `sudo fleet ...` works.
 
 The services run as the calling user (via `SUDO_USER`), write unit files to `/etc/systemd/system/`, and use these service names:
 
