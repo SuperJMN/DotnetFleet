@@ -296,32 +296,34 @@ When total cached repo size exceeds the limit (in GB), the worker automatically 
 
 Upgrading DotnetFleet replaces only the tool binary — **all data is preserved** (projects, jobs, worker credentials, configuration, cached repos). Data lives under `--data-dir` (default `~/.fleet/`), which is independent of the tool installation.
 
-#### 1. Update the CLI tool
+#### One-shot update
+
+If the coordinator and/or workers run as systemd services on this machine, a single command updates the global tool and restarts every local fleet service:
+
+```bash
+sudo fleet update
+```
+
+Options:
+
+```
+--skip-tool-update      Only restart services; skip 'dotnet tool update'
+--version <version>     Pin a specific DotnetFleet.Tool version
+--prerelease            Allow prerelease versions when updating
+```
+
+#### Manual update
+
+If you'd rather do it by hand:
 
 ```bash
 dotnet tool update -g DotnetFleet.Tool
 fleet version   # verify the new version
+sudo systemctl restart fleet-coordinator
+sudo systemctl restart fleet-worker-<name>
 ```
 
-#### 2. Restart services
-
-For **foreground** processes, just stop and re-run the same command.
-
-For **systemd services**, re-run the `install` command with the same flags you used originally — it stops the running service, writes a fresh unit file, and starts the new version:
-
-```bash
-# Coordinator
-sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
-  "$(which fleet)" coordinator install --port 5000
-
-# Worker(s)
-sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
-  "$(which fleet)" worker install \
-  --coordinator http://myserver:5000 \
-  --name build-01
-```
-
-> **Note:** `--token` is not needed on reinstall — the coordinator keeps its existing token from `config.json`, and each worker already has credentials in `worker.json`.
+> The systemd unit files point at the **global tool** (`~/.dotnet/tools/fleet`) — there's no need to re-run `install` after a tool update.
 
 #### What is preserved across upgrades
 
@@ -335,10 +337,8 @@ sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
 If something goes wrong, downgrade to a specific version:
 
 ```bash
-dotnet tool update -g DotnetFleet.Tool --version <previous-version>
+sudo fleet update --version <previous-version>
 ```
-
-Then restart the services the same way as above.
 
 ---
 
@@ -370,6 +370,11 @@ fleet worker status [--name <n>]       Show service status
   --max-disk <gb>               Max disk usage in GB (default: 10)
 
 fleet version                          Show version
+
+fleet update [options]                 Update tool + restart local services (sudo)
+  --skip-tool-update            Only restart services
+  --version <version>           Pin a specific DotnetFleet.Tool version
+  --prerelease                  Allow prerelease versions
 ```
 
 ---

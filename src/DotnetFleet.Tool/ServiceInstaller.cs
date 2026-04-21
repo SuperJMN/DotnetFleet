@@ -54,8 +54,8 @@ public static class ServiceInstaller
         EnsureLinux();
         EnsureRoot();
 
-        var fleetPath = ResolveFleetPath();
         var user = ResolveRunAsUser();
+        var fleetPath = await EnsureFleetGlobalToolAsync(user);
 
         Directory.CreateDirectory(opts.DataDir);
 
@@ -153,8 +153,8 @@ public static class ServiceInstaller
         EnsureLinux();
         EnsureRoot();
 
-        var fleetPath = ResolveFleetPath();
         var user = ResolveRunAsUser();
+        var fleetPath = await EnsureFleetGlobalToolAsync(user);
         var serviceName = WorkerServiceName(opts.Name);
 
         Directory.CreateDirectory(opts.DataDir);
@@ -314,6 +314,11 @@ public static class ServiceInstaller
 
     private static async Task<int> RunDotnetToolUpdateAsync(string? version, bool includePrerelease)
     {
+        return await RunDotnetToolCommandAsync("update", version, includePrerelease);
+    }
+
+    private static async Task<int> RunDotnetToolCommandAsync(string verb, string? version, bool includePrerelease)
+    {
         var runAsUser = ResolveRunAsUser();
         var runningAsRoot = geteuid() == 0;
         var crossUser = runningAsRoot && !string.Equals(runAsUser, "root", StringComparison.Ordinal);
@@ -327,7 +332,7 @@ public static class ServiceInstaller
             return 1;
         }
 
-        var toolArgs = new List<string> { "tool", "update", "-g", "DotnetFleet.Tool" };
+        var toolArgs = new List<string> { "tool", verb, "-g", "DotnetFleet.Tool" };
         if (!string.IsNullOrWhiteSpace(version))
         {
             toolArgs.Add("--version");
@@ -610,19 +615,79 @@ public static class ServiceInstaller
 
     // ── Process helpers ──────────────────────────────────────────────────────
 
-    private static string ResolveFleetPath()
+    /// <summary>
+    /// Returns the absolute path to the 'fleet' global tool for <paramref name="targetUser"/>,
+    /// auto-installing the DotnetFleet.Tool global tool if we're currently running from an
+    /// ephemeral location (e.g. dnx / NuGet package cache). systemd needs a stable ExecStart path.
+    /// </summary>
+    private static async Task<string> EnsureFleetGlobalToolAsync(string targetUser)
     {
+        var userHome = ResolveUserHome(targetUser)
+                       ?? throw new InvalidOperationException($"Could not resolve home directory for user '{targetUser}'.");
+        var globalToolPath = Path.Combine(userHome, ".dotnet", "tools", "fleet");
         var currentExe = Environment.ProcessPath;
-        if (currentExe != null && File.Exists(currentExe))
+        var ephemeral = currentExe != null && IsEphemeralPath(currentExe);
+
+        if (!ephemeral && currentExe != null && File.Exists(currentExe))
+        {
+            // Already running from a stable path (likely the global tool itself).
             return currentExe;
+        }
 
-        var (whichResult, whichCode) = RunProcessSync("which", "fleet");
-        if (whichCode == 0 && !string.IsNullOrWhiteSpace(whichResult))
-            return whichResult.Trim();
+        if (File.Exists(globalToolPath) && !ephemeral)
+            return globalToolPath;
 
-        throw new InvalidOperationException(
-            "Cannot determine the path to the 'fleet' executable. " +
-            "Ensure it is installed as a dotnet global tool: dotnet tool install -g DotnetFleet.Tool");
+        // Need to install (or reinstall to refresh, when running ephemerally).
+        var pinnedVersion = ephemeral ? ExtractToolVersionFromPath(currentExe!) : null;
+        var verb = File.Exists(globalToolPath) ? "update" : "install";
+
+        Console.WriteLine();
+        Console.WriteLine($"  • DotnetFleet.Tool global tool is required for systemd services.");
+        if (ephemeral)
+            Console.WriteLine($"    Detected ephemeral execution path: {currentExe}");
+        Console.WriteLine($"    Running 'dotnet tool {verb} -g DotnetFleet.Tool{(pinnedVersion != null ? $" --version {pinnedVersion}" : "")}' for user '{targetUser}'...");
+        Console.WriteLine();
+
+        var exitCode = await RunDotnetToolCommandAsync(verb, pinnedVersion, includePrerelease: false);
+        if (exitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"Failed to install DotnetFleet.Tool global tool for user '{targetUser}' " +
+                $"(dotnet tool {verb} exited with code {exitCode}). " +
+                "Install it manually with: dotnet tool install -g DotnetFleet.Tool");
+        }
+
+        if (!File.Exists(globalToolPath))
+        {
+            throw new InvalidOperationException(
+                $"Global tool installation succeeded but '{globalToolPath}' was not found. " +
+                "Check the user's ~/.dotnet/tools directory.");
+        }
+
+        Console.WriteLine($"  ✓ Global tool installed at {globalToolPath}");
+        Console.WriteLine();
+        return globalToolPath;
+    }
+
+    private static bool IsEphemeralPath(string path)
+    {
+        return path.Contains("/.nuget/packages/", StringComparison.OrdinalIgnoreCase)
+               || path.Contains("/.dotnet/toolResolverCache/", StringComparison.OrdinalIgnoreCase)
+               || path.Contains("/dotnetCliToolResolver/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ExtractToolVersionFromPath(string path)
+    {
+        // dnx / NuGet layout: .../packages/dotnetfleet.tool/<version>/tools/<tfm>/<rid>/...
+        const string marker = "/dotnetfleet.tool/";
+        var idx = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return null;
+        var rest = path[(idx + marker.Length)..];
+        var slash = rest.IndexOf('/');
+        if (slash <= 0) return null;
+        var candidate = rest[..slash];
+        // Sanity check: looks like a SemVer-ish version (starts with a digit).
+        return candidate.Length > 0 && char.IsDigit(candidate[0]) ? candidate : null;
     }
 
     private static string ResolveRunAsUser()
