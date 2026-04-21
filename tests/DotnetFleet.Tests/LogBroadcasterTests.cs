@@ -89,4 +89,36 @@ public class LogBroadcasterTests
 
         lines.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task Concurrent_publish_and_subscribe_does_not_throw()
+    {
+        var broadcaster = new LogBroadcaster();
+        var jobId = Guid.NewGuid();
+
+        // Hammer the broadcaster from multiple threads simultaneously.
+        // Before the lock fix this would throw InvalidOperationException
+        // ("Collection was modified during enumeration").
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var publishTask = Task.Run(async () =>
+        {
+            for (var i = 0; i < 500 && !cts.IsCancellationRequested; i++)
+                broadcaster.Publish(jobId, $"line-{i}");
+        });
+
+        var subscribeTask = Task.Run(async () =>
+        {
+            var channels = new List<System.Threading.Channels.Channel<string>>();
+            for (var i = 0; i < 500 && !cts.IsCancellationRequested; i++)
+            {
+                var ch = broadcaster.Subscribe(jobId);
+                channels.Add(ch);
+                if (i % 3 == 0)
+                    broadcaster.Unsubscribe(jobId, ch);
+            }
+        });
+
+        var act = () => Task.WhenAll(publishTask, subscribeTask);
+        await act.Should().NotThrowAsync();
+    }
 }
