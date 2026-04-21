@@ -24,6 +24,7 @@ public class CoordinatorStartupOptions
     public string? DataDir { get; set; }
     public string? AdminPassword { get; set; }
     public string? Urls { get; set; }
+    public bool NoMdns { get; set; }
 }
 
 public static class CoordinatorHostBuilder
@@ -75,6 +76,14 @@ public static class CoordinatorHostBuilder
         builder.Services.AddSingleton<LogBroadcaster>();
         builder.Services.AddHostedService<PollingBackgroundService>();
         builder.Services.AddHostedService<StaleJobReaperService>();
+
+        // ── mDNS LAN auto-discovery ──────────────────────────────────────────
+        if (!options.NoMdns)
+        {
+            var instance = $"fleet-{Environment.MachineName}".ToLowerInvariant();
+            var asmVersion = typeof(CoordinatorHostBuilder).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+            builder.Services.AddSingleton<IHostedService>(_ => new MdnsAdvertiser(options.Port, instance, asmVersion));
+        }
 
         // ── CORS ─────────────────────────────────────────────────────────────
         builder.Services.AddCors(opt => opt.AddDefaultPolicy(p =>

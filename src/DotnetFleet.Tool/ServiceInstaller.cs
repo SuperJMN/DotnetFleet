@@ -47,7 +47,8 @@ public static class ServiceInstaller
         string? Token,
         string? JwtSecret,
         string? AdminPassword,
-        string? Urls);
+        string? Urls,
+        bool NoMdns = false);
 
     public static async Task InstallCoordinatorAsync(CoordinatorInstallOptions opts)
     {
@@ -596,6 +597,7 @@ public static class ServiceInstaller
         if (opts.JwtSecret != null) parts.Add($"--jwt-secret \"{opts.JwtSecret}\"");
         if (opts.AdminPassword != null) parts.Add($"--admin-password \"{opts.AdminPassword}\"");
         if (opts.Urls != null) parts.Add($"--urls \"{opts.Urls}\"");
+        if (opts.NoMdns) parts.Add("--no-mdns");
         return string.Join(" ", parts);
     }
 

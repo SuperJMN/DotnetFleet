@@ -49,6 +49,8 @@
     <!-- Icons -->
     <PackageVersion Include="Optris.Icons.Avalonia.MaterialDesign" Version="12.0.4" />
     <PackageVersion Include="System.CommandLine" Version="3.0.0-preview.3.26207.106" />
+    <!-- mDNS service discovery -->
+    <PackageVersion Include="Makaretu.Dns.Multicast.New" Version="0.38.0" />
     <!-- Testing -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
     <PackageVersion Include="xunit" Version="2.9.0" />

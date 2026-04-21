@@ -32,10 +32,12 @@ fleet coordinator
 **3. Connect a worker**
 
 ```bash
-fleet worker --coordinator http://localhost:5000 --token <token>
+fleet worker
 ```
 
-Copy the token from the coordinator banner. That's it — you have a working CI/CD pipeline. Add projects from the [Desktop App](#desktop-app), trigger deploys, and watch live logs.
+That's it. The worker auto-detects the coordinator running on the same machine — no URL or token needed. (Across machines on the LAN, mDNS finds the coordinator automatically and you only need to pass `--token <token>` once.)
+
+You now have a working CI/CD pipeline. Add projects from the [Desktop App](#desktop-app), trigger deploys, and watch live logs.
 
 ---
 
@@ -165,23 +167,43 @@ Secrets are generated once and reused across restarts — you'll always get the 
 
 ### Step 2 — Connect Workers
 
-Copy the command from the coordinator banner and run it **on the same machine or any other machine on the network**:
+DotnetFleet has two layers of auto-discovery so you rarely need to type the coordinator URL or copy a token:
+
+**Same machine (no flags needed):**
+
+```bash
+fleet worker
+```
+
+The worker reads `~/.fleet/coordinator/config.json` (or the systemd unit) and connects to `http://localhost:<port>` with the token already present on disk.
+
+**Other machine on the LAN (token only):**
+
+```bash
+fleet worker --token <token>
+```
+
+The worker queries multicast DNS (`_dotnetfleet._tcp.local.`), finds the coordinator advertised by the other host, and uses its URL. The token is **never** broadcast — you still need to provide it once.
+
+**Multiple coordinators on the LAN, or no mDNS:**
 
 ```bash
 fleet worker --coordinator http://myserver:5000 --token <token>
 ```
+
+If `fleet worker` finds more than one coordinator, it lists them and asks you to pick with `--coordinator`. If your network blocks multicast, pass both flags explicitly. To skip discovery altogether, add `--no-discover`.
 
 The worker self-registers on first run, persists its credentials to `~/.fleet/worker-<hostname>/worker.json`, and immediately starts polling for jobs.
 
 **Scale out** by adding more workers — each one is an independent process:
 
 ```bash
-fleet worker --coordinator http://myserver:5000 --token <token> --name build-01
-fleet worker --coordinator http://myserver:5000 --token <token> --name build-02
-fleet worker --coordinator http://myserver:5000 --token <token> --name build-03
+fleet worker --name build-01
+fleet worker --name build-02
+fleet worker --name build-03
 ```
 
-> The `--token` is only needed on first run. After registration the worker authenticates with its own credentials.
+> After the first registration, even `--token` is no longer needed: the worker authenticates with its own per-instance credentials.
 
 ### Step 3 — Add Projects and Deploy
 
@@ -222,14 +244,18 @@ What's going on in that command:
 
 The first time you do this, the installer detects it's running from `dnx`'s ephemeral cache and **automatically performs `dotnet tool install -g DotnetFleet.Tool`** for the calling user, so the systemd unit's `ExecStart=` points at the stable global-tool path (`~/.dotnet/tools/fleet`) instead of a cache location that may disappear later.
 
-A worker on the same machine looks the same:
+A worker on the same machine looks the same — and thanks to local auto-discovery you don't need `--coordinator` or `--token`:
 
 ```bash
 sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
-  dnx dotnetfleet.tool worker install \
-    --coordinator http://myserver:5000 \
-    --token <token> \
-    --name build-01
+  dnx dotnetfleet.tool worker install --name build-01
+```
+
+For a worker on a **different** machine, mDNS finds the coordinator's URL automatically — you only have to supply the token:
+
+```bash
+sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
+  dnx dotnetfleet.tool worker install --token <token> --name build-01
 ```
 
 #### Option B — Install the global tool first, then use `fleet` directly
@@ -242,11 +268,13 @@ dotnet tool install -g DotnetFleet.Tool
 sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
   "$(which fleet)" coordinator install --port 5000
 
+# Worker on the same machine — auto-discovered:
 sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
-  "$(which fleet)" worker install \
-    --coordinator http://myserver:5000 \
-    --token <token> \
-    --name build-01
+  "$(which fleet)" worker install --name build-01
+
+# Worker on a remote host — pass the token (URL is discovered via mDNS):
+sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
+  "$(which fleet)" worker install --token <token> --name build-01
 ```
 
 The `$(which fleet)` resolves the path **before** `sudo` strips `PATH`, so root can find the binary.
@@ -397,18 +425,20 @@ fleet coordinator status               Show service status
   --jwt-secret <secret>         JWT signing secret (auto-generated)
   --admin-password <pass>       Admin password (default: admin)
   --urls <urls>                 ASP.NET Core URLs override
+  --no-mdns                     Disable mDNS advertising on the LAN
 
 fleet worker [options]                 Run worker in foreground
 fleet worker install [options]         Install as systemd service (sudo)
 fleet worker uninstall [--name <n>]    Remove systemd service (sudo)
 fleet worker status [--name <n>]       Show service status
 
-  --coordinator, -c <url>       Coordinator URL (required)
-  --token, -t <token>           Registration token (required on first run)
+  --coordinator, -c <url>       Coordinator URL (auto-discovered if omitted)
+  --token, -t <token>           Registration token (auto-discovered for local coordinators)
   --name, -n <name>             Worker display name (default: hostname)
   --data-dir <path>             Data directory (default: ~/.fleet/worker-{name})
   --poll-interval <secs>        Polling interval in seconds (default: 10)
   --max-disk <gb>               Max disk usage in GB (default: 10)
+  --no-discover                 Disable local + mDNS auto-discovery
 
 fleet version                          Show version
 

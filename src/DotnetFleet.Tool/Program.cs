@@ -36,6 +36,10 @@ var urlsOption = new Option<string?>("--urls")
 {
     Description = "ASP.NET Core URLs override (e.g. http://0.0.0.0:5000)"
 };
+var noMdnsOption = new Option<bool>("--no-mdns")
+{
+    Description = "Disable mDNS advertising (workers won't auto-discover this coordinator on the LAN)"
+};
 
 coordinatorCommand.Options.Add(portOption);
 coordinatorCommand.Options.Add(coordDataDirOption);
@@ -43,6 +47,7 @@ coordinatorCommand.Options.Add(tokenOption);
 coordinatorCommand.Options.Add(jwtSecretOption);
 coordinatorCommand.Options.Add(adminPasswordOption);
 coordinatorCommand.Options.Add(urlsOption);
+coordinatorCommand.Options.Add(noMdnsOption);
 
 // Default action: run coordinator in foreground
 coordinatorCommand.SetAction(async (parseResult, cancellationToken) =>
@@ -53,6 +58,7 @@ coordinatorCommand.SetAction(async (parseResult, cancellationToken) =>
     var regToken = parseResult.GetValue(tokenOption);
     var adminPassword = parseResult.GetValue(adminPasswordOption);
     var urls = parseResult.GetValue(urlsOption);
+    var noMdns = parseResult.GetValue(noMdnsOption);
 
     var config = FleetConfig.LoadOrCreateCoordinatorConfig(dataDir, jwtSecret, regToken, port);
 
@@ -72,7 +78,8 @@ coordinatorCommand.SetAction(async (parseResult, cancellationToken) =>
             RegistrationToken = config.RegistrationToken,
             DataDir = dataDir,
             AdminPassword = adminPassword,
-            Urls = urls
+            Urls = urls,
+            NoMdns = noMdns
         };
 
         var app = CoordinatorHostBuilder.Build(options, []);
@@ -100,6 +107,7 @@ coordInstallCommand.Options.Add(tokenOption);
 coordInstallCommand.Options.Add(jwtSecretOption);
 coordInstallCommand.Options.Add(adminPasswordOption);
 coordInstallCommand.Options.Add(urlsOption);
+coordInstallCommand.Options.Add(noMdnsOption);
 
 coordInstallCommand.SetAction(async (parseResult, _) =>
 {
@@ -111,7 +119,8 @@ coordInstallCommand.SetAction(async (parseResult, _) =>
         Token: parseResult.GetValue(tokenOption),
         JwtSecret: parseResult.GetValue(jwtSecretOption),
         AdminPassword: parseResult.GetValue(adminPasswordOption),
-        Urls: parseResult.GetValue(urlsOption)));
+        Urls: parseResult.GetValue(urlsOption),
+        NoMdns: parseResult.GetValue(noMdnsOption)));
 });
 
 // ── fleet coordinator uninstall ──────────────────────────────────────────
@@ -136,14 +145,13 @@ coordinatorCommand.Subcommands.Add(coordStatusCommand);
 
 var workerCommand = new Command("worker", "Start a DotnetFleet worker that connects to a coordinator");
 
-var coordinatorUrlOption = new Option<string>("--coordinator", "-c")
+var coordinatorUrlOption = new Option<string?>("--coordinator", "-c")
 {
-    Description = "Coordinator URL (e.g. http://myserver:5000)",
-    Required = true
+    Description = "Coordinator URL (e.g. http://myserver:5000). Auto-discovered on the local machine and via mDNS on the LAN if omitted."
 };
 var workerTokenOption = new Option<string?>("--token", "-t")
 {
-    Description = "Registration token (required on first run)"
+    Description = "Registration token (required on first run; auto-discovered when the coordinator runs on this machine)"
 };
 var nameOption = new Option<string?>("--name", "-n")
 {
@@ -161,6 +169,10 @@ var maxDiskOption = new Option<double?>("--max-disk")
 {
     Description = "Max disk usage in GB for repo cache (default: 10)"
 };
+var noDiscoverOption = new Option<bool>("--no-discover")
+{
+    Description = "Disable auto-discovery (local + mDNS) of the coordinator"
+};
 
 workerCommand.Options.Add(coordinatorUrlOption);
 workerCommand.Options.Add(workerTokenOption);
@@ -168,17 +180,22 @@ workerCommand.Options.Add(nameOption);
 workerCommand.Options.Add(workerDataDirOption);
 workerCommand.Options.Add(pollIntervalOption);
 workerCommand.Options.Add(maxDiskOption);
+workerCommand.Options.Add(noDiscoverOption);
 
 // Default action: run worker in foreground
 workerCommand.SetAction(async (parseResult, cancellationToken) =>
 {
-    var coordinatorUrl = parseResult.GetValue(coordinatorUrlOption)!;
-    var regToken = parseResult.GetValue(workerTokenOption);
+    var explicitUrl = parseResult.GetValue(coordinatorUrlOption);
+    var explicitToken = parseResult.GetValue(workerTokenOption);
+    var noDiscover = parseResult.GetValue(noDiscoverOption);
     var workerName = parseResult.GetValue(nameOption) ?? Environment.MachineName;
     var dataDir = parseResult.GetValue(workerDataDirOption)
                   ?? FleetConfig.GetDefaultDataDir($"worker-{workerName}");
     var pollInterval = parseResult.GetValue(pollIntervalOption);
     var maxDisk = parseResult.GetValue(maxDiskOption);
+
+    var resolved = await CoordinatorResolver.ResolveAsync(explicitUrl, explicitToken, noDiscover);
+    if (resolved == null) return 1;
 
     Log.Logger = new LoggerConfiguration()
         .MinimumLevel.Information()
@@ -187,7 +204,7 @@ workerCommand.SetAction(async (parseResult, cancellationToken) =>
 
     Console.WriteLine();
     Console.WriteLine($"  DotnetFleet Worker \"{workerName}\"");
-    Console.WriteLine($"  Coordinator: {coordinatorUrl}");
+    Console.WriteLine($"  Coordinator: {resolved.Url}");
     Console.WriteLine($"  Data dir:    {dataDir}");
     Console.WriteLine();
 
@@ -195,8 +212,8 @@ workerCommand.SetAction(async (parseResult, cancellationToken) =>
     {
         var options = new WorkerStartupOptions
         {
-            CoordinatorUrl = coordinatorUrl,
-            RegistrationToken = regToken,
+            CoordinatorUrl = resolved.Url,
+            RegistrationToken = resolved.Token,
             Name = workerName,
             DataDir = dataDir,
             PollIntervalSeconds = pollInterval,
@@ -227,19 +244,28 @@ workerInstallCommand.Options.Add(nameOption);
 workerInstallCommand.Options.Add(workerDataDirOption);
 workerInstallCommand.Options.Add(pollIntervalOption);
 workerInstallCommand.Options.Add(maxDiskOption);
+workerInstallCommand.Options.Add(noDiscoverOption);
 
 workerInstallCommand.SetAction(async (parseResult, _) =>
 {
     var workerName = parseResult.GetValue(nameOption) ?? Environment.MachineName;
     var dataDir = parseResult.GetValue(workerDataDirOption)
                   ?? FleetConfig.GetDefaultDataDir($"worker-{workerName}");
+    var explicitUrl = parseResult.GetValue(coordinatorUrlOption);
+    var explicitToken = parseResult.GetValue(workerTokenOption);
+    var noDiscover = parseResult.GetValue(noDiscoverOption);
+
+    var resolved = await CoordinatorResolver.ResolveAsync(explicitUrl, explicitToken, noDiscover);
+    if (resolved == null) return 1;
+
     await ServiceInstaller.InstallWorkerAsync(new ServiceInstaller.WorkerInstallOptions(
-        CoordinatorUrl: parseResult.GetValue(coordinatorUrlOption)!,
-        Token: parseResult.GetValue(workerTokenOption),
+        CoordinatorUrl: resolved.Url,
+        Token: resolved.Token,
         Name: workerName,
         DataDir: dataDir,
         PollInterval: parseResult.GetValue(pollIntervalOption),
         MaxDisk: parseResult.GetValue(maxDiskOption)));
+    return 0;
 });
 
 // ── fleet worker uninstall ───────────────────────────────────────────────

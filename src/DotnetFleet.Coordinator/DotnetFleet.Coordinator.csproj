@@ -15,6 +15,7 @@
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Makaretu.Dns.Multicast.New" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DotnetFleet.Core\DotnetFleet.Core.csproj" />
