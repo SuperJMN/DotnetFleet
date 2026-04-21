@@ -223,6 +223,31 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory) : IFleetS
         return timedOutJobs.Select(j => j.Id).ToList();
     }
 
+    public async Task<IReadOnlyList<Guid>> FailStuckAssignedJobsAsync(TimeSpan assignedTimeout, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var cutoff = DateTimeOffset.UtcNow - assignedTimeout;
+
+        // Jobs stuck in Assigned: claimed by a worker but never transitioned to Running.
+        // EnqueuedAt is used as the baseline because there is no separate AssignedAt timestamp.
+        var stuckJobs = await db.DeploymentJobs
+            .Where(j => j.Status == JobStatus.Assigned && j.StartedAt == null && j.EnqueuedAt < cutoff)
+            .ToListAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var job in stuckJobs)
+        {
+            job.Status = JobStatus.Failed;
+            job.FinishedAt = now;
+            job.ErrorMessage = "Timed out — worker claimed this job but never started it.";
+        }
+
+        if (stuckJobs.Count > 0)
+            await db.SaveChangesAsync(ct);
+
+        return stuckJobs.Select(j => j.Id).ToList();
+    }
+
     // Repo caches
     public async Task<IReadOnlyList<RepoCache>> GetRepoCachesAsync(Guid workerId, CancellationToken ct = default)
     {

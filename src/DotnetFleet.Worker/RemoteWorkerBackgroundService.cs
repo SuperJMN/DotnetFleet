@@ -105,28 +105,6 @@ public class RemoteWorkerBackgroundService : BackgroundService
     {
         logger.LogInformation("Starting job {JobId} for project {ProjectId}", job.Id, job.ProjectId);
 
-        await SetWorkerBusy(true, ct);
-        await jobSource.ReportJobStartedAsync(job.Id, workerId, ct);
-
-        var project = await coordinator.GetProjectAsync(job.ProjectId, ct);
-        if (project is null)
-        {
-            await jobSource.ReportJobCompletedAsync(job.Id, false, "Project not found", ct);
-            await SetWorkerBusy(false, ct);
-            return;
-        }
-
-        await ManageDiskSpaceAsync(ct);
-
-        var localPath = Path.Combine(repoStoragePath, SanitizeName(project.Name));
-
-        using var cancelCts = new CancellationTokenSource();
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, cancelCts.Token);
-        var jobCt = linkedCts.Token;
-
-        // Background task: poll coordinator for cancellation requests
-        _ = PollForCancellationAsync(job.Id, cancelCts, ct);
-
         await using var logBuffer = new LogChunkBuffer(
             send: (chunk, token) => jobSource.SendLogChunkAsync(job.Id, chunk, token),
             ct: ct);
@@ -139,6 +117,26 @@ public class RemoteWorkerBackgroundService : BackgroundService
 
         try
         {
+            await SetWorkerBusy(true, ct);
+            await jobSource.ReportJobStartedAsync(job.Id, workerId, ct);
+
+            var project = await coordinator.GetProjectAsync(job.ProjectId, ct);
+            if (project is null)
+            {
+                await jobSource.ReportJobCompletedAsync(job.Id, false, "Project not found", ct);
+                return;
+            }
+
+            await ManageDiskSpaceAsync(ct);
+
+            var localPath = Path.Combine(repoStoragePath, SanitizeName(project.Name));
+
+            using var cancelCts = new CancellationTokenSource();
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, cancelCts.Token);
+            var jobCt = linkedCts.Token;
+
+            _ = PollForCancellationAsync(job.Id, cancelCts, ct);
+
             await Log($"=== DotnetFleet Worker | Job {job.Id} ===");
             await Log($"Project: {project.Name} | Branch: {project.Branch}");
             await Log($"Git URL: {project.GitUrl}");
@@ -194,21 +192,46 @@ public class RemoteWorkerBackgroundService : BackgroundService
                 await jobSource.ReportJobCompletedAsync(job.Id, false, error, ct);
             }
         }
-        catch (OperationCanceledException) when (cancelCts.IsCancellationRequested)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            await Log("=== Deployment CANCELLED by user ===");
-            await logBuffer.FlushAsync();
-            await jobSource.ReportJobCompletedAsync(job.Id, false, "Cancelled by user", ct);
+            throw; // Host shutting down — let it propagate
+        }
+        catch (OperationCanceledException)
+        {
+            // User-initiated cancellation
+            try
+            {
+                await Log("=== Deployment CANCELLED by user ===");
+                await logBuffer.FlushAsync();
+            }
+            catch { /* best effort */ }
+            await ReportJobFailedBestEffort(job.Id, "Cancelled by user", ct);
         }
         catch (Exception ex)
         {
-            await Log($"[EXCEPTION] {ex.Message}");
-            await logBuffer.FlushAsync();
-            await jobSource.ReportJobCompletedAsync(job.Id, false, ex.Message, ct);
+            try
+            {
+                await Log($"[EXCEPTION] {ex.Message}");
+                await logBuffer.FlushAsync();
+            }
+            catch { /* best effort */ }
+            await ReportJobFailedBestEffort(job.Id, ex.Message, ct);
         }
         finally
         {
             await SetWorkerBusy(false, ct);
+        }
+    }
+
+    private async Task ReportJobFailedBestEffort(Guid jobId, string error, CancellationToken ct)
+    {
+        try
+        {
+            await jobSource.ReportJobCompletedAsync(jobId, false, error, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to report job {JobId} as failed (error: {Error})", jobId, error);
         }
     }
 
