@@ -1,6 +1,5 @@
 using System.Collections.Specialized;
 using Avalonia.Controls;
-using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using AvaloniaTerminal;
 using DotnetFleet.Core.Logging;
@@ -16,7 +15,7 @@ public partial class JobDetailView : UserControl
 
     public JobDetailView()
     {
-        AvaloniaXamlLoader.Load(this);
+        InitializeComponent();
         DataContextChanged += OnDataContextChanged;
     }
 
@@ -31,6 +30,7 @@ public partial class JobDetailView : UserControl
         var terminal = LogTerminal;
         if (terminal is null) return;
 
+        terminal.Model ??= new TerminalControlModel();
         vm.SetTerminalModel(terminal.Model);
 
         // Feed existing lines
