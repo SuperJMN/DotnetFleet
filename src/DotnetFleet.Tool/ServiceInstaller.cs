@@ -4,8 +4,8 @@ using System.Runtime.InteropServices;
 namespace DotnetFleet.Tool;
 
 /// <summary>
-/// Installs, uninstalls and queries DotnetFleet services.
-/// Currently supports Linux (systemd). Windows/macOS support can be added later.
+/// Installs, uninstalls and queries DotnetFleet services as system-level systemd services.
+/// Requires root (sudo) for install/uninstall. Services start automatically at boot.
 /// </summary>
 public static class ServiceInstaller
 {
@@ -57,16 +57,22 @@ public static class ServiceInstaller
         var fleetPath = ResolveFleetPath();
         var user = ResolveRunAsUser();
 
-        // Ensure config is generated before installing
+        Directory.CreateDirectory(opts.DataDir);
+
         var config = FleetConfig.LoadOrCreateCoordinatorConfig(
             opts.DataDir, opts.JwtSecret, opts.Token, opts.Port);
 
+        // The install runs as root — fix ownership so the service user can access the data dir
+        await ChownRecursiveAsync(opts.DataDir, user);
+
+        var dotnetRoot = ResolveDotnetRoot();
         var args = BuildCoordinatorArgs(opts);
         var unit = GenerateUnit(
             description: "DotnetFleet Coordinator",
             execStart: $"{fleetPath} coordinator {args}",
             workingDirectory: opts.DataDir,
-            user: user);
+            user: user,
+            dotnetRoot: dotnetRoot);
 
         await InstallUnitAsync(CoordinatorServiceName, unit);
 
@@ -119,14 +125,18 @@ public static class ServiceInstaller
         var user = ResolveRunAsUser();
         var serviceName = WorkerServiceName(opts.Name);
 
+        Directory.CreateDirectory(opts.DataDir);
+
+        var dotnetRoot = ResolveDotnetRoot();
         var args = BuildWorkerArgs(opts);
         var unit = GenerateUnit(
             description: $"DotnetFleet Worker ({opts.Name})",
             execStart: $"{fleetPath} worker {args}",
             workingDirectory: opts.DataDir,
-            user: user);
+            user: user,
+            dotnetRoot: dotnetRoot);
 
-        Directory.CreateDirectory(opts.DataDir);
+        await ChownRecursiveAsync(opts.DataDir, user);
         await InstallUnitAsync(serviceName, unit);
 
         Console.WriteLine();
@@ -158,8 +168,12 @@ public static class ServiceInstaller
 
     // ── Systemd helpers ──────────────────────────────────────────────────────
 
-    private static string GenerateUnit(string description, string execStart, string workingDirectory, string user)
+    private static string GenerateUnit(string description, string execStart, string workingDirectory, string user, string? dotnetRoot)
     {
+        var dotnetRootLine = dotnetRoot != null
+            ? $"\nEnvironment=DOTNET_ROOT={dotnetRoot}"
+            : "";
+
         return $"""
             [Unit]
             Description={description}
@@ -173,7 +187,7 @@ public static class ServiceInstaller
             RestartSec=5
             User={user}
             Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
-            Environment=DOTNET_NOLOGO=1
+            Environment=DOTNET_NOLOGO=1{dotnetRootLine}
 
             [Install]
             WantedBy=multi-user.target
@@ -240,7 +254,6 @@ public static class ServiceInstaller
 
         if (status == "active")
         {
-            // Get more details
             var (details, _) = await RunSystemctlAsync(
                 "show", serviceName,
                 "--property=MainPID,MemoryCurrent,ActiveEnterTimestamp",
@@ -305,12 +318,10 @@ public static class ServiceInstaller
 
     private static string ResolveFleetPath()
     {
-        // For dotnet global tools, the shim is in ~/.dotnet/tools/
         var currentExe = Environment.ProcessPath;
         if (currentExe != null && File.Exists(currentExe))
             return currentExe;
 
-        // Fallback: search PATH
         var (whichResult, whichCode) = RunProcessSync("which", "fleet");
         if (whichCode == 0 && !string.IsNullOrWhiteSpace(whichResult))
             return whichResult.Trim();
@@ -322,9 +333,38 @@ public static class ServiceInstaller
 
     private static string ResolveRunAsUser()
     {
-        // Use SUDO_USER if available (the original non-root user), otherwise current user
         return Environment.GetEnvironmentVariable("SUDO_USER")
                ?? Environment.UserName;
+    }
+
+    private static string? ResolveDotnetRoot()
+    {
+        // 1. Explicit env var (e.g. passed via sudo DOTNET_ROOT=...)
+        var root = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+        if (root != null && Directory.Exists(root))
+            return root;
+
+        // 2. Infer from the running dotnet process location
+        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location);
+        if (runtimeDir != null)
+        {
+            // Runtime is at <DOTNET_ROOT>/shared/Microsoft.NETCore.App/<version>/
+            var candidate = Path.GetFullPath(Path.Combine(runtimeDir, "..", "..", ".."));
+            if (File.Exists(Path.Combine(candidate, "dotnet")))
+                return candidate;
+        }
+
+        // 3. Check common user install location for the target user
+        var user = Environment.GetEnvironmentVariable("SUDO_USER");
+        if (user != null)
+        {
+            var home = FleetConfig.GetDefaultDataDir("").Replace("/.fleet/", "");
+            var userDotnet = Path.Combine(home, ".dotnet");
+            if (File.Exists(Path.Combine(userDotnet, "dotnet")))
+                return userDotnet;
+        }
+
+        return null;
     }
 
     private static async Task<(string stdout, int exitCode)> RunSystemctlAsync(
@@ -375,6 +415,27 @@ public static class ServiceInstaller
         catch
         {
             return ("", 1);
+        }
+    }
+
+    private static async Task ChownRecursiveAsync(string path, string user)
+    {
+        var psi = new ProcessStartInfo("chown", $"-R {user}:{user} \"{path}\"")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        try
+        {
+            using var proc = Process.Start(psi)!;
+            await proc.WaitForExitAsync();
+        }
+        catch
+        {
+            // Best-effort
         }
     }
 

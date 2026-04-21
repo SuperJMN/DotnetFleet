@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -22,8 +23,32 @@ public static class FleetConfig
 
     public static string GetDefaultDataDir(string component)
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var home = GetEffectiveUserHome();
         return Path.Combine(home, ".fleet", component);
+    }
+
+    /// <summary>
+    /// When running under sudo, <see cref="Environment.SpecialFolder.UserProfile"/> returns
+    /// root's home. This method resolves the original user's home via SUDO_USER + /etc/passwd.
+    /// </summary>
+    private static string GetEffectiveUserHome()
+    {
+        var sudoUser = Environment.GetEnvironmentVariable("SUDO_USER");
+        if (sudoUser != null && RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            try
+            {
+                foreach (var line in File.ReadLines("/etc/passwd"))
+                {
+                    var fields = line.Split(':');
+                    if (fields.Length >= 6 && fields[0] == sudoUser)
+                        return fields[5];
+                }
+            }
+            catch { }
+        }
+
+        return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     }
 
     public static CoordinatorConfig LoadOrCreateCoordinatorConfig(string dataDir, string? jwtSecretOverride, string? tokenOverride, int port)
