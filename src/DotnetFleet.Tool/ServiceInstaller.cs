@@ -316,6 +316,16 @@ public static class ServiceInstaller
     {
         var runAsUser = ResolveRunAsUser();
         var runningAsRoot = geteuid() == 0;
+        var crossUser = runningAsRoot && !string.Equals(runAsUser, "root", StringComparison.Ordinal);
+
+        var (dotnetBinary, dotnetRoot) = ResolveDotnetForUser(crossUser ? runAsUser : null);
+        if (dotnetBinary == null)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("  ✗ Could not locate a 'dotnet' executable.");
+            Console.Error.WriteLine("    Set DOTNET_ROOT or install the .NET SDK for the target user.");
+            return 1;
+        }
 
         var toolArgs = new List<string> { "tool", "update", "-g", "DotnetFleet.Tool" };
         if (!string.IsNullOrWhiteSpace(version))
@@ -326,39 +336,47 @@ public static class ServiceInstaller
         if (includePrerelease)
             toolArgs.Add("--prerelease");
 
-        string fileName;
-        string arguments;
-
-        if (runningAsRoot && !string.Equals(runAsUser, "root", StringComparison.Ordinal))
-        {
-            fileName = "sudo";
-            var sudoArgs = new List<string> { "-u", runAsUser, "-H", "dotnet" };
-            sudoArgs.AddRange(toolArgs);
-            arguments = string.Join(" ", sudoArgs.Select(QuoteIfNeeded));
-        }
-        else
-        {
-            fileName = "dotnet";
-            arguments = string.Join(" ", toolArgs.Select(QuoteIfNeeded));
-        }
-
-        Console.WriteLine($"  • Running: {fileName} {arguments}");
-        Console.WriteLine();
-
-        var psi = new ProcessStartInfo(fileName, arguments)
+        var psi = new ProcessStartInfo
         {
             UseShellExecute = false,
             CreateNoWindow = false
         };
 
-        var dotnetRoot = ResolveDotnetRoot();
-        if (dotnetRoot != null)
+        if (crossUser)
         {
-            psi.Environment["DOTNET_ROOT"] = dotnetRoot;
-            var path = Environment.GetEnvironmentVariable("PATH") ?? DefaultSystemPath;
-            if (!path.Split(':').Contains(dotnetRoot))
-                psi.Environment["PATH"] = $"{dotnetRoot}:{path}";
+            // sudo strips PATH/DOTNET_ROOT, so we hand them to the child via `env`
+            // and invoke dotnet by absolute path to be safe.
+            var userHome = ResolveUserHome(runAsUser);
+            var pathForUser = BuildPathForUser(dotnetRoot, userHome);
+
+            psi.FileName = "sudo";
+            psi.ArgumentList.Add("-u");
+            psi.ArgumentList.Add(runAsUser);
+            psi.ArgumentList.Add("-H");
+            psi.ArgumentList.Add("env");
+            if (dotnetRoot != null)
+                psi.ArgumentList.Add($"DOTNET_ROOT={dotnetRoot}");
+            psi.ArgumentList.Add($"PATH={pathForUser}");
+            if (userHome != null)
+                psi.ArgumentList.Add($"HOME={userHome}");
+            psi.ArgumentList.Add(dotnetBinary);
+            foreach (var a in toolArgs) psi.ArgumentList.Add(a);
         }
+        else
+        {
+            psi.FileName = dotnetBinary;
+            foreach (var a in toolArgs) psi.ArgumentList.Add(a);
+            if (dotnetRoot != null)
+            {
+                psi.Environment["DOTNET_ROOT"] = dotnetRoot;
+                var path = Environment.GetEnvironmentVariable("PATH") ?? DefaultSystemPath;
+                if (!path.Split(':').Contains(dotnetRoot))
+                    psi.Environment["PATH"] = $"{dotnetRoot}:{path}";
+            }
+        }
+
+        Console.WriteLine($"  • Running: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
+        Console.WriteLine();
 
         try
         {
@@ -368,13 +386,76 @@ public static class ServiceInstaller
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"  ✗ Failed to invoke '{fileName}': {ex.Message}");
+            Console.Error.WriteLine($"  ✗ Failed to invoke '{psi.FileName}': {ex.Message}");
             return 1;
         }
     }
 
-    private static string QuoteIfNeeded(string value) =>
-        value.Contains(' ') ? $"\"{value}\"" : value;
+    /// <summary>
+    /// Returns (absolute path to dotnet binary, DOTNET_ROOT) preferring the target user's
+    /// install (~/.dotnet/dotnet) when invoking across users via sudo.
+    /// </summary>
+    private static (string? binary, string? root) ResolveDotnetForUser(string? targetUser)
+    {
+        // Prefer the target user's per-user install (where their global tools live)
+        if (targetUser != null)
+        {
+            var userHome = ResolveUserHome(targetUser);
+            if (userHome != null)
+            {
+                var userDotnet = Path.Combine(userHome, ".dotnet");
+                var userBin = Path.Combine(userDotnet, "dotnet");
+                if (File.Exists(userBin))
+                    return (userBin, userDotnet);
+            }
+        }
+
+        var root = ResolveDotnetRoot();
+        if (root != null)
+        {
+            var bin = Path.Combine(root, "dotnet");
+            if (File.Exists(bin))
+                return (bin, root);
+        }
+
+        // Fall back to PATH lookup
+        var (which, code) = RunProcessSync("which", "dotnet");
+        if (code == 0 && !string.IsNullOrWhiteSpace(which))
+        {
+            var bin = which.Trim();
+            return (bin, Path.GetDirectoryName(bin));
+        }
+
+        return (null, null);
+    }
+
+    private static string? ResolveUserHome(string user)
+    {
+        try
+        {
+            foreach (var line in File.ReadLines("/etc/passwd"))
+            {
+                var fields = line.Split(':');
+                if (fields.Length >= 6 && fields[0] == user)
+                    return fields[5];
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private static string BuildPathForUser(string? dotnetRoot, string? userHome)
+    {
+        var parts = new List<string>();
+        if (dotnetRoot != null) parts.Add(dotnetRoot);
+        if (userHome != null)
+        {
+            parts.Add(Path.Combine(userHome, ".dotnet"));
+            parts.Add(Path.Combine(userHome, ".dotnet", "tools"));
+        }
+        parts.Add(DefaultSystemPath);
+        return string.Join(":", parts);
+    }
 
     // ── Systemd helpers ──────────────────────────────────────────────────────
 
