@@ -12,4 +12,7 @@ public interface IWorkerJobSource
     Task ReportJobStartedAsync(Guid jobId, Guid workerId, CancellationToken ct = default);
     Task SendLogChunkAsync(Guid jobId, IEnumerable<string> lines, CancellationToken ct = default);
     Task ReportJobCompletedAsync(Guid jobId, bool success, string? errorMessage, CancellationToken ct = default);
+
+    /// <summary>Returns true if cancellation has been requested for this job.</summary>
+    Task<bool> IsJobCancelledAsync(Guid jobId, CancellationToken ct = default);
 }

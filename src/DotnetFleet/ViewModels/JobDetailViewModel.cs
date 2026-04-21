@@ -28,6 +28,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 
     [Reactive] private string _statusText = string.Empty;
     [Reactive] private bool _isStreaming;
+    [Reactive] private bool _canCancel;
     [Reactive] private LogSeverity _minSeverity = LogSeverity.None;
     [Reactive] private string _searchText = string.Empty;
     [Reactive] private string _searchResultText = string.Empty;
@@ -57,6 +58,8 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         BackCommand = ReactiveCommand.Create(GoBack);
         CopyLogsCommand = ReactiveCommand.CreateFromTask(CopyLogsToClipboard);
         NextSearchResultCommand = ReactiveCommand.Create(NavigateNextSearchResult);
+        CancelJobCommand = ReactiveCommand.CreateFromTask(CancelJobAsync,
+            this.WhenAnyValue(x => x.CanCancel));
 
         var minSeverityChanges = this.WhenAnyValue(x => x.MinSeverity);
 
@@ -76,7 +79,10 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             .Subscribe(OnSearchTextChanged);
 
         if (job.Status is JobStatus.Running or JobStatus.Queued or JobStatus.Assigned)
+        {
+            CanCancel = true;
             StartStreaming();
+        }
         else
             LoadLogsAsync().ConfigureAwait(false);
     }
@@ -84,6 +90,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> BackCommand { get; }
     public ReactiveCommand<Unit, Unit> CopyLogsCommand { get; }
     public ReactiveCommand<Unit, Unit> NextSearchResultCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelJobCommand { get; }
 
     public void SetTerminalModel(TerminalControlModel model) => TerminalModel = model;
 
@@ -120,6 +127,20 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         await clipboard.SetTextAsync(text);
     }
 
+    private async Task CancelJobAsync()
+    {
+        try
+        {
+            await _client.CancelJobAsync(Job.Id);
+            CanCancel = false;
+            StatusText = JobStatus.Cancelled.ToString();
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Cancel failed: {ex.Message}";
+        }
+    }
+
     private async Task LoadLogsAsync()
     {
         try
@@ -133,7 +154,11 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     {
         _cts = new CancellationTokenSource();
         IsStreaming = true;
-        _ = StreamLogsAsync(_cts.Token).ContinueWith(_ => IsStreaming = false);
+        _ = StreamLogsAsync(_cts.Token).ContinueWith(_ =>
+        {
+            IsStreaming = false;
+            CanCancel = false;
+        });
     }
 
     private async Task StreamLogsAsync(CancellationToken ct)

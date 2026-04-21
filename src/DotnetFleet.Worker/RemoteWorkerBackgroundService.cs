@@ -120,6 +120,13 @@ public class RemoteWorkerBackgroundService : BackgroundService
 
         var localPath = Path.Combine(repoStoragePath, SanitizeName(project.Name));
 
+        using var cancelCts = new CancellationTokenSource();
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, cancelCts.Token);
+        var jobCt = linkedCts.Token;
+
+        // Background task: poll coordinator for cancellation requests
+        _ = PollForCancellationAsync(job.Id, cancelCts, ct);
+
         await using var logBuffer = new LogChunkBuffer(
             send: (chunk, token) => jobSource.SendLogChunkAsync(job.Id, chunk, token),
             ct: ct);
@@ -137,7 +144,7 @@ public class RemoteWorkerBackgroundService : BackgroundService
             await Log($"Git URL: {project.GitUrl}");
 
             await GitHelper.CloneOrFetchAsync(project.GitUrl, project.Branch, localPath,
-                msg => logBuffer.AppendAsync(msg), ct, project.GitToken);
+                msg => logBuffer.AppendAsync(msg), jobCt, project.GitToken);
             await logBuffer.FlushAsync();
 
             var cacheSize = GitHelper.GetDirectorySize(localPath);
@@ -172,7 +179,7 @@ public class RemoteWorkerBackgroundService : BackgroundService
                 localPath,
                 onLine: line => logBuffer.AppendAsync(line),
                 envVars: envVars,
-                ct);
+                jobCt);
 
             await logBuffer.FlushAsync();
 
@@ -187,6 +194,12 @@ public class RemoteWorkerBackgroundService : BackgroundService
                 await jobSource.ReportJobCompletedAsync(job.Id, false, error, ct);
             }
         }
+        catch (OperationCanceledException) when (cancelCts.IsCancellationRequested)
+        {
+            await Log("=== Deployment CANCELLED by user ===");
+            await logBuffer.FlushAsync();
+            await jobSource.ReportJobCompletedAsync(job.Id, false, "Cancelled by user", ct);
+        }
         catch (Exception ex)
         {
             await Log($"[EXCEPTION] {ex.Message}");
@@ -197,6 +210,26 @@ public class RemoteWorkerBackgroundService : BackgroundService
         {
             await SetWorkerBusy(false, ct);
         }
+    }
+
+    private async Task PollForCancellationAsync(Guid jobId, CancellationTokenSource cancelCts, CancellationToken hostCt)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+            while (await timer.WaitForNextTickAsync(hostCt))
+            {
+                if (cancelCts.IsCancellationRequested) break;
+                if (await jobSource.IsJobCancelledAsync(jobId, hostCt))
+                {
+                    logger.LogInformation("Cancellation requested for job {JobId}", jobId);
+                    await cancelCts.CancelAsync();
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) { /* host shutting down or job finished */ }
+        catch (Exception ex) { logger.LogWarning(ex, "Cancellation poll error for job {JobId}", jobId); }
     }
 
     private async Task ManageDiskSpaceAsync(CancellationToken ct)
