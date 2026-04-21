@@ -104,6 +104,38 @@ public static class ServiceInstaller
     {
         EnsureLinux();
         await ShowStatusAsync(CoordinatorServiceName);
+
+        // Show config info (token, data dir) by reading the WorkingDirectory from the unit
+        var dataDir = ReadWorkingDirectoryFromUnit(CoordinatorServiceName);
+        if (dataDir != null)
+        {
+            var configPath = Path.Combine(dataDir, "config.json");
+            if (File.Exists(configPath))
+            {
+                try
+                {
+                    var config = FleetConfig.LoadOrCreateCoordinatorConfig(dataDir, null, null, 5000);
+                    Console.WriteLine($"  Token: {config.RegistrationToken}");
+                    Console.WriteLine($"  Data:  {dataDir}");
+                    Console.WriteLine();
+                }
+                catch { }
+            }
+        }
+    }
+
+    private static string? ReadWorkingDirectoryFromUnit(string serviceName)
+    {
+        var unitPath = Path.Combine(SystemdDir, $"{serviceName}.service");
+        if (!File.Exists(unitPath)) return null;
+
+        foreach (var line in File.ReadLines(unitPath))
+        {
+            if (line.StartsWith("WorkingDirectory="))
+                return line["WorkingDirectory=".Length..].Trim();
+        }
+
+        return null;
     }
 
     // ── Worker ───────────────────────────────────────────────────────────────
