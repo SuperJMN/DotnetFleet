@@ -74,6 +74,15 @@ public class PollingBackgroundService : BackgroundService
             return;
         }
 
+        // First poll: just record the baseline SHA — don't auto-deploy.
+        if (project.LastPolledCommitSha is null)
+        {
+            logger.LogInformation("First poll for {Name}/{Branch}: recording baseline SHA {Sha}", project.Name, project.Branch, latestSha);
+            project.LastPolledCommitSha = latestSha;
+            await storage.UpdateProjectAsync(project);
+            return;
+        }
+
         if (latestSha == project.LastPolledCommitSha)
         {
             await storage.UpdateProjectAsync(project);

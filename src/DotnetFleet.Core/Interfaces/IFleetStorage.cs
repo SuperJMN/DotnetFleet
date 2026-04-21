@@ -51,6 +51,27 @@ public interface IFleetStorage
     Task DeleteUserAsync(Guid id, CancellationToken ct = default);
     Task<bool> AnyUserExistsAsync(CancellationToken ct = default);
 
+    // Stale detection
+    /// <summary>
+    /// Marks workers whose <c>LastSeenAt</c> is older than <paramref name="staleThreshold"/> as <see cref="WorkerStatus.Offline"/>.
+    /// Returns the number of workers affected.
+    /// </summary>
+    Task<int> MarkOfflineWorkersAsync(TimeSpan staleThreshold, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fails jobs that are still <see cref="JobStatus.Running"/> or <see cref="JobStatus.Assigned"/>
+    /// but whose worker has not heartbeated within <paramref name="staleThreshold"/>.
+    /// Returns the IDs of the jobs that were marked as failed.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> FailStaleJobsAsync(TimeSpan staleThreshold, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fails jobs that have been <see cref="JobStatus.Queued"/> longer than <paramref name="queuedTimeout"/>
+    /// without being claimed by a worker.
+    /// Returns the IDs of the jobs that were marked as failed.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> FailTimedOutJobsAsync(TimeSpan queuedTimeout, CancellationToken ct = default);
+
     // Secrets
     /// <summary>Returns global secrets when <paramref name="projectId"/> is null, or project-scoped secrets otherwise.</summary>
     Task<IReadOnlyList<Secret>> GetSecretsAsync(Guid? projectId, CancellationToken ct = default);

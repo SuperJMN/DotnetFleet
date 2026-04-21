@@ -105,7 +105,8 @@ public static class WorkerEndpoints
         if (worker is null) return Results.NotFound();
 
         worker.LastSeenAt = DateTimeOffset.UtcNow;
-        worker.Status = WorkerStatus.Online;
+        if (worker.Status == WorkerStatus.Offline)
+            worker.Status = WorkerStatus.Online;
         await storage.UpdateWorkerAsync(worker);
         return Results.Ok();
     }

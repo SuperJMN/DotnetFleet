@@ -144,6 +144,37 @@ public static class CoordinatorHostBuilder
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"DeploymentJobs\" ADD COLUMN \"CancellationRequestedAt\" INTEGER NULL");
         }
 
+        // ── Startup reconciliation ─────────────────────────────────────────
+        // Jobs that were Running or Assigned during the last shutdown can never
+        // complete because the worker context is lost. Fail them so they don't
+        // sit around forever.
+        var orphanedJobs = await db.DeploymentJobs
+            .Where(j => j.Status == JobStatus.Running || j.Status == JobStatus.Assigned)
+            .ToListAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var job in orphanedJobs)
+        {
+            job.Status = JobStatus.Failed;
+            job.FinishedAt = now;
+            job.ErrorMessage = "Failed during coordinator restart — job state could not be recovered.";
+        }
+
+        // Workers will re-register via heartbeat; start them all as Offline.
+        var activeWorkers = await db.Workers
+            .Where(w => w.Status != WorkerStatus.Offline)
+            .ToListAsync();
+
+        foreach (var w in activeWorkers)
+            w.Status = WorkerStatus.Offline;
+
+        if (orphanedJobs.Count > 0 || activeWorkers.Count > 0)
+        {
+            await db.SaveChangesAsync();
+            Log.Information("Startup reconciliation: failed {Jobs} orphaned job(s), reset {Workers} worker(s) to Offline",
+                orphanedJobs.Count, activeWorkers.Count);
+        }
+
         var storage = app.Services.GetRequiredService<IFleetStorage>();
         if (!await storage.AnyUserExistsAsync())
         {
