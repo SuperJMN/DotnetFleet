@@ -44,10 +44,11 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="6.0.0" />
     <PackageVersion Include="Serilog.Extensions.Hosting" Version="9.0.0" />
     <PackageVersion Include="Serilog.Settings.Configuration" Version="9.0.0" />
-    <!-- Text editor -->
-    <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
+    <!-- ItemsRepeater (virtualized log viewer) -->
+    <PackageVersion Include="Avalonia.Controls.ItemsRepeater" Version="$(AvaloniaVersion)" />
     <!-- Icons -->
     <PackageVersion Include="Optris.Icons.Avalonia.MaterialDesign" Version="12.0.4" />
+    <PackageVersion Include="System.CommandLine" Version="3.0.0-preview.3.26207.106" />
     <!-- Testing -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
     <PackageVersion Include="xunit" Version="2.9.0" />

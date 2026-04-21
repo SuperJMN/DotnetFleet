@@ -6,6 +6,7 @@
     <Project Path="src/DotnetFleet.Core/DotnetFleet.Core.csproj" />
     <Project Path="src/DotnetFleet.Desktop/DotnetFleet.Desktop.csproj" />
     <Project Path="src/DotnetFleet.Worker/DotnetFleet.Worker.csproj" />
+    <Project Path="src/DotnetFleet.Tool/DotnetFleet.Tool.csproj" />
     <Project Path="src/DotnetFleet/DotnetFleet.csproj" />
   </Folder>
   <Folder Name="/tests/">

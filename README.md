@@ -33,6 +33,7 @@ and they connect to the coordinator over HTTP.
 
 | Project | Role |
 |---|---|
+| `DotnetFleet.Tool` | **CLI tool** (`fleet`) — install via `dotnet tool install -g DotnetFleet.Tool` |
 | `DotnetFleet.Core` | Domain models, interfaces, enums |
 | `DotnetFleet.Coordinator` | ASP.NET Core API + queue + polling + EF Core SQLite |
 | `DotnetFleet.Worker` | Standalone Generic Host: git clone/fetch + `dnx dotnetdeployer.tool -y` |
@@ -73,53 +74,61 @@ behalf of another worker.
 ### Prerequisites
 
 - .NET 10 SDK
-- `dnx` tool runner (ships with .NET 10)
 - Git
 
-### 1. Run the Coordinator
+### Quick Install (recommended)
 
 ```bash
-cd src/DotnetFleet.Coordinator
-dotnet run
+dotnet tool install -g DotnetFleet.Tool
 ```
 
-The coordinator starts on `http://localhost:5000`. It creates `fleet.db`
-(SQLite) in the working directory and seeds an admin user.
-
-**Default credentials**: `admin` / `admin`
-
-To allow workers to self-register, set a registration token (any opaque string):
+### 1. Start the Coordinator
 
 ```bash
-export DotnetFleet__Workers__RegistrationToken=change-me
-dotnet run
+fleet coordinator --port 5000
 ```
 
-### 2. Run one (or more) Workers
+On first run the coordinator auto-generates a JWT secret and a worker registration
+token, saves them to `~/.fleet/coordinator/config.json`, and prints a banner:
 
-In a separate terminal:
-
-```bash
-cd src/DotnetFleet.Worker
-export Worker__CoordinatorBaseUrl=http://localhost:5000
-export Worker__RegistrationToken=change-me   # same value as above
-dotnet run
+```
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                   DotnetFleet Coordinator                    ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Listening on:       http://0.0.0.0:5000                     ║
+  ║  Admin credentials:  admin / admin                           ║
+  ║  Registration token: f7a2b9c1d4e5...                         ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  Connect workers with:                                       ║
+  ║    fleet worker --coordinator http://<host>:5000 \            ║
+  ║                 --token f7a2b9c1d4e5...                      ║
+  ╚══════════════════════════════════════════════════════════════╝
 ```
 
-On first start, the worker self-registers, persists its credentials to
-`worker-credentials.json`, then loops on `claim → run → report`. Stop and
-restart it freely — credentials are reused from disk.
+### 2. Connect one (or more) Workers
 
-To run several workers on the same machine, give each one its own working
-directory (so each gets its own `worker-credentials.json` and repo cache):
+Copy the command from the coordinator banner and run it on the same or a
+different machine:
 
 ```bash
-mkdir -p /var/lib/fleet/worker-1 /var/lib/fleet/worker-2
-cd /var/lib/fleet/worker-1 && dotnet run --project /path/to/src/DotnetFleet.Worker &
-cd /var/lib/fleet/worker-2 && dotnet run --project /path/to/src/DotnetFleet.Worker &
+fleet worker --coordinator http://myserver:5000 --token <token>
+```
+
+The worker self-registers, persists credentials to
+`~/.fleet/worker-<hostname>/worker.json`, then loops on `claim → run → report`.
+
+To run several workers:
+
+```bash
+fleet worker --coordinator http://myserver:5000 --token <token> --name worker-1
+fleet worker --coordinator http://myserver:5000 --token <token> --name worker-2
 ```
 
 ### 3. Run the Desktop App
+
+Download the latest release for your platform from
+[GitHub Releases](https://github.com/SuperJMN/DotnetFleet/releases), or build
+from source:
 
 ```bash
 cd src/DotnetFleet.Desktop
@@ -128,6 +137,55 @@ dotnet run
 
 Enter the coordinator endpoint (e.g., `http://localhost:5000`) on the Connect
 screen, then log in.
+
+### CLI Reference
+
+```
+fleet coordinator [options]
+  --port, -p <port>           HTTP port (default: 5000)
+  --data-dir <path>           Data directory (default: ~/.fleet/coordinator)
+  --token, -t <token>         Registration token (auto-generated)
+  --jwt-secret <secret>       JWT signing secret (auto-generated)
+  --admin-password <pass>     Admin password (default: admin)
+  --urls <urls>               ASP.NET Core URLs override
+
+fleet worker [options]
+  --coordinator, -c <url>     Coordinator URL (required)
+  --token, -t <token>         Registration token (required on first run)
+  --name, -n <name>           Worker display name (default: hostname)
+  --data-dir <path>           Data directory (default: ~/.fleet/worker-{name})
+  --poll-interval <secs>      Polling interval in seconds (default: 10)
+  --max-disk <gb>             Max disk usage in GB (default: 10)
+
+fleet version
+```
+
+### Development (from source)
+
+If you prefer to run from the Git checkout:
+
+```bash
+# Coordinator
+cd src/DotnetFleet.Coordinator
+dotnet run
+
+# Worker (in a separate terminal)
+cd src/DotnetFleet.Worker
+export Worker__CoordinatorBaseUrl=http://localhost:5000
+export Worker__RegistrationToken=change-me
+dotnet run
+
+# Desktop
+cd src/DotnetFleet.Desktop
+dotnet run
+```
+
+Or use the helper script to run everything at once:
+
+```bash
+./scripts/run-fleet.sh          # 1 coordinator + 1 worker + GUI
+WORKERS=3 ./scripts/run-fleet.sh  # 1 coordinator + 3 workers + GUI
+```
 
 ## Configuration
 

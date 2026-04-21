@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DotnetFleet.Tool</RootNamespace>
+
+    <!-- NuGet Tool packaging -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>fleet</ToolCommandName>
+    <PackageId>DotnetFleet.Tool</PackageId>
+    <Description>CLI tool for installing and running DotnetFleet infrastructure (Coordinator + Workers).</Description>
+    <Authors>SuperJMN</Authors>
+    <PackageTags>ci;cd;deploy;fleet;dotnet</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/SuperJMN/DotnetFleet</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Required to host ASP.NET Core (Coordinator) from a non-Web SDK project -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DotnetFleet.Coordinator\DotnetFleet.Coordinator.csproj" />
+    <ProjectReference Include="..\DotnetFleet.Worker\DotnetFleet.Worker.csproj" />
+  </ItemGroup>
+</Project>
