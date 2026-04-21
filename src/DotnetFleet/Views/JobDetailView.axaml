@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
-             xmlns:ae="https://github.com/avaloniaui/avaloniaedit"
+             xmlns:terminal="using:AvaloniaTerminal"
              x:Class="DotnetFleet.Views.JobDetailView"
              x:DataType="vm:JobDetailViewModel">
 
@@ -28,31 +28,35 @@
             </StackPanel>
         </Grid>
 
-        <!-- Filter toolbar -->
+        <!-- Toolbar: search + severity filter -->
         <Border DockPanel.Dock="Top"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                 Padding="8" Margin="0,0,0,8" CornerRadius="4">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="11" Opacity="0.7"
-                           Text="Ctrl+F to search" />
-                <ComboBox Grid.Column="1"
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="8">
+                <TextBox Grid.Column="0" Name="SearchBox"
+                         PlaceholderText="Search…" MinWidth="180"
+                         Text="{Binding SearchText}" />
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="11" Opacity="0.7"
+                           Text="{Binding SearchResultText}" />
+                <Button Grid.Column="2" Content="▼" Padding="6,4"
+                        Command="{Binding NextSearchResultCommand}"
+                        ToolTip.Tip="Next match" />
+                <ComboBox Grid.Column="3"
                           ItemsSource="{Binding AvailableSeverities}"
                           SelectedItem="{Binding MinSeverity}"
                           MinWidth="120"
                           HorizontalAlignment="Right"
                           ToolTip.Tip="Minimum severity to show" />
+                <Button Grid.Column="4" Content="Copy All"
+                        Command="{Binding CopyLogsCommand}"
+                        ToolTip.Tip="Copy all log lines to clipboard" />
             </Grid>
         </Border>
 
-        <!-- Log output: AvaloniaEdit with line virtualization and severity colouring. -->
-        <ae:TextEditor Name="LogEditor"
-                       FontFamily="Consolas,Courier New,monospace"
-                       FontSize="12"
-                       IsReadOnly="True"
-                       ShowLineNumbers="False"
-                       WordWrap="False"
-                       HorizontalScrollBarVisibility="Auto"
-                       VerticalScrollBarVisibility="Auto" />
+        <!-- Terminal log viewer -->
+        <terminal:TerminalControl Name="LogTerminal"
+                                  FontFamily="Consolas,Courier New,monospace"
+                                  FontSize="12" />
 
     </DockPanel>
 
