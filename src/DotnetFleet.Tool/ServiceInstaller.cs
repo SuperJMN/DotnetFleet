@@ -200,10 +200,13 @@ public static class ServiceInstaller
 
     // ── Systemd helpers ──────────────────────────────────────────────────────
 
+    private const string DefaultSystemPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+
     private static string GenerateUnit(string description, string execStart, string workingDirectory, string user, string? dotnetRoot)
     {
-        var dotnetRootLine = dotnetRoot != null
-            ? $"\nEnvironment=DOTNET_ROOT={dotnetRoot}"
+        var dotnetEnvLines = dotnetRoot != null
+            ? $"\nEnvironment=DOTNET_ROOT={dotnetRoot}" +
+              $"\nEnvironment=PATH={dotnetRoot}:{DefaultSystemPath}"
             : "";
 
         return $"""
@@ -219,7 +222,7 @@ public static class ServiceInstaller
             RestartSec=5
             User={user}
             Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
-            Environment=DOTNET_NOLOGO=1{dotnetRootLine}
+            Environment=DOTNET_NOLOGO=1{dotnetEnvLines}
 
             [Install]
             WantedBy=multi-user.target
