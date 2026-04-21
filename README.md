@@ -200,38 +200,77 @@ To auto-deploy on new commits, set a **polling interval** (in minutes) on the pr
 
 For production, install the coordinator and workers as **systemd services** so they start on boot and restart on failure.
 
-> **Note:** `sudo` resets `PATH`, so you need to pass the full path to `fleet` and set `DOTNET_ROOT` if .NET is installed per-user (e.g., via `dotnet-install.sh`). The examples below use `$(which fleet)` to resolve the path before `sudo` takes over.
+You have two equivalent ways to install. Pick whichever you prefer.
+
+#### Option A — Zero-install (recommended for first-time setup)
+
+If you just installed .NET and don't yet have anything else, you can do the whole thing in one command using `dnx` (.NET 10's tool runner):
 
 ```bash
-# Install the coordinator
-sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
+sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
+  dnx dotnetfleet.tool coordinator install --port 5000
+```
+
+What's going on in that command:
+
+| Fragment | Why it's there |
+|---|---|
+| `sudo` | systemd unit files live under `/etc/systemd/system`, so root is required |
+| `env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT"` | `sudo` strips the user's environment by default. We re-export `PATH` (so `dnx` and `dotnet` are found) and `DOTNET_ROOT` (so the runtime is located when .NET is installed under `~/.dotnet`) |
+| `dnx dotnetfleet.tool` | Downloads and runs the latest `DotnetFleet.Tool` package. No prior `dotnet tool install` needed |
+| `coordinator install` | The actual `fleet` subcommand |
+
+The first time you do this, the installer detects it's running from `dnx`'s ephemeral cache and **automatically performs `dotnet tool install -g DotnetFleet.Tool`** for the calling user, so the systemd unit's `ExecStart=` points at the stable global-tool path (`~/.dotnet/tools/fleet`) instead of a cache location that may disappear later.
+
+A worker on the same machine looks the same:
+
+```bash
+sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
+  dnx dotnetfleet.tool worker install \
+    --coordinator http://myserver:5000 \
+    --token <token> \
+    --name build-01
+```
+
+#### Option B — Install the global tool first, then use `fleet` directly
+
+```bash
+# One-time:
+dotnet tool install -g DotnetFleet.Tool
+
+# Then:
+sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
   "$(which fleet)" coordinator install --port 5000
-#  → Creates and enables fleet-coordinator.service
-#  → Prints the registration token
 
-# Install a worker
-sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
+sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" \
   "$(which fleet)" worker install \
-  --coordinator http://myserver:5000 \
-  --token <token> \
-  --name build-01
+    --coordinator http://myserver:5000 \
+    --token <token> \
+    --name build-01
+```
 
-# Check status
+The `$(which fleet)` resolves the path **before** `sudo` strips `PATH`, so root can find the binary.
+
+> **Tip:** If .NET is installed system-wide (e.g., via `apt`) and `fleet` is on the system `PATH`, you can drop the `env` wrapper and just run `sudo fleet ...`. The wrapper is only needed for per-user .NET installs (the typical `dotnet-install.sh` setup).
+
+#### Managing the services
+
+```bash
+# Status
 sudo systemctl status fleet-coordinator
 sudo systemctl status fleet-worker-build-01
 
-# View logs
+# Logs
 journalctl -u fleet-coordinator -f
 journalctl -u fleet-worker-build-01 -f
 
-# Uninstall when needed
-sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
-  "$(which fleet)" coordinator uninstall
-sudo DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}" \
-  "$(which fleet)" worker uninstall --name build-01
-```
+# Update tool + restart all local fleet services in one go
+sudo fleet update
 
-> **Tip:** If .NET is installed system-wide (e.g., via `apt`), `DOTNET_ROOT` is typically already set and `fleet` may be in the system PATH — in that case, plain `sudo fleet ...` works.
+# Uninstall
+sudo fleet coordinator uninstall
+sudo fleet worker uninstall --name build-01
+```
 
 The services run as the calling user (via `SUDO_USER`), write unit files to `/etc/systemd/system/`, and use these service names:
 
@@ -301,8 +340,10 @@ Upgrading DotnetFleet replaces only the tool binary — **all data is preserved*
 If the coordinator and/or workers run as systemd services on this machine, a single command updates the global tool and restarts every local fleet service:
 
 ```bash
-sudo fleet update
+sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" fleet update
 ```
+
+(The `env` wrapper is only needed when .NET is installed per-user — see the [systemd install section](#install-as-systemd-services) for the explanation. With a system-wide .NET install, plain `sudo fleet update` works.)
 
 Options:
 
