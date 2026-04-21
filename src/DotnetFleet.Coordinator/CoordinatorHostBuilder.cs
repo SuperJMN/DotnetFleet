@@ -74,6 +74,7 @@ public static class CoordinatorHostBuilder
         // ── Services ─────────────────────────────────────────────────────────
         builder.Services.AddSingleton<LogBroadcaster>();
         builder.Services.AddHostedService<PollingBackgroundService>();
+        builder.Services.AddHostedService<StaleJobReaperService>();
 
         // ── CORS ─────────────────────────────────────────────────────────────
         builder.Services.AddCors(opt => opt.AddDefaultPolicy(p =>
@@ -133,6 +134,14 @@ public static class CoordinatorHostBuilder
         if (!hasGitToken)
         {
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Projects\" ADD COLUMN \"GitToken\" TEXT NULL");
+        }
+
+        var hasCancellationRequestedAt = (await db.Database
+            .SqlQueryRaw<long>("SELECT COUNT(*) AS \"Value\" FROM pragma_table_info('DeploymentJobs') WHERE name='CancellationRequestedAt'")
+            .ToListAsync()).FirstOrDefault() > 0;
+        if (!hasCancellationRequestedAt)
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"DeploymentJobs\" ADD COLUMN \"CancellationRequestedAt\" INTEGER NULL");
         }
 
         var storage = app.Services.GetRequiredService<IFleetStorage>();

@@ -56,7 +56,15 @@ public static class DeployerRunner
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
-        await process.WaitForExitAsync(ct);
+        try
+        {
+            await process.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            throw;
+        }
 
         if (process.ExitCode != 0)
             return (false, $"dotnetdeployer.tool exited with code {process.ExitCode}");

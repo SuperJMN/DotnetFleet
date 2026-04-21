@@ -15,4 +15,7 @@ public class DeploymentJob
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
     public string? ErrorMessage { get; set; }
+
+    /// <summary>Set when a user requests cancellation. Workers poll this to abort in-flight jobs.</summary>
+    public DateTimeOffset? CancellationRequestedAt { get; set; }
 }

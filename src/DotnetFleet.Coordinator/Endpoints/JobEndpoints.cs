@@ -15,6 +15,7 @@ public static class JobEndpoints
         group.MapGet("/", GetAll);
         group.MapGet("/{id:guid}", GetById);
         group.MapGet("/{id:guid}/logs", StreamLogs);
+        group.MapPost("/{id:guid}/cancel", CancelJob);
 
         // Worker internal endpoints (authenticated by worker secret header)
         var workerGroup = app.MapGroup("/api/queue");
@@ -22,6 +23,7 @@ public static class JobEndpoints
         workerGroup.MapPost("/jobs/{id:guid}/start", ReportStarted).RequireAuthorization("Worker");
         workerGroup.MapPost("/jobs/{id:guid}/logs", AppendLogs).RequireAuthorization("Worker");
         workerGroup.MapPost("/jobs/{id:guid}/complete", ReportCompleted).RequireAuthorization("Worker");
+        workerGroup.MapGet("/jobs/{id:guid}/should-cancel", ShouldCancel).RequireAuthorization("Worker");
     }
 
     private static async Task<IResult> GetAll(IFleetStorage storage)
@@ -64,7 +66,7 @@ public static class JobEndpoints
         // If job is already in a terminal state, close the stream
         var job = await storage.GetJobAsync(id, ct);
         bool isTerminal = job is null
-            || job.Status is JobStatus.Succeeded or JobStatus.Failed;
+            || job.Status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled;
 
         if (isTerminal) return;
 
@@ -181,7 +183,9 @@ public static class JobEndpoints
         if (job is null) return Results.NotFound();
         if (job.WorkerId != workerId) return Results.Forbid();
 
-        job.Status = req.Success ? JobStatus.Succeeded : JobStatus.Failed;
+        job.Status = job.CancellationRequestedAt is not null && !req.Success
+            ? JobStatus.Cancelled
+            : req.Success ? JobStatus.Succeeded : JobStatus.Failed;
         job.FinishedAt = DateTimeOffset.UtcNow;
         job.ErrorMessage = req.ErrorMessage;
         await storage.UpdateJobAsync(job);
@@ -192,6 +196,37 @@ public static class JobEndpoints
 
     public record AppendLogsRequest(string[] Lines);
     public record CompleteJobRequest(bool Success, string? ErrorMessage);
+
+    private static async Task<IResult> CancelJob(
+        Guid id,
+        IFleetStorage storage,
+        LogBroadcaster broadcaster)
+    {
+        var job = await storage.GetJobAsync(id);
+        if (job is null) return Results.NotFound();
+
+        if (job.Status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled)
+            return Results.Conflict(new { message = "Job is already in a terminal state." });
+
+        job.CancellationRequestedAt = DateTimeOffset.UtcNow;
+
+        if (job.Status is JobStatus.Queued)
+        {
+            job.Status = JobStatus.Cancelled;
+            job.FinishedAt = DateTimeOffset.UtcNow;
+            broadcaster.Complete(id);
+        }
+
+        await storage.UpdateJobAsync(job);
+        return Results.Ok(job);
+    }
+
+    private static async Task<IResult> ShouldCancel(Guid id, IFleetStorage storage)
+    {
+        var job = await storage.GetJobAsync(id);
+        if (job is null) return Results.NotFound();
+        return Results.Ok(new { shouldCancel = job.CancellationRequestedAt is not null });
+    }
 
     private static bool TryGetWorkerId(HttpContext ctx, out Guid workerId)
     {

@@ -129,6 +129,12 @@ public class FleetApiClient
     public async Task<DeploymentJob?> GetJobAsync(Guid id) =>
         await http.GetFromJsonAsync<DeploymentJob>($"/api/jobs/{id}", JsonOptions);
 
+    public async Task CancelJobAsync(Guid jobId)
+    {
+        var response = await http.PostAsync($"/api/jobs/{jobId}/cancel", null);
+        response.EnsureSuccessStatusCode();
+    }
+
     /// <summary>
     /// Returns an async enumerable of log lines streamed via SSE.
     /// Completes when the job finishes or the cancellation token is triggered.

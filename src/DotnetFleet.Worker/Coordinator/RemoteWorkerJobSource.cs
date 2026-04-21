@@ -53,4 +53,22 @@ public class RemoteWorkerJobSource : IWorkerJobSource
         var resp = await http.PostAsJsonAsync($"/api/queue/jobs/{jobId}/complete", payload, ct);
         resp.EnsureSuccessStatusCode();
     }
+
+    public async Task<bool> IsJobCancelledAsync(Guid jobId, CancellationToken ct = default)
+    {
+        try
+        {
+            var resp = await http.GetAsync($"/api/queue/jobs/{jobId}/should-cancel", ct);
+            if (!resp.IsSuccessStatusCode) return false;
+            var result = await resp.Content.ReadFromJsonAsync<ShouldCancelResponse>(ct);
+            return result?.ShouldCancel ?? false;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to check cancellation for job {JobId}", jobId);
+            return false;
+        }
+    }
+
+    private record ShouldCancelResponse(bool ShouldCancel);
 }
