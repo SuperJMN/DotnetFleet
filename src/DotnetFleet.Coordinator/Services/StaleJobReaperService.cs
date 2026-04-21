@@ -18,6 +18,7 @@ public class StaleJobReaperService : BackgroundService
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StaleThreshold = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan QueuedTimeout = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan AssignedTimeout = TimeSpan.FromMinutes(5);
 
     public StaleJobReaperService(
         IServiceScopeFactory scopeFactory,
@@ -70,6 +71,15 @@ public class StaleJobReaperService : BackgroundService
             logger.LogWarning("Timed out {Count} unclaimed job(s): {Ids}", timedOutIds.Count, string.Join(", ", timedOutIds));
 
             foreach (var jobId in timedOutIds)
+                broadcaster.Complete(jobId);
+        }
+
+        var stuckAssignedIds = await storage.FailStuckAssignedJobsAsync(AssignedTimeout, ct);
+        if (stuckAssignedIds.Count > 0)
+        {
+            logger.LogWarning("Failed {Count} stuck Assigned job(s): {Ids}", stuckAssignedIds.Count, string.Join(", ", stuckAssignedIds));
+
+            foreach (var jobId in stuckAssignedIds)
                 broadcaster.Complete(jobId);
         }
     }

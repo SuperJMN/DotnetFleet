@@ -72,6 +72,14 @@ public interface IFleetStorage
     /// </summary>
     Task<IReadOnlyList<Guid>> FailTimedOutJobsAsync(TimeSpan queuedTimeout, CancellationToken ct = default);
 
+    /// <summary>
+    /// Fails jobs that have been <see cref="JobStatus.Assigned"/> longer than <paramref name="assignedTimeout"/>
+    /// without transitioning to <see cref="JobStatus.Running"/>. This catches jobs that were claimed
+    /// by a worker but never started (e.g. due to a crash between claim and execution).
+    /// Returns the IDs of the jobs that were marked as failed.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> FailStuckAssignedJobsAsync(TimeSpan assignedTimeout, CancellationToken ct = default);
+
     // Secrets
     /// <summary>Returns global secrets when <paramref name="projectId"/> is null, or project-scoped secrets otherwise.</summary>
     Task<IReadOnlyList<Secret>> GetSecretsAsync(Guid? projectId, CancellationToken ct = default);
