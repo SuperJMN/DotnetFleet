@@ -110,4 +110,58 @@ public class StaleJobReaperTests : IDisposable
         var failedIds = await storage.FailStuckAssignedJobsAsync(TimeSpan.FromMinutes(5));
         failedIds.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task TouchWorkerAsync_updates_LastSeenAt_and_revives_offline_worker()
+    {
+        var storage = new EfFleetStorage(factory);
+        var workerId = Guid.NewGuid();
+
+        await storage.AddWorkerAsync(new Worker
+        {
+            Id = workerId,
+            Name = "rpi4",
+            Status = WorkerStatus.Offline,
+            LastSeenAt = DateTimeOffset.UtcNow.AddMinutes(-10)
+        });
+
+        var before = DateTimeOffset.UtcNow;
+        var existed = await storage.TouchWorkerAsync(workerId);
+        existed.Should().BeTrue();
+
+        var refreshed = await storage.GetWorkerAsync(workerId);
+        refreshed!.LastSeenAt.Should().NotBeNull();
+        refreshed.LastSeenAt!.Value.Should().BeOnOrAfter(before);
+        refreshed.Status.Should().Be(WorkerStatus.Online,
+            "TouchWorkerAsync must revive a worker that was previously declared Offline");
+    }
+
+    [Fact]
+    public async Task TouchWorkerAsync_preserves_busy_status()
+    {
+        var storage = new EfFleetStorage(factory);
+        var workerId = Guid.NewGuid();
+
+        await storage.AddWorkerAsync(new Worker
+        {
+            Id = workerId,
+            Name = "busy-worker",
+            Status = WorkerStatus.Busy,
+            LastSeenAt = DateTimeOffset.UtcNow.AddSeconds(-5)
+        });
+
+        await storage.TouchWorkerAsync(workerId);
+
+        var refreshed = await storage.GetWorkerAsync(workerId);
+        refreshed!.Status.Should().Be(WorkerStatus.Busy,
+            "Touch must only flip Offline→Online; other statuses are caller-managed");
+    }
+
+    [Fact]
+    public async Task TouchWorkerAsync_returns_false_for_unknown_worker()
+    {
+        var storage = new EfFleetStorage(factory);
+        var existed = await storage.TouchWorkerAsync(Guid.NewGuid());
+        existed.Should().BeFalse();
+    }
 }

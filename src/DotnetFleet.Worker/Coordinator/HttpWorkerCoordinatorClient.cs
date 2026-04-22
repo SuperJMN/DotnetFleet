@@ -23,22 +23,42 @@ public class HttpWorkerCoordinatorClient : IWorkerCoordinatorClient
         return await resp.Content.ReadFromJsonAsync<Worker>(ct);
     }
 
+    /// <summary>
+    /// Per-request hard ceiling for liveness signals. Heartbeats must never
+    /// block the worker for longer than this — they exist precisely to detect
+    /// stalls, so a stalled heartbeat is worse than no heartbeat.
+    /// </summary>
+    private static readonly TimeSpan HeartbeatTimeout = TimeSpan.FromSeconds(10);
+
     public async Task SendHeartbeatAsync(Guid workerId, CancellationToken ct = default)
         => await SendHeartbeatAsync(workerId, version: null, ct);
 
     public async Task SendHeartbeatAsync(Guid workerId, string? version, CancellationToken ct = default)
     {
-        HttpResponseMessage resp;
-        if (string.IsNullOrWhiteSpace(version))
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(HeartbeatTimeout);
+
+        try
         {
-            resp = await http.PostAsync($"/api/workers/{workerId}/heartbeat", content: null, ct);
+            HttpResponseMessage resp;
+            if (string.IsNullOrWhiteSpace(version))
+                resp = await http.PostAsync($"/api/workers/{workerId}/heartbeat", content: null, cts.Token);
+            else
+                resp = await http.PostAsJsonAsync($"/api/workers/{workerId}/heartbeat", new { version }, cts.Token);
+
+            if (!resp.IsSuccessStatusCode)
+                logger.LogWarning("Heartbeat returned {Status}", (int)resp.StatusCode);
         }
-        else
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            resp = await http.PostAsJsonAsync($"/api/workers/{workerId}/heartbeat", new { version }, ct);
+            // Local timeout, not host shutdown — log and move on so the
+            // heartbeat loop keeps ticking on schedule.
+            logger.LogWarning("Heartbeat timed out after {Timeout}s", HeartbeatTimeout.TotalSeconds);
         }
-        if (!resp.IsSuccessStatusCode)
-            logger.LogWarning("Heartbeat returned {Status}", (int)resp.StatusCode);
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Heartbeat transport failure");
+        }
     }
 
     public async Task UpdateStatusAsync(Guid workerId, WorkerStatus status, CancellationToken ct = default)

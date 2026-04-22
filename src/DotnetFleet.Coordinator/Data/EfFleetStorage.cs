@@ -155,6 +155,24 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory) : IFleetS
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<bool> TouchWorkerAsync(Guid workerId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+
+        // ExecuteUpdate avoids the read+write round-trip and is safe to call
+        // on the hot path of every authenticated worker request.
+        var rows = await db.Workers
+            .Where(w => w.Id == workerId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(w => w.LastSeenAt, now)
+                .SetProperty(w => w.Status,
+                    w => w.Status == WorkerStatus.Offline ? WorkerStatus.Online : w.Status),
+                ct);
+
+        return rows > 0;
+    }
+
     // Stale detection
     public async Task<int> MarkOfflineWorkersAsync(TimeSpan staleThreshold, CancellationToken ct = default)
     {

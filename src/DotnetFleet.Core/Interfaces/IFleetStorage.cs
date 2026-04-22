@@ -36,6 +36,15 @@ public interface IFleetStorage
     Task AddWorkerAsync(Worker worker, CancellationToken ct = default);
     Task UpdateWorkerAsync(Worker worker, CancellationToken ct = default);
 
+    /// <summary>
+    /// Cheap liveness ping: updates <c>LastSeenAt = UtcNow</c> for the worker
+    /// and, if it was <see cref="WorkerStatus.Offline"/>, flips it back to
+    /// <see cref="WorkerStatus.Online"/>. Returns <c>true</c> if the worker exists.
+    /// Designed to be called from any authenticated worker endpoint so that
+    /// heartbeats are not the single point of failure for liveness detection.
+    /// </summary>
+    Task<bool> TouchWorkerAsync(Guid workerId, CancellationToken ct = default);
+
     // Repo caches
     Task<IReadOnlyList<RepoCache>> GetRepoCachesAsync(Guid workerId, CancellationToken ct = default);
     Task<RepoCache?> GetRepoCacheAsync(Guid workerId, Guid projectId, CancellationToken ct = default);

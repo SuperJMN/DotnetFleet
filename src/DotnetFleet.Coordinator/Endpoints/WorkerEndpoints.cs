@@ -26,14 +26,15 @@ public static class WorkerEndpoints
         group.MapPost("/login", Login).AllowAnonymous();
 
         // Worker self-service (must present a Worker JWT whose worker_id matches the route id).
-        group.MapPost("/{id:guid}/heartbeat", Heartbeat).RequireAuthorization("Worker");
-        group.MapPost("/{id:guid}/status", UpdateStatus).RequireAuthorization("Worker");
-        group.MapGet("/me", GetSelf).RequireAuthorization("Worker");
+        // The liveness filter refreshes LastSeenAt on every authenticated worker request.
+        group.MapPost("/{id:guid}/heartbeat", Heartbeat).RequireAuthorization("Worker").AddEndpointFilter<WorkerLivenessFilter>();
+        group.MapPost("/{id:guid}/status", UpdateStatus).RequireAuthorization("Worker").AddEndpointFilter<WorkerLivenessFilter>();
+        group.MapGet("/me", GetSelf).RequireAuthorization("Worker").AddEndpointFilter<WorkerLivenessFilter>();
 
         // Repo cache metadata (worker tells coordinator what it has cached, for visibility/eviction).
-        group.MapGet("/{id:guid}/repo-caches", GetRepoCaches).RequireAuthorization("Worker");
-        group.MapPost("/{id:guid}/repo-caches", UpsertRepoCache).RequireAuthorization("Worker");
-        group.MapDelete("/{id:guid}/repo-caches/{cacheId:guid}", DeleteRepoCache).RequireAuthorization("Worker");
+        group.MapGet("/{id:guid}/repo-caches", GetRepoCaches).RequireAuthorization("Worker").AddEndpointFilter<WorkerLivenessFilter>();
+        group.MapPost("/{id:guid}/repo-caches", UpsertRepoCache).RequireAuthorization("Worker").AddEndpointFilter<WorkerLivenessFilter>();
+        group.MapDelete("/{id:guid}/repo-caches/{cacheId:guid}", DeleteRepoCache).RequireAuthorization("Worker").AddEndpointFilter<WorkerLivenessFilter>();
     }
 
     private static async Task<IResult> GetAll(IFleetStorage storage)

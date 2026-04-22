@@ -18,7 +18,7 @@ public static class JobEndpoints
         group.MapPost("/{id:guid}/cancel", CancelJob);
 
         // Worker internal endpoints (authenticated by worker secret header)
-        var workerGroup = app.MapGroup("/api/queue");
+        var workerGroup = app.MapGroup("/api/queue").AddEndpointFilter<WorkerLivenessFilter>();
         workerGroup.MapGet("/next", GetNextJob).RequireAuthorization("Worker");
         workerGroup.MapPost("/jobs/{id:guid}/start", ReportStarted).RequireAuthorization("Worker");
         workerGroup.MapPost("/jobs/{id:guid}/logs", AppendLogs).RequireAuthorization("Worker");

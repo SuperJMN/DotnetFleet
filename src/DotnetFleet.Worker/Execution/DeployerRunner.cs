@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Threading.Channels;
 
 namespace DotnetFleet.WorkerService.Execution;
 
@@ -45,23 +46,50 @@ public static class DeployerRunner
 
         using var process = new Process { StartInfo = psi };
 
-        var outputLock = new SemaphoreSlim(1, 1);
-
-        process.OutputDataReceived += async (_, e) =>
+        // Decouple stdout/stderr capture from log delivery.
+        //
+        // Process events fire on threadpool threads. The previous design used
+        // `async void` event handlers that awaited an HTTP POST per line under a
+        // SemaphoreSlim. During noisy commands like `dotnet workload restore`
+        // (thousands of lines/sec on first run) this saturated the threadpool
+        // on small machines (e.g. Raspberry Pi 4, 4 cores) and starved the
+        // worker's heartbeat loop, which in turn caused the coordinator's
+        // stale-job reaper to mark the worker as dead and fail the job.
+        //
+        // The fix: handlers do nothing but a non-blocking enqueue into an
+        // unbounded channel. A single dedicated consumer task drains the
+        // channel and awaits onLine sequentially — preserving order without
+        // any lock and without blocking process I/O.
+        var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
         {
-            if (e.Data is null) return;
-            await outputLock.WaitAsync(ct);
-            try { await onLine(e.Data); }
-            finally { outputLock.Release(); }
+            SingleReader = true,
+            SingleWriter = false,
+            AllowSynchronousContinuations = false
+        });
+
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) channel.Writer.TryWrite(e.Data);
         };
 
-        process.ErrorDataReceived += async (_, e) =>
+        process.ErrorDataReceived += (_, e) =>
         {
-            if (e.Data is null) return;
-            await outputLock.WaitAsync(ct);
-            try { await onLine($"[ERR] {e.Data}"); }
-            finally { outputLock.Release(); }
+            if (e.Data is not null) channel.Writer.TryWrite($"[ERR] {e.Data}");
         };
+
+        var consumer = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var line in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+                {
+                    try { await onLine(line).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { throw; }
+                    catch { /* never let a transient log delivery failure tear down the build */ }
+                }
+            }
+            catch (OperationCanceledException) { /* expected on cancellation */ }
+        }, ct);
 
         process.Start();
         process.BeginOutputReadLine();
@@ -69,13 +97,20 @@ public static class DeployerRunner
 
         try
         {
-            await process.WaitForExitAsync(ct);
+            await process.WaitForExitAsync(ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            channel.Writer.TryComplete();
+            try { await consumer.ConfigureAwait(false); } catch { /* swallow */ }
             throw;
         }
+
+        // Process has exited: signal end-of-stream and let the consumer drain
+        // any buffered lines before we report completion.
+        channel.Writer.TryComplete();
+        try { await consumer.ConfigureAwait(false); } catch { /* already logged above */ }
 
         if (process.ExitCode != 0)
             return (false, $"dotnetdeployer.tool exited with code {process.ExitCode}");

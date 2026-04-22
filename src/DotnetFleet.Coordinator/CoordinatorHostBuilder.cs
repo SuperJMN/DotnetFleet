@@ -74,6 +74,7 @@ public static class CoordinatorHostBuilder
 
         // ── Services ─────────────────────────────────────────────────────────
         builder.Services.AddSingleton<LogBroadcaster>();
+        builder.Services.AddSingleton<Endpoints.WorkerLivenessFilter>();
         builder.Services.AddHostedService<PollingBackgroundService>();
         builder.Services.AddHostedService<StaleJobReaperService>();
 
