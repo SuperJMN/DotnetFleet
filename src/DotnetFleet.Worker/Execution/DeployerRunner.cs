@@ -35,7 +35,7 @@ public static class DeployerRunner
         psi.ArgumentList.Add("dotnetdeployer.tool");
         psi.ArgumentList.Add("-y");
 
-        EnsureDotnetToolsOnPath(psi);
+        EnsureDotnetEnvironment(psi);
 
         if (envVars is not null)
         {
@@ -84,15 +84,35 @@ public static class DeployerRunner
     }
 
     /// <summary>
-    /// Ensures the global dotnet-tools directory (<c>$HOME/.dotnet/tools</c>) and
-    /// <c>DOTNET_ROOT</c> are on the child process's <c>PATH</c>. DotnetDeployer
-    /// installs <c>GitVersion.Tool</c> globally and then immediately invokes
-    /// <c>dotnet-gitversion</c>; without these entries on PATH the second call
-    /// fails with "No such file or directory".
+    /// Ensures the spawned <c>dotnet dnx</c> process — and every descendant it
+    /// spawns (including <c>dotnet publish</c> and any <c>sh</c> launched by
+    /// MSBuild <c>&lt;Exec&gt;</c> tasks) — has a usable .NET environment:
+    /// <list type="bullet">
+    ///   <item><description><c>DOTNET_ROOT</c> pointing to a directory that contains the <c>dotnet</c> host.</description></item>
+    ///   <item><description><c>HOME</c> set so per-user tool/NuGet caches resolve correctly under systemd.</description></item>
+    ///   <item><description><c>PATH</c> with <c>$DOTNET_ROOT</c> and <c>$HOME/.dotnet/tools</c> prepended,
+    ///     so MSBuild <c>&lt;Exec&gt;</c> shell scripts can find <c>dotnet</c>, <c>dnx</c> and global tools.</description></item>
+    /// </list>
+    /// Without this, builds fail mid-publish with errors like
+    /// <c>/usr/bin/sh: ...exec.cmd: dotnet: not found</c> (exit 127) when MSBuild
+    /// post-build steps invoke <c>dotnet</c>.
     /// </summary>
-    private static void EnsureDotnetToolsOnPath(ProcessStartInfo psi)
+    private static void EnsureDotnetEnvironment(ProcessStartInfo psi)
     {
         var separator = OperatingSystem.IsWindows() ? ';' : ':';
+
+        var home = psi.Environment.TryGetValue("HOME", out var existingHome) && !string.IsNullOrEmpty(existingHome)
+            ? existingHome
+            : Environment.GetEnvironmentVariable("HOME")
+              ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        if (!string.IsNullOrEmpty(home))
+            psi.Environment["HOME"] = home;
+
+        var dotnetRoot = ResolveDotnetRoot(psi, home);
+        if (!string.IsNullOrEmpty(dotnetRoot))
+            psi.Environment["DOTNET_ROOT"] = dotnetRoot;
+
         var current = psi.Environment.TryGetValue("PATH", out var existing) && !string.IsNullOrEmpty(existing)
             ? existing
             : Environment.GetEnvironmentVariable("PATH") ?? "";
@@ -106,16 +126,59 @@ public static class DeployerRunner
             parts.Insert(0, dir);
         }
 
-        var home = Environment.GetEnvironmentVariable("HOME")
-                   ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         if (!string.IsNullOrEmpty(home))
             Prepend(Path.Combine(home, ".dotnet", "tools"));
 
-        var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
         if (!string.IsNullOrEmpty(dotnetRoot))
             Prepend(dotnetRoot);
 
         psi.Environment["PATH"] = string.Join(separator, parts);
+    }
+
+    /// <summary>
+    /// Resolves a usable <c>DOTNET_ROOT</c>: existing env var first, then the
+    /// running runtime's location (works for self-contained / per-user installs),
+    /// then <c>$HOME/.dotnet</c>, then a PATH lookup.
+    /// </summary>
+    private static string? ResolveDotnetRoot(ProcessStartInfo psi, string? home)
+    {
+        var env = psi.Environment.TryGetValue("DOTNET_ROOT", out var fromPsi) && !string.IsNullOrEmpty(fromPsi)
+            ? fromPsi
+            : Environment.GetEnvironmentVariable("DOTNET_ROOT");
+
+        if (!string.IsNullOrEmpty(env) && DotnetHostExists(env))
+            return env;
+
+        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location);
+        if (!string.IsNullOrEmpty(runtimeDir))
+        {
+            var candidate = Path.GetFullPath(Path.Combine(runtimeDir, "..", "..", ".."));
+            if (DotnetHostExists(candidate))
+                return candidate;
+        }
+
+        if (!string.IsNullOrEmpty(home))
+        {
+            var userDotnet = Path.Combine(home, ".dotnet");
+            if (DotnetHostExists(userDotnet))
+                return userDotnet;
+        }
+
+        var resolved = ResolveDotnetExecutable();
+        if (Path.IsPathRooted(resolved))
+        {
+            var dir = Path.GetDirectoryName(resolved);
+            if (!string.IsNullOrEmpty(dir) && DotnetHostExists(dir))
+                return dir;
+        }
+
+        return null;
+    }
+
+    private static bool DotnetHostExists(string dir)
+    {
+        var exe = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
+        return File.Exists(Path.Combine(dir, exe));
     }
 
     private static string ResolveDotnetExecutable()

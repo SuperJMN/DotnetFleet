@@ -469,10 +469,26 @@ public static class ServiceInstaller
 
     private static string GenerateUnit(string description, string execStart, string workingDirectory, string user, string? dotnetRoot)
     {
-        var dotnetEnvLines = dotnetRoot != null
-            ? $"\nEnvironment=DOTNET_ROOT={dotnetRoot}" +
-              $"\nEnvironment=PATH={dotnetRoot}:{DefaultSystemPath}"
-            : "";
+        var userHome = ResolveUserHome(user);
+        var path = BuildPathForUser(dotnetRoot, userHome);
+
+        var envLines = new List<string>
+        {
+            "Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1",
+            "Environment=DOTNET_NOLOGO=1",
+            $"Environment=PATH={path}",
+        };
+
+        if (dotnetRoot != null)
+            envLines.Add($"Environment=DOTNET_ROOT={dotnetRoot}");
+
+        if (userHome != null)
+        {
+            envLines.Add($"Environment=HOME={userHome}");
+            envLines.Add($"Environment=DOTNET_TOOLS_ROOT={Path.Combine(userHome, ".dotnet", "tools")}");
+        }
+
+        var environmentBlock = string.Join("\n", envLines);
 
         return $"""
             [Unit]
@@ -486,8 +502,7 @@ public static class ServiceInstaller
             Restart=on-failure
             RestartSec=5
             User={user}
-            Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
-            Environment=DOTNET_NOLOGO=1{dotnetEnvLines}
+            {environmentBlock}
 
             [Install]
             WantedBy=multi-user.target
