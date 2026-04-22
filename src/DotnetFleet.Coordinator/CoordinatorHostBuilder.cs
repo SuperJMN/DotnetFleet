@@ -153,6 +153,14 @@ public static class CoordinatorHostBuilder
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"DeploymentJobs\" ADD COLUMN \"CancellationRequestedAt\" INTEGER NULL");
         }
 
+        var hasWorkerVersion = (await db.Database
+            .SqlQueryRaw<long>("SELECT COUNT(*) AS \"Value\" FROM pragma_table_info('Workers') WHERE name='Version'")
+            .ToListAsync()).FirstOrDefault() > 0;
+        if (!hasWorkerVersion)
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Workers\" ADD COLUMN \"Version\" TEXT NULL");
+        }
+
         // ── Startup reconciliation ─────────────────────────────────────────
         // Jobs that were Running or Assigned during the last shutdown can never
         // complete because the worker context is lost. Fail them so they don't
