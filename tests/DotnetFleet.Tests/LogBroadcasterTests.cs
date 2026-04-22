@@ -1,10 +1,14 @@
 using DotnetFleet.Coordinator.Services;
+using DotnetFleet.Core.Domain;
 using FluentAssertions;
 
 namespace DotnetFleet.Tests;
 
 public class LogBroadcasterTests
 {
+    private static LogEntry Entry(Guid jobId, string line) =>
+        new() { JobId = jobId, Line = line };
+
     [Fact]
     public async Task Published_line_is_received_by_subscriber()
     {
@@ -12,12 +16,12 @@ public class LogBroadcasterTests
         var jobId = Guid.NewGuid();
         var channel = broadcaster.Subscribe(jobId);
 
-        broadcaster.Publish(jobId, "hello");
+        broadcaster.Publish(jobId, Entry(jobId, "hello"));
         broadcaster.Complete(jobId);
 
         var lines = new List<string>();
-        await foreach (var line in channel.Reader.ReadAllAsync())
-            lines.Add(line);
+        await foreach (var entry in channel.Reader.ReadAllAsync())
+            lines.Add(entry.Line);
 
         lines.Should().ContainSingle().Which.Should().Be("hello");
     }
@@ -31,15 +35,15 @@ public class LogBroadcasterTests
         var ch1 = broadcaster.Subscribe(jobId);
         var ch2 = broadcaster.Subscribe(jobId);
 
-        broadcaster.Publish(jobId, "line1");
-        broadcaster.Publish(jobId, "line2");
+        broadcaster.Publish(jobId, Entry(jobId, "line1"));
+        broadcaster.Publish(jobId, Entry(jobId, "line2"));
         broadcaster.Complete(jobId);
 
         var lines1 = new List<string>();
-        await foreach (var l in ch1.Reader.ReadAllAsync()) lines1.Add(l);
+        await foreach (var e in ch1.Reader.ReadAllAsync()) lines1.Add(e.Line);
 
         var lines2 = new List<string>();
-        await foreach (var l in ch2.Reader.ReadAllAsync()) lines2.Add(l);
+        await foreach (var e in ch2.Reader.ReadAllAsync()) lines2.Add(e.Line);
 
         lines1.Should().Equal("line1", "line2");
         lines2.Should().Equal("line1", "line2");
@@ -49,7 +53,7 @@ public class LogBroadcasterTests
     public void Publish_to_unknown_job_does_not_throw()
     {
         var broadcaster = new LogBroadcaster();
-        var act = () => broadcaster.Publish(Guid.NewGuid(), "ignored");
+        var act = () => broadcaster.Publish(Guid.NewGuid(), Entry(Guid.NewGuid(), "ignored"));
         act.Should().NotThrow();
     }
 
@@ -60,16 +64,16 @@ public class LogBroadcasterTests
         var jobId = Guid.NewGuid();
         var channel = broadcaster.Subscribe(jobId);
 
-        broadcaster.Publish(jobId, "before-unsub");
+        broadcaster.Publish(jobId, Entry(jobId, "before-unsub"));
         broadcaster.Unsubscribe(jobId, channel);
-        broadcaster.Publish(jobId, "after-unsub");
+        broadcaster.Publish(jobId, Entry(jobId, "after-unsub"));
         broadcaster.Complete(jobId);
 
         // The channel writer was not completed by Unsubscribe, so we only
         // read what was buffered before unsubscribing.
         var received = new List<string>();
-        while (channel.Reader.TryRead(out var line))
-            received.Add(line);
+        while (channel.Reader.TryRead(out var entry))
+            received.Add(entry.Line);
 
         received.Should().ContainSingle("before-unsub");
     }
@@ -84,8 +88,8 @@ public class LogBroadcasterTests
         broadcaster.Complete(jobId);
 
         var lines = new List<string>();
-        await foreach (var l in channel.Reader.ReadAllAsync())
-            lines.Add(l);
+        await foreach (var e in channel.Reader.ReadAllAsync())
+            lines.Add(e.Line);
 
         lines.Should().BeEmpty();
     }
@@ -103,12 +107,12 @@ public class LogBroadcasterTests
         var publishTask = Task.Run(async () =>
         {
             for (var i = 0; i < 500 && !cts.IsCancellationRequested; i++)
-                broadcaster.Publish(jobId, $"line-{i}");
+                broadcaster.Publish(jobId, Entry(jobId, $"line-{i}"));
         });
 
         var subscribeTask = Task.Run(async () =>
         {
-            var channels = new List<System.Threading.Channels.Channel<string>>();
+            var channels = new List<System.Threading.Channels.Channel<LogEntry>>();
             for (var i = 0; i < 500 && !cts.IsCancellationRequested; i++)
             {
                 var ch = broadcaster.Subscribe(jobId);

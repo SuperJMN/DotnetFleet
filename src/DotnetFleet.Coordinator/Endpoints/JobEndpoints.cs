@@ -61,12 +61,14 @@ public static class JobEndpoints
         // Subscribe BEFORE reading existing logs so no messages are lost
         // in the window between the DB read and the subscription.
         var channel = broadcaster.Subscribe(id);
+        var seenLogIds = new HashSet<Guid>();
         try
         {
             // Send existing logs first
             var existing = await storage.GetLogsAsync(id, ct);
             foreach (var entry in existing)
             {
+                seenLogIds.Add(entry.Id);
                 await WriteEventAsync(httpContext.Response, entry.Line, ct);
             }
 
@@ -101,8 +103,9 @@ public static class JobEndpoints
 
                 if (winner == pendingRead)
                 {
-                    var line = await pendingRead;
-                    await WriteEventAsync(httpContext.Response, line, ct);
+                    var entry = await pendingRead;
+                    if (seenLogIds.Add(entry.Id))
+                        await WriteEventAsync(httpContext.Response, entry.Line, ct);
                     pendingRead = channel.Reader.ReadAsync(ct).AsTask();
                 }
                 else
@@ -213,8 +216,8 @@ public static class JobEndpoints
 
         await storage.AddLogEntriesAsync(entries);
 
-        foreach (var line in req.Lines)
-            broadcaster.Publish(id, line);
+        foreach (var entry in entries)
+            broadcaster.Publish(id, entry);
 
         return Results.Ok();
     }
