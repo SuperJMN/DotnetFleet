@@ -228,8 +228,12 @@ public static class ServiceInstaller
         }
         Console.WriteLine();
 
+        string? versionBefore = null;
+        string? versionAfter = null;
         if (!opts.SkipToolUpdate)
         {
+            versionBefore = await GetInstalledToolVersionAsync();
+
             var exitCode = await RunDotnetToolUpdateAsync(opts.Version, opts.IncludePrerelease);
             if (exitCode != 0)
             {
@@ -238,6 +242,19 @@ public static class ServiceInstaller
                 Console.Error.WriteLine("    Re-run with --skip-tool-update to only restart services.");
                 throw new InvalidOperationException("dotnet tool update failed.");
             }
+
+            versionAfter = await GetInstalledToolVersionAsync();
+
+            Console.WriteLine();
+            if (versionBefore == null && versionAfter != null)
+                Console.WriteLine($"  ✓ DotnetFleet.Tool installed: {versionAfter}");
+            else if (versionBefore != null && versionAfter != null &&
+                     !string.Equals(versionBefore, versionAfter, StringComparison.Ordinal))
+                Console.WriteLine($"  ✓ DotnetFleet.Tool updated: {versionBefore} → {versionAfter}");
+            else if (versionAfter != null)
+                Console.WriteLine($"  • DotnetFleet.Tool already up to date ({versionAfter}); nothing to update.");
+            else
+                Console.WriteLine("  • DotnetFleet.Tool: could not determine installed version.");
         }
         else
         {
@@ -320,19 +337,6 @@ public static class ServiceInstaller
 
     private static async Task<int> RunDotnetToolCommandAsync(string verb, string? version, bool includePrerelease)
     {
-        var runAsUser = ResolveRunAsUser();
-        var runningAsRoot = geteuid() == 0;
-        var crossUser = runningAsRoot && !string.Equals(runAsUser, "root", StringComparison.Ordinal);
-
-        var (dotnetBinary, dotnetRoot) = ResolveDotnetForUser(crossUser ? runAsUser : null);
-        if (dotnetBinary == null)
-        {
-            Console.Error.WriteLine();
-            Console.Error.WriteLine("  ✗ Could not locate a 'dotnet' executable.");
-            Console.Error.WriteLine("    Set DOTNET_ROOT or install the .NET SDK for the target user.");
-            return 1;
-        }
-
         var toolArgs = new List<string> { "tool", verb, "-g", "DotnetFleet.Tool" };
         if (!string.IsNullOrWhiteSpace(version))
         {
@@ -342,10 +346,86 @@ public static class ServiceInstaller
         if (includePrerelease)
             toolArgs.Add("--prerelease");
 
+        var psi = BuildDotnetToolProcess(toolArgs, captureOutput: false);
+        if (psi == null)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("  ✗ Could not locate a 'dotnet' executable.");
+            Console.Error.WriteLine("    Set DOTNET_ROOT or install the .NET SDK for the target user.");
+            return 1;
+        }
+
+        Console.WriteLine($"  • Running: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
+        Console.WriteLine();
+
+        try
+        {
+            using var proc = Process.Start(psi)!;
+            await proc.WaitForExitAsync();
+            return proc.ExitCode;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"  ✗ Failed to invoke '{psi.FileName}': {ex.Message}");
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Returns the installed version of the DotnetFleet.Tool global tool, or null if it
+    /// is not installed or the version could not be determined.
+    /// </summary>
+    private static async Task<string?> GetInstalledToolVersionAsync()
+    {
+        var toolArgs = new List<string> { "tool", "list", "-g" };
+        var psi = BuildDotnetToolProcess(toolArgs, captureOutput: true);
+        if (psi == null)
+            return null;
+
+        try
+        {
+            using var proc = Process.Start(psi)!;
+            var stdout = await proc.StandardOutput.ReadToEndAsync();
+            await proc.WaitForExitAsync();
+            if (proc.ExitCode != 0)
+                return null;
+
+            foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = line.Trim();
+                // Format: "<package id>      <version>      <commands>"
+                var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2 &&
+                    string.Equals(parts[0], "dotnetfleet.tool", StringComparison.OrdinalIgnoreCase))
+                {
+                    return parts[1];
+                }
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return null;
+    }
+
+    private static ProcessStartInfo? BuildDotnetToolProcess(List<string> toolArgs, bool captureOutput)
+    {
+        var runAsUser = ResolveRunAsUser();
+        var runningAsRoot = geteuid() == 0;
+        var crossUser = runningAsRoot && !string.Equals(runAsUser, "root", StringComparison.Ordinal);
+
+        var (dotnetBinary, dotnetRoot) = ResolveDotnetForUser(crossUser ? runAsUser : null);
+        if (dotnetBinary == null)
+            return null;
+
         var psi = new ProcessStartInfo
         {
             UseShellExecute = false,
-            CreateNoWindow = false
+            CreateNoWindow = captureOutput,
+            RedirectStandardOutput = captureOutput,
+            RedirectStandardError = captureOutput
         };
 
         if (crossUser)
@@ -381,20 +461,7 @@ public static class ServiceInstaller
             }
         }
 
-        Console.WriteLine($"  • Running: {psi.FileName} {string.Join(" ", psi.ArgumentList)}");
-        Console.WriteLine();
-
-        try
-        {
-            using var proc = Process.Start(psi)!;
-            await proc.WaitForExitAsync();
-            return proc.ExitCode;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"  ✗ Failed to invoke '{psi.FileName}': {ex.Message}");
-            return 1;
-        }
+        return psi;
     }
 
     /// <summary>
