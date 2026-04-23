@@ -62,6 +62,7 @@ You now have a working CI/CD pipeline. Add projects from the [Desktop App](#desk
 - [API Reference](#api-reference)
 - [Development](#development)
 - [Running Tests](#running-tests)
+- [FAQ](docs/FAQ.md) — troubleshooting and common questions (Spanish)
 
 ---
 
@@ -262,11 +263,12 @@ fleet worker install --name build-01
 fleet worker install --token <token> --name build-01
 ```
 
-> **Manual sudo fallback.** If the automatic re-exec doesn't work for your setup (e.g., passwordless policies, custom sudoers), you can always run the commands explicitly yourself. The tool detects it's already root and skips the re-exec:
+> **Manual sudo fallback.** If the automatic re-exec doesn't work for your setup (e.g., passwordless policies, custom sudoers), call `sudo` yourself but use the **absolute path** to the binary and preserve `DOTNET_ROOT` (`~/.dotnet/tools` is not in `secure_path`, and `sudo` strips `DOTNET_ROOT`). The tool detects it's already root and skips the re-exec:
 > ```bash
-> sudo env "PATH=$PATH" "DOTNET_ROOT=$DOTNET_ROOT" "HOME=$HOME" \
->   dnx dotnetfleet.tool coordinator install --port 5000
+> sudo env "PATH=$PATH" "DOTNET_ROOT=$HOME/.dotnet" "HOME=$HOME" \
+>   ~/.dotnet/tools/fleet coordinator install --port 5000
 > ```
+> Do **not** run `sudo fleet ...` directly — it will fail with `sudo: fleet: command not found`.
 
 #### Managing the services
 
@@ -279,12 +281,12 @@ sudo systemctl status fleet-worker-build-01
 journalctl -u fleet-coordinator -f
 journalctl -u fleet-worker-build-01 -f
 
-# Update tool + restart all local fleet services in one go
-sudo fleet update
+# Update tool + restart all local fleet services in one go (no sudo — auto-elevates)
+fleet update
 
-# Uninstall
-sudo fleet coordinator uninstall
-sudo fleet worker uninstall --name build-01
+# Uninstall (no sudo — auto-elevates)
+fleet coordinator uninstall
+fleet worker uninstall --name build-01
 ```
 
 The services run as the calling user (via `SUDO_USER`), write unit files to `/etc/systemd/system/`, and use these service names:

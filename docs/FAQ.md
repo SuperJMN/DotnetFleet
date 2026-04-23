@@ -8,14 +8,54 @@ revisa el [README](../README.md) o abre una issue.
 
 ## Índice
 
+- [Getting Started en 5 minutos](#getting-started-en-5-minutos)
 - [Instalación y arranque](#instalación-y-arranque)
 - [Tokens, secretos y credenciales](#tokens-secretos-y-credenciales)
 - [Workers y descubrimiento](#workers-y-descubrimiento)
-- [Servicios systemd](#servicios-systemd)
+- [Servicios systemd: instalación, gestión y actualización](#servicios-systemd-instalación-gestión-y-actualización)
 - [Datos, almacenamiento y caché](#datos-almacenamiento-y-caché)
 - [Actualizaciones y rollback](#actualizaciones-y-rollback)
 - [Seguridad y red](#seguridad-y-red)
 - [Resolución de problemas](#resolución-de-problemas)
+
+---
+
+## Getting Started en 5 minutos
+
+El camino más rápido, asumiendo Linux + .NET 10 SDK ya instalado:
+
+```bash
+# 1. Instala la global tool (deja el binario en ~/.dotnet/tools/fleet)
+dotnet tool install -g DotnetFleet.Tool
+
+# 2. Arranca el coordinador en primer plano (Ctrl+C para parar)
+fleet coordinator
+#  → escucha en http://localhost:5000
+#  → admin / admin para la UI
+#  → imprime el registrationToken en el banner
+
+# 3. En otra terminal: arranca un worker en la misma máquina
+fleet worker
+#  → autodescubre el coordinador local (URL + token)
+```
+
+Listo. Abre `http://localhost:5000`, añade un repo con `deployer.yaml` en la
+raíz y pulsa **Deploy Now**.
+
+### Variantes habituales
+
+| Escenario                                      | Comando                                                                                                |
+|------------------------------------------------|--------------------------------------------------------------------------------------------------------|
+| Worker en otra máquina de la LAN               | `fleet worker --token <token>` (URL la encuentra por mDNS)                                             |
+| Sin mDNS / red restringida                     | `fleet worker --coordinator http://host:5000 --token <token> --no-discover`                            |
+| Varios workers en el mismo host                | `fleet worker --name build-01` y `fleet worker --name build-02`                                        |
+| Sin instalar la global tool                    | `dnx dotnetfleet.tool coordinator` y `dnx dotnetfleet.tool worker`                                     |
+| Cambiar puerto / contraseña / data-dir         | `fleet coordinator --port 8080 --admin-password 's3cret' --data-dir /opt/fleet`                        |
+
+### Y para producción
+
+Para que arranquen en boot y se reinicien al fallar, instala como servicios
+systemd. Salta a [Servicios systemd](#servicios-systemd-instalación-gestión-y-actualización).
 
 ---
 
@@ -155,43 +195,151 @@ Cada 10 s por defecto. Ajustable con `--poll-interval <segundos>`.
 
 ---
 
-## Servicios systemd
+## Servicios systemd: instalación, gestión y actualización
 
 ### ¿Cómo se llaman los servicios?
 
-| Componente | Nombre del servicio       |
-|------------|---------------------------|
-| Coordinador| `fleet-coordinator`       |
-| Worker     | `fleet-worker-{nombre}`   |
+| Componente  | Nombre del servicio       |
+|-------------|---------------------------|
+| Coordinador | `fleet-coordinator`       |
+| Worker      | `fleet-worker-{nombre}`   |
 
 Las unidades viven en `/etc/systemd/system/` y corren bajo el usuario que
-invocó el `install` (resuelto vía `SUDO_USER`).
+invocó el `install` (resuelto vía `SUDO_USER`). Apuntan al binario estable
+`~/.dotnet/tools/fleet`, no a rutas efímeras de `dnx`.
 
-### ¿Por qué se me pide la contraseña de `sudo` aunque no la haya escrito?
+### Instalación recomendada
 
-Los subcomandos `install`, `uninstall` y `update` se **autoelevan** vía
-`SudoElevation.ReExecAsRootIfNeeded()`. Reejecutan la propia tool con `sudo`
-preservando `PATH`, `DOTNET_ROOT` y `HOME` para que las instalaciones
-per-usuario de .NET sigan funcionando.
-
-### El autoelevación falla en mi entorno (sudoers personalizado, etc.)
-
-Llama tú a `sudo` explícitamente; la herramienta detecta que ya es root y se
-salta el re-exec:
+**Coordinador**:
 
 ```bash
-sudo dnx dotnetfleet.tool coordinator install --port 5000
-sudo fleet coordinator install --port 5000
+fleet coordinator install --port 5000
+#  → te pide la contraseña de sudo una vez
+#  → instala /etc/systemd/system/fleet-coordinator.service
+#  → arranca y habilita el servicio
 ```
 
-### Comandos útiles para gestionarlos
+**Worker en la misma máquina** (autodescubre coordinador y token):
 
 ```bash
+fleet worker install --name build-01
+```
+
+**Worker en otra máquina de la LAN** (mDNS encuentra la URL; el token sí lo
+tienes que dar):
+
+```bash
+fleet worker install --token <token> --name build-01
+```
+
+**Worker apuntando a una URL fija** (sin descubrimiento):
+
+```bash
+fleet worker install \
+  --coordinator http://192.168.1.29:5000 \
+  --token <token> \
+  --name $(hostname)
+```
+
+> ⚠️ La URL **debe llevar `http://`**. `--coordinator 192.168.1.29:5000` no
+> sirve.
+
+### ¿Por qué no debo poner `sudo` delante de `fleet`?
+
+`sudo` resetea `PATH` al `secure_path` de `/etc/sudoers`, que **no incluye
+`~/.dotnet/tools`**. Resultado: `sudo: fleet: orden no encontrada`. La
+herramienta ya se autoeleva sola por su ruta absoluta y preserva
+`PATH`/`DOTNET_ROOT`/`HOME`, así que la regla simple es:
+
+```
+✅ fleet coordinator install ...
+✅ fleet update
+❌ sudo fleet coordinator install ...
+❌ sudo fleet update
+```
+
+Lo mismo aplica a `dnx`: úsalo sin `sudo`.
+
+### ¿Y si la autoelevación no funciona?
+
+Pasa por `sudo env` preservando lo necesario y usa la **ruta absoluta** del
+binario:
+
+```bash
+sudo env "PATH=$PATH" "DOTNET_ROOT=$HOME/.dotnet" "HOME=$HOME" \
+  ~/.dotnet/tools/fleet coordinator install --port 5000
+```
+
+Sin `DOTNET_ROOT=$HOME/.dotnet`, root no encuentra el runtime instalado en tu
+home y verás:
+
+> You must install .NET to run this application. … .NET location: Not found
+
+> ℹ️ La autoelevación correcta para apphosts requiere **DotnetFleet.Tool
+> ≥ 0.0.36**. En versiones anteriores el wrapper duplicaba el path de la DLL
+> y `install` fallaba con "Comando o argumento no reconocido
+> '/home/.../DotnetFleet.Tool.dll'". Si lo ves, actualiza con
+> `dotnet tool update -g DotnetFleet.Tool` y reintenta.
+
+### Gestión diaria de los servicios
+
+```bash
+# Estado y logs
 sudo systemctl status fleet-coordinator
-sudo systemctl restart fleet-worker-build-01
+sudo systemctl status fleet-worker-build-01
 journalctl -u fleet-coordinator -f
-fleet coordinator uninstall          # desinstala el servicio
+journalctl -u fleet-worker-build-01 -f
+
+# Reinicio
+sudo systemctl restart fleet-coordinator
+sudo systemctl restart fleet-worker-build-01
+
+# Desinstalación (sin sudo — la tool se autoeleva)
+fleet coordinator uninstall
+fleet worker uninstall --name build-01
 ```
+
+### Actualización en sitio (one-shot)
+
+Para actualizar la global tool **y** reiniciar todos los servicios fleet
+locales en una sola orden:
+
+```bash
+fleet update
+#  → se autoeleva con sudo (te pide contraseña una vez)
+#  → dotnet tool update -g DotnetFleet.Tool
+#  → systemctl restart fleet-coordinator + cada fleet-worker-*
+#  → preserva PATH, DOTNET_ROOT y HOME
+```
+
+No hace falta reinstalar las unidades systemd después: apuntan a la ruta
+estable `~/.dotnet/tools/fleet`, así que basta con reiniciar.
+
+### Actualización manual (si prefieres control fino)
+
+```bash
+dotnet tool update -g DotnetFleet.Tool
+sudo systemctl restart fleet-coordinator
+sudo systemctl restart fleet-worker-<nombre>
+```
+
+### Rollback a una versión anterior
+
+```bash
+dotnet tool update -g DotnetFleet.Tool --version <versión-anterior>
+sudo systemctl restart fleet-coordinator
+sudo systemctl restart fleet-worker-<nombre>
+```
+
+Todos los datos (`~/.fleet/`) se preservan: proyectos, jobs, historial,
+`config.json`, credenciales de worker y caché de repos.
+
+### ¿Y si no estoy en Linux con systemd?
+
+Los `install` solo funcionan en Linux con systemd. En Windows / macOS / sin
+systemd, ejecuta el coordinador y los workers en primer plano (`fleet
+coordinator`, `fleet worker`) bajo el gestor que prefieras: `launchd`, NSSM,
+`sc.exe`, Docker, etc.
 
 ---
 
@@ -377,11 +525,12 @@ falta porque la autoelevación hace todo el trabajo.
 
 ### `fleet worker install -c 192.168.1.29:5000 -t <token>` no funciona
 
-Casi siempre es uno de estos tres motivos. Para un worker **local que apunta a
-un coordinador remoto** la receta correcta es:
+Casi siempre es uno de estos motivos. Para un worker **local que apunta a
+un coordinador remoto** la receta correcta es (sin `sudo`, sin scheme
+implícito):
 
 ```bash
-sudo fleet worker install \
+fleet worker install \
   --coordinator http://192.168.1.29:5000 \
   --token xxwVtE66hkqLD2SVQ1PBYoj5yT2moQNl \
   --name $(hostname)
@@ -393,17 +542,22 @@ Comprueba:
    `http://192.168.1.29:5000`, no `192.168.1.29:5000`. Sin `http://` la
    `HttpClient` del worker no puede construir la BaseAddress y falla al primer
    latido.
-2. **`install` requiere `sudo`.** Crea la unidad en `/etc/systemd/system/`. La
-   tool intenta autoelevarse, pero si el `sudo` no es interactivo (sesión SSH
-   sin TTY, sudoers personalizados…), reejecuta tú: `sudo fleet worker install
-   …`.
-3. **El servicio se llama por el nombre del worker.** Si no pasas `--name`,
+2. **No prefijes con `sudo`.** La tool se autoeleva sola por su ruta absoluta
+   y preserva `PATH`/`DOTNET_ROOT`/`HOME`. `sudo fleet ...` falla porque
+   `~/.dotnet/tools` no está en `secure_path` (ver pregunta anterior). Si la
+   autoelevación no funciona en tu entorno, usa el workaround de la
+   [sección systemd](#y-si-la-autoelevación-no-funciona).
+3. **Versión < 0.0.36 con `install`.** Hubo un bug en `SudoElevation` que al
+   reejecutarse con `sudo` añadía el path de la DLL como argumento, dando
+   `Comando o argumento no reconocido '/home/.../DotnetFleet.Tool.dll'`.
+   Solución: `dotnet tool update -g DotnetFleet.Tool` (≥ 0.0.36).
+4. **El servicio se llama por el nombre del worker.** Si no pasas `--name`,
    usa el `hostname`. Verifica el nombre real con:
    ```bash
    systemctl list-units 'fleet-worker-*' --all
    journalctl -u fleet-worker-<nombre> -n 100 --no-pager
    ```
-4. **El coordinador debe ser alcanzable desde el worker.** Pruébalo antes de
+5. **El coordinador debe ser alcanzable desde el worker.** Pruébalo antes de
    instalar:
    ```bash
    curl -i http://192.168.1.29:5000/healthz
@@ -411,7 +565,7 @@ Comprueba:
    Si da `Connection refused`, el coordinador está bindeado a `localhost` y no
    a `0.0.0.0`. Reinstálalo con `--urls http://0.0.0.0:5000` o pásale
    `ASPNETCORE_URLS`.
-5. **El token debe ser exactamente el del `config.json` del coordinador**, sin
+6. **El token debe ser exactamente el del `config.json` del coordinador**, sin
    espacios ni saltos. Confírmalo con:
    ```bash
    ssh user@192.168.1.29 'cat ~/.fleet/coordinator/config.json'
@@ -426,6 +580,19 @@ fleet worker --coordinator http://192.168.1.29:5000 --token <token>
 
 Así ves los logs directamente en consola y aíslas si el problema es el
 servicio o la conexión.
+
+### `You must install .NET to run this application` al hacer `sudo ~/.dotnet/tools/fleet ...`
+
+`sudo` borra `DOTNET_ROOT` y root busca .NET en `/usr/share/dotnet`, donde no
+está si lo instalaste per-usuario en `~/.dotnet`. Pasa la variable:
+
+```bash
+sudo env "PATH=$PATH" "DOTNET_ROOT=$HOME/.dotnet" "HOME=$HOME" \
+  ~/.dotnet/tools/fleet <subcomando> ...
+```
+
+O mejor todavía, **deja que la tool se autoeleve** (no pongas `sudo`): la
+autoelevación ya preserva `DOTNET_ROOT` automáticamente.
 
 ### ¿Cómo puedo abrir la UI de administración?
 
