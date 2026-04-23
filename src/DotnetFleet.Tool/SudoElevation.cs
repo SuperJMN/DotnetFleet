@@ -83,24 +83,25 @@ public static class SudoElevation
             psi.ArgumentList.Add($"HOME={home}");
         }
 
-        // When launched via `dotnet foo.dll`, ProcessPath is the dotnet host
-        // and args[0] is the dll path. Re-invoke as `dotnet <dll> <user-args>`.
-        // For a native apphost (global tool), ProcessPath == args[0]; pass it once.
-        if (!string.Equals(procPath, cmdArgs[0], StringComparison.Ordinal))
+        // Re-invocation strategies:
+        //   - `dotnet foo.dll user-args`: ProcessPath = dotnet, cmdArgs[0] = dll.
+        //     We must re-pass the dll explicitly: `dotnet <dll> <user-args>`.
+        //   - Native apphost (global tool): ProcessPath = apphost binary, cmdArgs[0]
+        //     is the dll path injected by the runtime (NOT a user argument). We must
+        //     re-invoke as `<apphost> <user-args>` and skip cmdArgs[0]; otherwise
+        //     System.CommandLine sees the dll path as an unknown command.
+        psi.ArgumentList.Add(procPath);
+
+        var procName = Path.GetFileNameWithoutExtension(procPath);
+        var isDotnetHost = string.Equals(procName, "dotnet", StringComparison.OrdinalIgnoreCase);
+        if (isDotnetHost && cmdArgs.Length > 0)
         {
-            psi.ArgumentList.Add(procPath);
-            foreach (var a in cmdArgs)
-            {
-                psi.ArgumentList.Add(a);
-            }
+            psi.ArgumentList.Add(cmdArgs[0]);
         }
-        else
+
+        for (var i = 1; i < cmdArgs.Length; i++)
         {
-            psi.ArgumentList.Add(procPath);
-            for (var i = 1; i < cmdArgs.Length; i++)
-            {
-                psi.ArgumentList.Add(cmdArgs[i]);
-            }
+            psi.ArgumentList.Add(cmdArgs[i]);
         }
 
         try
