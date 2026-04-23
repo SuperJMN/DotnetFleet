@@ -17,12 +17,12 @@ internal static class LogAnsi
 
     private static string? GetAnsiCode(LogSeverity severity) => severity switch
     {
-        LogSeverity.Trace   => "\x1b[90m",        // bright black (gray)
-        LogSeverity.Debug   => "\x1b[37m",         // white (dim)
-        LogSeverity.Info    => "\x1b[34m",          // blue
-        LogSeverity.Warning => "\x1b[33m",          // yellow
-        LogSeverity.Error   => "\x1b[1;31m",        // bold red
-        LogSeverity.Fatal   => "\x1b[1;91m",        // bold bright red
+        LogSeverity.Trace   => "\x1b[37m",          // light gray
+        LogSeverity.Debug   => "\x1b[94m",          // bright blue
+        LogSeverity.Info    => "\x1b[97m",          // bright white
+        LogSeverity.Warning => "\x1b[93m",          // bright yellow/amber
+        LogSeverity.Error   => "\x1b[1;91m",        // bold bright red
+        LogSeverity.Fatal   => "\x1b[1;91m",        // bold bright red (intense)
         _                   => null
     };
 }

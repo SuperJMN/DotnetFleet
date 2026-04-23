@@ -176,14 +176,14 @@ public static class LogTextPresenter
 
 internal static class SeverityColors
 {
-    // Theme-friendly explicit colours; chosen to be readable on both light and dark backgrounds.
-    public static readonly IBrush Default = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC));
-    public static readonly IBrush Trace   = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
-    public static readonly IBrush Debug   = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
-    public static readonly IBrush Info    = new SolidColorBrush(Color.FromRgb(0x60, 0xA5, 0xFA));
-    public static readonly IBrush Warning = new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B));
-    public static readonly IBrush Error   = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44));
-    public static readonly IBrush Fatal   = new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26));
+    // Bright, high-contrast colours chosen for readability on a dark/black terminal background.
+    public static readonly IBrush Default = new SolidColorBrush(Color.FromRgb(0xDC, 0xDC, 0xDC));
+    public static readonly IBrush Trace   = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0));
+    public static readonly IBrush Debug   = new SolidColorBrush(Color.FromRgb(0x6F, 0xB8, 0xFF));
+    public static readonly IBrush Info    = new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0xFF));
+    public static readonly IBrush Warning = new SolidColorBrush(Color.FromRgb(0xFF, 0xD2, 0x4D));
+    public static readonly IBrush Error   = new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B));
+    public static readonly IBrush Fatal   = new SolidColorBrush(Color.FromRgb(0xFF, 0x3B, 0x3B));
 
     public static readonly IBrush MatchHighlight = new SolidColorBrush(Color.FromArgb(0x80, 0xFA, 0xCC, 0x15));
 
