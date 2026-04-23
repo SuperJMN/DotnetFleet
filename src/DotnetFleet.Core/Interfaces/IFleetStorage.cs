@@ -19,6 +19,15 @@ public interface IFleetStorage
     Task UpdateJobAsync(DeploymentJob job, CancellationToken ct = default);
 
     /// <summary>
+    /// Atomically sets <see cref="DeploymentJob.Version"/> for the given job
+    /// only if it is currently NULL. Returns true if the row was updated, false
+    /// if the job did not exist or already had a version. Single SQL UPDATE
+    /// with a WHERE Id = @id AND Version IS NULL guard — no app-level locking,
+    /// no read-then-write race window.
+    /// </summary>
+    Task<bool> SetJobVersionIfUnsetAsync(Guid jobId, string version, CancellationToken ct = default);
+
+    /// <summary>
     /// Atomically claims the oldest Queued job for the given worker.
     /// Transitions the job to <see cref="JobStatus.Assigned"/> and sets <c>WorkerId</c> in a single
     /// serialized transaction so concurrent workers cannot pick the same job.

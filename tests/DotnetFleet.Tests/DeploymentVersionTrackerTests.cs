@@ -58,7 +58,7 @@ public class DeploymentVersionTrackerTests : IDisposable
     [Fact]
     public async Task First_GitVersion_line_in_the_stream_renames_the_deployment()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new DotnetFleet.Core.Domain.CapabilityWorkerSelector());
         var job = await SeedJobAsync(storage);
 
         var lines = new[]
@@ -80,7 +80,7 @@ public class DeploymentVersionTrackerTests : IDisposable
     [Fact]
     public async Task Subsequent_batches_do_not_overwrite_the_first_detected_version()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new DotnetFleet.Core.Domain.CapabilityWorkerSelector());
         var job = await SeedJobAsync(storage);
 
         await DeploymentVersionTracker.TryUpdateVersionAsync(storage, job,
@@ -99,7 +99,7 @@ public class DeploymentVersionTrackerTests : IDisposable
     [Fact]
     public async Task Lines_without_a_version_leave_the_job_unchanged()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new DotnetFleet.Core.Domain.CapabilityWorkerSelector());
         var job = await SeedJobAsync(storage);
 
         var detected = await DeploymentVersionTracker.TryUpdateVersionAsync(storage, job,
@@ -108,5 +108,42 @@ public class DeploymentVersionTrackerTests : IDisposable
         detected.Should().BeNull();
         var reloaded = await storage.GetJobAsync(job.Id);
         reloaded!.Version.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Concurrent_batches_with_different_versions_persist_only_one()
+    {
+        var storage = new EfFleetStorage(factory, new DotnetFleet.Core.Domain.CapabilityWorkerSelector());
+        var job = await SeedJobAsync(storage);
+
+        // Both copies observe Version == null, mirroring two AppendLogs requests racing
+        // for the same job inside their own scoped DbContext.
+        var jobCopyA = (await storage.GetJobAsync(job.Id))!;
+        var jobCopyB = (await storage.GetJobAsync(job.Id))!;
+
+        using var gate = new SemaphoreSlim(0, 2);
+        var t1 = Task.Run(async () =>
+        {
+            await gate.WaitAsync();
+            return await DeploymentVersionTracker.TryUpdateVersionAsync(
+                storage, jobCopyA, new[] { "FullSemVer: 1.0.0" });
+        });
+        var t2 = Task.Run(async () =>
+        {
+            await gate.WaitAsync();
+            return await DeploymentVersionTracker.TryUpdateVersionAsync(
+                storage, jobCopyB, new[] { "FullSemVer: 2.0.0" });
+        });
+
+        gate.Release(2);
+        var results = await Task.WhenAll(t1, t2);
+
+        results.Count(r => r is not null).Should().Be(1,
+            "first-match-wins: the racing batch that loses the atomic write must report null");
+
+        var reloaded = await storage.GetJobAsync(job.Id);
+        reloaded!.Version.Should().BeOneOf("1.0.0", "2.0.0");
+        reloaded.Version.Should().Be(results.Single(r => r is not null),
+            "the surviving version must be exactly the one returned by the winning task");
     }
 }
