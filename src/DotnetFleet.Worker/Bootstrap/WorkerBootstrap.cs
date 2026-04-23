@@ -23,6 +23,8 @@ public static class WorkerBootstrap
 
     public static async Task EnsureCredentialsAsync(WorkerOptions options, ILogger logger, CancellationToken ct = default)
     {
+        options.CoordinatorBaseUrl = NormalizeCoordinatorBaseUrl(options.CoordinatorBaseUrl);
+
         if (options.Id is { } id && !string.IsNullOrEmpty(options.Secret))
         {
             logger.LogInformation("Worker credentials provided via configuration (id={Id})", id);
@@ -102,4 +104,29 @@ public static class WorkerBootstrap
 
     private record StoredCredentials(Guid WorkerId, string Secret);
     private record RegisterResponse(Guid WorkerId, string Secret);
+
+    /// <summary>
+    /// Normalizes the configured coordinator URL so that bare host:port values
+    /// (e.g. <c>192.168.1.10:5000</c>) are accepted instead of failing with the
+    /// cryptic <c>UriFormatException: Invalid URI: The URI scheme is not valid</c>.
+    /// </summary>
+    public static string NormalizeCoordinatorBaseUrl(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            throw new InvalidOperationException("Worker:CoordinatorBaseUrl is not configured.");
+
+        var trimmed = raw.Trim();
+        var hasScheme = System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[a-zA-Z][a-zA-Z0-9+\-.]*://");
+        var candidate = hasScheme ? trimmed : "http://" + trimmed;
+
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
+            throw new InvalidOperationException(
+                $"Worker:CoordinatorBaseUrl '{raw}' is not a valid absolute URL. Expected something like 'http://host:5000'.");
+
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            throw new InvalidOperationException(
+                $"Worker:CoordinatorBaseUrl '{raw}' has unsupported scheme '{uri.Scheme}'. Use http or https.");
+
+        return uri.GetLeftPart(UriPartial.Authority);
+    }
 }
