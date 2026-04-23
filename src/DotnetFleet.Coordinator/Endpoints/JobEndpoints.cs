@@ -198,7 +198,8 @@ public static class JobEndpoints
         [FromBody] AppendLogsRequest req,
         HttpContext httpContext,
         IFleetStorage storage,
-        LogBroadcaster broadcaster)
+        LogBroadcaster broadcaster,
+        ILoggerFactory loggerFactory)
     {
         if (!TryGetWorkerId(httpContext, out var workerId))
             return Results.Forbid();
@@ -218,6 +219,21 @@ public static class JobEndpoints
 
         foreach (var entry in entries)
             broadcaster.Publish(id, entry);
+
+        // Version detection is best-effort and must NEVER fail the log-append:
+        // logs are already persisted (line above) and broadcast. If the tracker
+        // throws (e.g. transient DB lock, malformed line, etc.) we log a warning
+        // and return 200 so the worker doesn't retry and duplicate the batch.
+        try
+        {
+            await DeploymentVersionTracker.TryUpdateVersionAsync(storage, job, req.Lines);
+        }
+        catch (Exception ex)
+        {
+            loggerFactory
+                .CreateLogger(typeof(JobEndpoints).FullName!)
+                .LogWarning(ex, "Deployment version detection failed for job {JobId}; logs were persisted regardless.", id);
+        }
 
         return Results.Ok();
     }

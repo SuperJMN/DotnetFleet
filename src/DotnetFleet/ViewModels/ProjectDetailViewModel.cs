@@ -79,15 +79,58 @@ public partial class JobViewModel : ReactiveObject
 
     public DeploymentJob Job { get; }
 
+    private string? _version;
+    private string _displayName = string.Empty;
+
     public JobViewModel(DeploymentJob job, FleetApiClient client, MainViewModel main, ProjectDetailViewModel projectDetail)
     {
         Job = job;
         _client = client;
         _main = main;
         _projectDetail = projectDetail;
+        _version = job.Version;
+        _displayName = ComputeDisplayName(job.Version);
 
         OpenCommand = ReactiveCommand.Create(Open);
     }
+
+    /// <summary>The detected GitVersion-style version, or null if none was reported yet.</summary>
+    public string? Version
+    {
+        get => _version;
+        private set
+        {
+            if (_version == value) return;
+            this.RaiseAndSetIfChanged(ref _version, value);
+            DisplayName = ComputeDisplayName(value);
+        }
+    }
+
+    /// <summary>
+    /// Friendly label shown in deployment lists. Falls back to a short prefix of the
+    /// job GUID until a version is detected from the worker's log stream.
+    /// </summary>
+    public string DisplayName
+    {
+        get => _displayName;
+        private set => this.RaiseAndSetIfChanged(ref _displayName, value);
+    }
+
+    /// <summary>
+    /// Pushes a fresher snapshot of the underlying <see cref="DeploymentJob"/> into this VM,
+    /// raising change notifications for the user-visible fields. Used when the deployment is
+    /// renamed (a version was detected) or any other field is updated by the coordinator.
+    /// </summary>
+    public void ApplyJobUpdate(DeploymentJob updated)
+    {
+        if (updated.Id != Job.Id) return;
+        Job.Version = updated.Version;
+        Job.Status = updated.Status;
+        Version = updated.Version;
+    }
+
+    private string ComputeDisplayName(string? version) =>
+        string.IsNullOrWhiteSpace(version) ? Job.Id.ToString("N")[..8] : version!;
 
     public string StatusBadge => Job.Status switch
     {

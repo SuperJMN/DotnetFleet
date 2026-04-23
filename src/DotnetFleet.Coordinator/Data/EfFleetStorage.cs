@@ -85,6 +85,20 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<bool> SetJobVersionIfUnsetAsync(Guid jobId, string version, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+
+        // Single UPDATE Jobs SET Version = @version WHERE Id = @jobId AND Version IS NULL.
+        // Atomic at the SQL level: only the first concurrent caller's UPDATE matches a row
+        // (rows == 1); every later caller sees Version IS NOT NULL and matches zero rows.
+        var rows = await db.DeploymentJobs
+            .Where(j => j.Id == jobId && j.Version == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(j => j.Version, version), ct);
+
+        return rows > 0;
+    }
+
     public async Task<DeploymentJob?> ClaimNextJobAsync(Guid workerId, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
