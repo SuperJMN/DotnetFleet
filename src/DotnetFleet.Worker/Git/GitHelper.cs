@@ -32,6 +32,17 @@ public static class GitHelper
             await RunGitAsync(["fetch", "--all", "--tags", "--recurse-submodules", "--prune"], localPath, log, ct);
             await RunGitAsync(["checkout", branch], localPath, log, ct);
             await RunGitAsync(["reset", "--hard", $"origin/{branch}"], localPath, log, ct);
+
+            // Wipe untracked/ignored files (bin/, obj/, generated artifacts, NuGet caches
+            // local to the project, etc.) so every job starts from a state equivalent
+            // to a fresh clone. Without this, MSBuild's incremental build can reuse
+            // stale outputs from a previous job — the .NET Android SDK in particular
+            // does NOT treat -p:ApplicationVersion / -p:ApplicationDisplayVersion
+            // as inputs that invalidate the build, so a publish for v1.2.4 can silently
+            // ship the APK that was produced by the previous v1.2.3 job. Submodules
+            // are wiped recursively for the same reason.
+            await RunGitAsync(["clean", "-fdx"], localPath, log, ct);
+            await RunGitAsync(["submodule", "foreach", "--recursive", "git clean -fdx"], localPath, log, ct);
             await log($"Updated to latest {branch}");
         }
         else
