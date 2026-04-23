@@ -4,9 +4,11 @@ using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI.Shell.Utils;
 
 namespace DotnetFleet.ViewModels;
 
+[Section(name: "secrets", icon: "mdi-key-outline", sortIndex: 2)]
 public partial class SecretsViewModel : ReactiveObject
 {
     private readonly FleetApiClient _client;
@@ -35,7 +37,7 @@ public partial class SecretsViewModel : ReactiveObject
         AddCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         ImportFromEnvCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
 
-        RefreshCommand.Execute(Unit.Default).Subscribe();
+        RefreshCommand.Execute(Unit.Default).Subscribe(_ => { }, _ => { });
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }

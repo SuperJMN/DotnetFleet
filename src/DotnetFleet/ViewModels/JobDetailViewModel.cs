@@ -13,13 +13,14 @@ using DotnetFleet.Core.Logging;
 using DotnetFleet.Views.Logging;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI.Navigation;
 
 namespace DotnetFleet.ViewModels;
 
 public partial class JobDetailViewModel : ReactiveObject, IDisposable
 {
     private readonly FleetApiClient _client;
-    private readonly MainViewModel _main;
+    private readonly INavigator _navigator;
     private readonly ProjectDetailViewModel? _parentProject;
     private readonly SourceList<LogLine> _logs = new();
     private readonly IDisposable _filterSubscription;
@@ -47,11 +48,11 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 
     private CancellationTokenSource? _cts;
 
-    public JobDetailViewModel(DeploymentJob job, FleetApiClient client, MainViewModel main, ProjectDetailViewModel? parentProject = null)
+    public JobDetailViewModel(DeploymentJob job, FleetApiClient client, INavigator navigator, ProjectDetailViewModel? parentProject = null)
     {
         Job = job;
         _client = client;
-        _main = main;
+        _navigator = navigator;
         _parentProject = parentProject;
         _statusText = FormatStatus(job.Status);
 
@@ -229,7 +230,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     private void GoBack()
     {
         _cts?.Cancel();
-        _main.NavigateTo((object?)_parentProject ?? _main.Projects);
+        _navigator.GoBack();
     }
 
     public void Dispose()

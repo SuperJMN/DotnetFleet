@@ -3,9 +3,11 @@ using System.Reactive;
 using DotnetFleet.Api.Client;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI.Shell.Utils;
 
 namespace DotnetFleet.ViewModels;
 
+[Section(name: "workers", icon: "mdi-server", sortIndex: 1)]
 public partial class WorkersViewModel : ReactiveObject
 {
     private readonly FleetApiClient _client;
@@ -19,7 +21,7 @@ public partial class WorkersViewModel : ReactiveObject
         _client = client;
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadAsync);
         RefreshCommand.ThrownExceptions.Subscribe(_ => { });
-        RefreshCommand.Execute(Unit.Default).Subscribe();
+        RefreshCommand.Execute(Unit.Default).Subscribe(_ => { }, _ => { });
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }

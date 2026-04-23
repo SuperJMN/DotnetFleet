@@ -1,0 +1,29 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotnetFleet.Dialogs"
+             x:Class="DotnetFleet.Dialogs.LoginDialogView"
+             x:DataType="vm:LoginDialogViewModel"
+             Width="340">
+
+    <StackPanel Spacing="12">
+
+        <TextBox Text="{Binding Username}"
+                 Watermark="Username"
+                 IsEnabled="{Binding !IsBusy}" />
+
+        <TextBox Text="{Binding Password}"
+                 Watermark="Password"
+                 PasswordChar="●"
+                 IsEnabled="{Binding !IsBusy}" />
+
+        <ProgressBar IsIndeterminate="True" Height="4"
+                     IsVisible="{Binding IsBusy}" />
+
+        <TextBlock Text="{Binding Error}"
+                   Foreground="Red"
+                   IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                   TextWrapping="Wrap" />
+
+    </StackPanel>
+
+</UserControl>

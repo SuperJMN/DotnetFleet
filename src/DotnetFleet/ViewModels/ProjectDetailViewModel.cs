@@ -4,13 +4,14 @@ using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI.Navigation;
 
 namespace DotnetFleet.ViewModels;
 
 public partial class ProjectDetailViewModel : ReactiveObject
 {
     private readonly FleetApiClient _client;
-    private readonly MainViewModel _main;
+    private readonly INavigator _navigator;
 
     public Project Project { get; }
     public ProjectSecretsViewModel ProjectSecrets { get; }
@@ -20,21 +21,20 @@ public partial class ProjectDetailViewModel : ReactiveObject
 
     public ObservableCollection<JobViewModel> Jobs { get; } = [];
 
-    public ProjectDetailViewModel(Project project, FleetApiClient client, MainViewModel main)
+    public ProjectDetailViewModel(Project project, FleetApiClient client, INavigator navigator)
     {
         Project = project;
         _client = client;
-        _main = main;
+        _navigator = navigator;
 
         ProjectSecrets = new ProjectSecretsViewModel(project.Id, client);
 
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadJobsAsync);
         DeployCommand = ReactiveCommand.CreateFromTask(DeployAsync);
-        BackCommand = ReactiveCommand.Create(() => _main.NavigateTo(_main.Projects));
+        BackCommand = ReactiveCommand.CreateFromTask(async () => { await _navigator.GoBack(); });
         EditCommand = ReactiveCommand.Create(() =>
         {
-            var vm = new EditProjectViewModel(Project, _client, _main, _main.Projects);
-            _main.NavigateTo(vm);
+            _navigator.Go(() => new EditProjectViewModel(Project, _client, _navigator, projectsForRefresh: null));
         });
 
         RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
@@ -55,7 +55,7 @@ public partial class ProjectDetailViewModel : ReactiveObject
             var jobs = await _client.GetProjectJobsAsync(Project.Id);
             Jobs.Clear();
             foreach (var j in jobs.OrderByDescending(j => j.EnqueuedAt))
-                Jobs.Add(new JobViewModel(j, _client, _main, this));
+                Jobs.Add(new JobViewModel(j, _client, _navigator, this));
         }
         finally
         {
@@ -66,15 +66,15 @@ public partial class ProjectDetailViewModel : ReactiveObject
     private async Task DeployAsync()
     {
         var job = await _client.EnqueueDeployAsync(Project.Id);
-        Jobs.Insert(0, new JobViewModel(job, _client, _main, this));
-        _main.NavigateTo(new JobDetailViewModel(job, _client, _main, this));
+        Jobs.Insert(0, new JobViewModel(job, _client, _navigator, this));
+        await _navigator.Go(() => new JobDetailViewModel(job, _client, _navigator, this));
     }
 }
 
 public partial class JobViewModel : ReactiveObject
 {
     private readonly FleetApiClient _client;
-    private readonly MainViewModel _main;
+    private readonly INavigator _navigator;
     private readonly ProjectDetailViewModel _projectDetail;
 
     public DeploymentJob Job { get; }
@@ -82,11 +82,11 @@ public partial class JobViewModel : ReactiveObject
     private string? _version;
     private string _displayName = string.Empty;
 
-    public JobViewModel(DeploymentJob job, FleetApiClient client, MainViewModel main, ProjectDetailViewModel projectDetail)
+    public JobViewModel(DeploymentJob job, FleetApiClient client, INavigator navigator, ProjectDetailViewModel projectDetail)
     {
         Job = job;
         _client = client;
-        _main = main;
+        _navigator = navigator;
         _projectDetail = projectDetail;
         _version = job.Version;
         _displayName = ComputeDisplayName(job.Version);
@@ -147,7 +147,6 @@ public partial class JobViewModel : ReactiveObject
 
     private void Open()
     {
-        var vm = new JobDetailViewModel(Job, _client, _main, _projectDetail);
-        _main.NavigateTo(vm);
+        _navigator.Go(() => new JobDetailViewModel(Job, _client, _navigator, _projectDetail));
     }
 }

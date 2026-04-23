@@ -14,7 +14,7 @@ public class JobViewModelDisplayNameTests
     {
         // The non-null parameters are only consumed by the Open() command which we never
         // invoke in these tests, so passing null! is safe here.
-        return new JobViewModel(job, client: null!, main: null!, projectDetail: null!);
+        return new JobViewModel(job, client: null!, navigator: null!, projectDetail: null!);
     }
 
     [Fact]

@@ -3,14 +3,15 @@ using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI.Navigation;
 
 namespace DotnetFleet.ViewModels;
 
 public partial class EditProjectViewModel : ReactiveObject
 {
     private readonly FleetApiClient _client;
-    private readonly MainViewModel _main;
-    private readonly ProjectsViewModel _projects;
+    private readonly INavigator _navigator;
+    private readonly ProjectsViewModel? _projects;
     private readonly Project _project;
     private readonly string _originalToken;
 
@@ -22,12 +23,12 @@ public partial class EditProjectViewModel : ReactiveObject
     [Reactive] private string? _error;
     [Reactive] private bool _isBusy;
 
-    public EditProjectViewModel(Project project, FleetApiClient client, MainViewModel main, ProjectsViewModel projects)
+    public EditProjectViewModel(Project project, FleetApiClient client, INavigator navigator, ProjectsViewModel? projectsForRefresh)
     {
         _project = project;
         _client = client;
-        _main = main;
-        _projects = projects;
+        _navigator = navigator;
+        _projects = projectsForRefresh;
 
         _name = project.Name;
         _gitUrl = project.GitUrl;
@@ -74,8 +75,8 @@ public partial class EditProjectViewModel : ReactiveObject
                 pollingIntervalMinutes: polling,
                 gitToken: tokenToSend);
 
-            _projects.RefreshCommand.Execute(Unit.Default).Subscribe();
-            _main.NavigateTo(_projects);
+            _projects?.RefreshCommand.Execute(Unit.Default).Subscribe();
+            await _navigator.GoBack();
         }
         finally
         {
@@ -83,5 +84,5 @@ public partial class EditProjectViewModel : ReactiveObject
         }
     }
 
-    private void Cancel() => _main.NavigateTo(_projects);
+    private void Cancel() => _navigator.GoBack();
 }

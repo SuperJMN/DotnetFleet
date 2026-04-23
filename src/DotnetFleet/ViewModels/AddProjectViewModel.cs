@@ -2,13 +2,14 @@ using System.Reactive;
 using DotnetFleet.Api.Client;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI.Navigation;
 
 namespace DotnetFleet.ViewModels;
 
 public partial class AddProjectViewModel : ReactiveObject
 {
     private readonly FleetApiClient _client;
-    private readonly MainViewModel _main;
+    private readonly INavigator _navigator;
     private readonly ProjectsViewModel _projects;
 
     [Reactive] private string _name = string.Empty;
@@ -19,10 +20,10 @@ public partial class AddProjectViewModel : ReactiveObject
     [Reactive] private string? _error;
     [Reactive] private bool _isBusy;
 
-    public AddProjectViewModel(FleetApiClient client, MainViewModel main, ProjectsViewModel projects)
+    public AddProjectViewModel(FleetApiClient client, INavigator navigator, ProjectsViewModel projects)
     {
         _client = client;
-        _main = main;
+        _navigator = navigator;
         _projects = projects;
 
         var canSave = this.WhenAnyValue(
@@ -48,7 +49,7 @@ public partial class AddProjectViewModel : ReactiveObject
             var token = string.IsNullOrWhiteSpace(GitToken) ? null : GitToken;
             await _client.CreateProjectAsync(Name, GitUrl, Branch, polling, token);
             _projects.RefreshCommand.Execute(Unit.Default).Subscribe();
-            _main.NavigateTo(_projects);
+            await _navigator.GoBack();
         }
         finally
         {
@@ -56,5 +57,5 @@ public partial class AddProjectViewModel : ReactiveObject
         }
     }
 
-    private void Cancel() => _main.NavigateTo(_projects);
+    private void Cancel() => _navigator.GoBack();
 }

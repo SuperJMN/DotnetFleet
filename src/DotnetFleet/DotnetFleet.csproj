@@ -16,11 +16,15 @@
     <PackageReference Include="AvaloniaTerminal" />
     <PackageReference Include="ReactiveUI" />
     <PackageReference Include="ReactiveUI.Avalonia" />
-    <PackageReference Include="ReactiveUI.SourceGenerators" />
     <PackageReference Include="DynamicData" />
     <PackageReference Include="Zafiro.Avalonia" />
     <PackageReference Include="Zafiro.Avalonia.Generators" />
     <PackageReference Include="Zafiro.Avalonia.Dialogs" />
+    <PackageReference Include="Zafiro.Avalonia.Icons.Optris" />
+    <PackageReference Include="Zafiro.UI" />
+    <PackageReference Include="Optris.Icons.Avalonia.MaterialDesign" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="CSharpFunctionalExtensions" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>

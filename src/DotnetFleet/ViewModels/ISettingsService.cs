@@ -9,6 +9,7 @@ public interface ISettingsService
     void SetEndpoint(string? endpoint);
     string? GetToken();
     void SetToken(string? token);
+    void ClearToken();
 }
 
 public class InMemorySettingsService : ISettingsService
@@ -20,6 +21,7 @@ public class InMemorySettingsService : ISettingsService
     public void SetEndpoint(string? endpoint) => _endpoint = endpoint;
     public string? GetToken() => _token;
     public void SetToken(string? token) => _token = token;
+    public void ClearToken() => _token = null;
 }
 
 public class FileSettingsService : ISettingsService
@@ -36,6 +38,7 @@ public class FileSettingsService : ISettingsService
     public void SetEndpoint(string? value) { _data["endpoint"] = value; Save(); }
     public string? GetToken() => _data.GetValueOrDefault("token");
     public void SetToken(string? value) { _data["token"] = value; Save(); }
+    public void ClearToken() { _data.Remove("token"); Save(); }
 
     private void Load()
     {
