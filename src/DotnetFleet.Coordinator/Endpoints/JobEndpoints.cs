@@ -219,6 +219,11 @@ public static class JobEndpoints
         foreach (var entry in entries)
             broadcaster.Publish(id, entry);
 
+        // Detect the deployment version the first time GitVersion (or NBGV/MinVer) prints
+        // it in the log stream, so the deployment shows a friendly identifier instead of
+        // just its GUID.
+        await DeploymentVersionTracker.TryUpdateVersionAsync(storage, job, req.Lines);
+
         return Results.Ok();
     }
 
