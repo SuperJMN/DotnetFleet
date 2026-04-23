@@ -23,4 +23,24 @@ public class Worker
     /// from a version-aware worker arrives.
     /// </summary>
     public string? Version { get; set; }
+
+    // ── Hardware capabilities (reported by the worker at register/heartbeat) ──
+    // All values default to 0 / null so legacy workers that don't report them
+    // still round-trip safely. The capability-aware selector treats missing
+    // values as the least-preferred score.
+
+    /// <summary>Number of logical CPUs reported by <c>Environment.ProcessorCount</c>.</summary>
+    public int ProcessorCount { get; set; }
+
+    /// <summary>Total physical RAM in megabytes (best-effort, reported by the worker).</summary>
+    public long TotalMemoryMb { get; set; }
+
+    /// <summary>Operating system family (e.g. "Linux", "Windows", "OSX").</summary>
+    public string? OperatingSystem { get; set; }
+
+    /// <summary>Process architecture (e.g. "X64", "Arm64", "Arm").</summary>
+    public string? Architecture { get; set; }
+
+    /// <summary>Optional human-readable CPU model name.</summary>
+    public string? CpuModel { get; set; }
 }

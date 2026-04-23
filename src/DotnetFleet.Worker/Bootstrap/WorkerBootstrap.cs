@@ -63,6 +63,7 @@ public static class WorkerBootstrap
         http.DefaultRequestHeaders.Add("X-Registration-Token", options.RegistrationToken);
 
         var name = options.Name ?? Environment.MachineName;
+        var caps = WorkerCapabilityProbe.Detect();
         var body = new
         {
             name,
@@ -70,7 +71,12 @@ public static class WorkerBootstrap
             maxDiskUsageGb = options.MaxDiskUsageBytes.HasValue
                 ? options.MaxDiskUsageBytes.Value / (1024.0 * 1024 * 1024)
                 : (double?)null,
-            repoStoragePath = options.RepoStoragePath
+            repoStoragePath = options.RepoStoragePath,
+            processorCount = caps.ProcessorCount,
+            totalMemoryMb = caps.TotalMemoryMb,
+            operatingSystem = caps.OperatingSystem,
+            architecture = caps.Architecture,
+            cpuModel = caps.CpuModel
         };
 
         var resp = await http.PostAsJsonAsync("/api/workers/register", body, ct);

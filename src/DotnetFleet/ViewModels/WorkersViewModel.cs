@@ -71,6 +71,25 @@ public partial class WorkerItemViewModel : ReactiveObject
 
     public string EmbeddedLabel => Worker.IsEmbedded ? "(embedded)" : string.Empty;
 
+    public string CapabilityLabel
+    {
+        get
+        {
+            if (Worker.ProcessorCount <= 0 && Worker.TotalMemoryMb <= 0)
+                return string.Empty;
+
+            var cores = Worker.ProcessorCount > 0 ? $"{Worker.ProcessorCount} core(s)" : null;
+            var memory = Worker.TotalMemoryMb > 0
+                ? $"{Worker.TotalMemoryMb / 1024.0:F1} GB"
+                : null;
+            var arch = !string.IsNullOrWhiteSpace(Worker.Architecture)
+                ? Worker.Architecture
+                : null;
+
+            return string.Join(" · ", new[] { cores, memory, arch }.Where(s => s is not null));
+        }
+    }
+
     private async Task SaveConfigAsync()
     {
         IsSaving = true;

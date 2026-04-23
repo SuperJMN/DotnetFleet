@@ -39,7 +39,7 @@ public class StaleJobReaperTests : IDisposable
     [Fact]
     public async Task FailStuckAssignedJobsAsync_fails_assigned_jobs_past_timeout()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
         var projectId = Guid.NewGuid();
         var workerId = Guid.NewGuid();
 
@@ -87,7 +87,7 @@ public class StaleJobReaperTests : IDisposable
     [Fact]
     public async Task FailStuckAssignedJobsAsync_ignores_running_jobs()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
         var projectId = Guid.NewGuid();
 
         await storage.AddProjectAsync(new Project
@@ -114,7 +114,7 @@ public class StaleJobReaperTests : IDisposable
     [Fact]
     public async Task TouchWorkerAsync_updates_LastSeenAt_and_revives_offline_worker()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
         var workerId = Guid.NewGuid();
 
         await storage.AddWorkerAsync(new Worker
@@ -139,7 +139,7 @@ public class StaleJobReaperTests : IDisposable
     [Fact]
     public async Task TouchWorkerAsync_preserves_busy_status()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
         var workerId = Guid.NewGuid();
 
         await storage.AddWorkerAsync(new Worker
@@ -160,7 +160,7 @@ public class StaleJobReaperTests : IDisposable
     [Fact]
     public async Task TouchWorkerAsync_returns_false_for_unknown_worker()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
         var existed = await storage.TouchWorkerAsync(Guid.NewGuid());
         existed.Should().BeFalse();
     }

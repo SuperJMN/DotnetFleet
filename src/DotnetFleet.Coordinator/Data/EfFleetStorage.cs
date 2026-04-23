@@ -9,7 +9,7 @@ namespace DotnetFleet.Coordinator.Data;
 /// operation creates its own short-lived DbContext — safe for concurrent
 /// singletons (BackgroundServices) and scoped API handlers alike.
 /// </summary>
-public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory) : IFleetStorage
+public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSelector selector) : IFleetStorage
 {
     // Projects
     public async Task<IReadOnlyList<Project>> GetProjectsAsync(CancellationToken ct = default)
@@ -99,6 +99,29 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory) : IFleetS
             .FirstOrDefaultAsync(ct);
 
         if (job is null)
+        {
+            await tx.CommitAsync(ct);
+            return null;
+        }
+
+        // Capability-aware selection: only let the caller claim if it is the best
+        // currently-idle worker (Online == idle here; Busy workers are running a job
+        // and Offline workers are out of the pool). When a beefier worker is also
+        // idle, return null and let it claim on its own next poll.
+        // The caller is always treated as a candidate (even if its DB row is still
+        // Offline or absent) so a freshly-online or unregistered worker can still
+        // claim when it is the only contender — preserving backward compatibility
+        // with workers that don't yet report capabilities.
+        var idleOthers = await db.Workers
+            .Where(w => w.Status == WorkerStatus.Online && w.Id != workerId)
+            .ToListAsync(ct);
+
+        var callerRow = await db.Workers.FirstOrDefaultAsync(w => w.Id == workerId, ct);
+        var callerCandidate = callerRow ?? new Worker { Id = workerId };
+
+        var candidates = idleOthers.Append(callerCandidate);
+        var best = selector.SelectBest(candidates);
+        if (best is null || best.Id != workerId)
         {
             await tx.CommitAsync(ct);
             return null;

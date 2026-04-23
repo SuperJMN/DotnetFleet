@@ -18,5 +18,6 @@
     <ProjectReference Include="..\..\src\DotnetFleet.Coordinator\DotnetFleet.Coordinator.csproj" />
     <ProjectReference Include="..\..\src\DotnetFleet.Worker\DotnetFleet.Worker.csproj" />
     <ProjectReference Include="..\..\src\DotnetFleet.Tool\DotnetFleet.Tool.csproj" />
+    <ProjectReference Include="..\..\src\DotnetFleet\DotnetFleet.csproj" />
   </ItemGroup>
 </Project>
