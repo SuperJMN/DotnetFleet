@@ -591,3 +591,9 @@ NO_GUI=1 ./scripts/run-fleet.sh     # headless (no Desktop App)
 ```bash
 dotnet test
 ```
+
+---
+
+## Credits
+
+App icon: <a href="https://www.flaticon.com/free-icons/expand" title="expand icons">Expand icons created by deemakdaksina - Flaticon</a>

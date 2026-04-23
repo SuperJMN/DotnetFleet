@@ -6,7 +6,8 @@ namespace DotnetFleet.Android;
 
 [Activity(
     Label = "DotnetFleet",
-    Theme = "@style/MyTheme.NoActionBar",
+    Icon = "@mipmap/icon",
+    Theme = "@style/MyTheme.Splash",
     MainLauncher = true,
     ConfigurationChanges = ConfigChanges.Orientation
                          | ConfigChanges.ScreenSize

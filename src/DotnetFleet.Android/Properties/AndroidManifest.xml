@@ -3,6 +3,7 @@
   <application
     android:allowBackup="true"
     android:label="DotnetFleet"
+    android:icon="@mipmap/icon"
     android:supportsRtl="true"
     android:theme="@style/MyTheme.NoActionBar"
     android:enableOnBackInvokedCallback="true"
