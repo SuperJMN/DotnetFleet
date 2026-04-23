@@ -46,7 +46,12 @@ public static class WorkerEndpoints
             w.Id, w.Name, w.Status, w.IsEmbedded, w.LastSeenAt,
             maxDiskUsageGb = w.MaxDiskUsageBytes / (1024.0 * 1024 * 1024),
             w.RepoStoragePath,
-            w.Version
+            w.Version,
+            w.ProcessorCount,
+            w.TotalMemoryMb,
+            w.OperatingSystem,
+            w.Architecture,
+            w.CpuModel
         }));
     }
 
@@ -74,7 +79,12 @@ public static class WorkerEndpoints
             MaxDiskUsageBytes = req.MaxDiskUsageGb.HasValue
                 ? (long)(req.MaxDiskUsageGb.Value * 1024 * 1024 * 1024)
                 : 10L * 1024 * 1024 * 1024,
-            RepoStoragePath = req.RepoStoragePath
+            RepoStoragePath = req.RepoStoragePath,
+            ProcessorCount = req.ProcessorCount ?? 0,
+            TotalMemoryMb = req.TotalMemoryMb ?? 0,
+            OperatingSystem = req.OperatingSystem,
+            Architecture = req.Architecture,
+            CpuModel = req.CpuModel
         };
 
         await storage.AddWorkerAsync(worker);
@@ -113,6 +123,16 @@ public static class WorkerEndpoints
             worker.Status = WorkerStatus.Online;
         if (!string.IsNullOrWhiteSpace(req?.Version))
             worker.Version = req.Version;
+        if (req?.ProcessorCount is { } cpuCount && cpuCount > 0)
+            worker.ProcessorCount = cpuCount;
+        if (req?.TotalMemoryMb is { } memMb && memMb > 0)
+            worker.TotalMemoryMb = memMb;
+        if (!string.IsNullOrWhiteSpace(req?.OperatingSystem))
+            worker.OperatingSystem = req.OperatingSystem;
+        if (!string.IsNullOrWhiteSpace(req?.Architecture))
+            worker.Architecture = req.Architecture;
+        if (!string.IsNullOrWhiteSpace(req?.CpuModel))
+            worker.CpuModel = req.CpuModel;
         await storage.UpdateWorkerAsync(worker);
         return Results.Ok();
     }
@@ -219,9 +239,24 @@ public static class WorkerEndpoints
         return Guid.TryParse(raw, out workerId);
     }
 
-    public record RegisterWorkerRequest(string Name, bool IsEmbedded = false, double? MaxDiskUsageGb = null, string? RepoStoragePath = null);
+    public record RegisterWorkerRequest(
+        string Name,
+        bool IsEmbedded = false,
+        double? MaxDiskUsageGb = null,
+        string? RepoStoragePath = null,
+        int? ProcessorCount = null,
+        long? TotalMemoryMb = null,
+        string? OperatingSystem = null,
+        string? Architecture = null,
+        string? CpuModel = null);
     public record UpdateWorkerConfigRequest(double? MaxDiskUsageGb, string? RepoStoragePath);
     public record WorkerLoginRequest(Guid WorkerId, string Secret);
     public record UpdateWorkerStatusRequest(WorkerStatus Status);
-    public record HeartbeatRequest(string? Version);
+    public record HeartbeatRequest(
+        string? Version,
+        int? ProcessorCount = null,
+        long? TotalMemoryMb = null,
+        string? OperatingSystem = null,
+        string? Architecture = null,
+        string? CpuModel = null);
 }

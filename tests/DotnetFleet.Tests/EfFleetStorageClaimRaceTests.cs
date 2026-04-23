@@ -41,7 +41,7 @@ public class EfFleetStorageClaimRaceTests : IDisposable
     [Fact]
     public async Task Single_queued_job_is_claimed_by_exactly_one_worker_under_contention()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
         var projectId = Guid.NewGuid();
 
         await storage.AddProjectAsync(new Project
@@ -79,7 +79,7 @@ public class EfFleetStorageClaimRaceTests : IDisposable
     [Fact]
     public async Task ClaimNextJobAsync_returns_null_when_queue_is_empty()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
         var result = await storage.ClaimNextJobAsync(Guid.NewGuid());
         result.Should().BeNull();
     }

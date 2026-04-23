@@ -42,9 +42,26 @@ public class HttpWorkerCoordinatorClient : IWorkerCoordinatorClient
         {
             HttpResponseMessage resp;
             if (string.IsNullOrWhiteSpace(version))
+            {
                 resp = await http.PostAsync($"/api/workers/{workerId}/heartbeat", content: null, cts.Token);
+            }
             else
-                resp = await http.PostAsJsonAsync($"/api/workers/{workerId}/heartbeat", new { version }, cts.Token);
+            {
+                // Piggyback the host capabilities on every heartbeat. They rarely change, but
+                // sending them on each heartbeat means a coordinator that loses its DB still
+                // converges to the right scoring within one heartbeat interval.
+                var caps = DotnetFleet.WorkerService.Bootstrap.WorkerCapabilityProbe.Detect();
+                var payload = new
+                {
+                    version,
+                    processorCount = caps.ProcessorCount,
+                    totalMemoryMb = caps.TotalMemoryMb,
+                    operatingSystem = caps.OperatingSystem,
+                    architecture = caps.Architecture,
+                    cpuModel = caps.CpuModel
+                };
+                resp = await http.PostAsJsonAsync($"/api/workers/{workerId}/heartbeat", payload, cts.Token);
+            }
 
             if (!resp.IsSuccessStatusCode)
                 logger.LogWarning("Heartbeat returned {Status}", (int)resp.StatusCode);

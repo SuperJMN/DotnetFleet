@@ -250,7 +250,12 @@ public class FleetApiClient
         DateTimeOffset? LastSeenAt,
         double MaxDiskUsageGb,
         string? RepoStoragePath,
-        string? Version = null);
+        string? Version = null,
+        int ProcessorCount = 0,
+        long TotalMemoryMb = 0,
+        string? OperatingSystem = null,
+        string? Architecture = null,
+        string? CpuModel = null);
 
     // ── Secrets ───────────────────────────────────────────────────────────────
 

@@ -41,7 +41,7 @@ public class FailJobsForWorkerTests : IDisposable
     [Fact]
     public async Task Fails_running_and_assigned_jobs_for_worker_and_leaves_terminal_ones_alone()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
         var projectId = Guid.NewGuid();
         var workerId = Guid.NewGuid();
         var otherWorkerId = Guid.NewGuid();
@@ -93,7 +93,7 @@ public class FailJobsForWorkerTests : IDisposable
     [Fact]
     public async Task Returns_empty_when_worker_has_no_live_jobs()
     {
-        var storage = new EfFleetStorage(factory);
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
         var workerId = Guid.NewGuid();
 
         var failed = await storage.FailJobsForWorkerAsync(workerId, "anything");

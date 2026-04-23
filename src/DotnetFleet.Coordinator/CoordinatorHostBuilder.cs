@@ -45,6 +45,7 @@ public static class CoordinatorHostBuilder
                           ?? "Data Source=fleet.db"));
 
         builder.Services.AddSingleton<IFleetStorage, EfFleetStorage>();
+        builder.Services.AddSingleton<IWorkerSelector, CapabilityWorkerSelector>();
 
         // ── Auth ─────────────────────────────────────────────────────────────
         builder.Services.AddSingleton<JwtService>();
@@ -162,6 +163,15 @@ public static class CoordinatorHostBuilder
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Workers\" ADD COLUMN \"Version\" TEXT NULL");
         }
 
+        // Capability columns (issue #14): added so the coordinator can pick the
+        // best-suited worker for each job. Each ALTER is gated by a pragma_table_info
+        // probe so re-runs and pre-existing databases stay safe.
+        await EnsureWorkerColumnAsync(db, "ProcessorCount", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureWorkerColumnAsync(db, "TotalMemoryMb", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureWorkerColumnAsync(db, "OperatingSystem", "TEXT NULL");
+        await EnsureWorkerColumnAsync(db, "Architecture", "TEXT NULL");
+        await EnsureWorkerColumnAsync(db, "CpuModel", "TEXT NULL");
+
         // ── Startup reconciliation ─────────────────────────────────────────
         // Jobs that were Running or Assigned during the last shutdown can never
         // complete because the worker context is lost. Fail them so they don't
@@ -205,6 +215,18 @@ public static class CoordinatorHostBuilder
             };
             await storage.AddUserAsync(admin);
             Log.Information("Seeded default admin user (username: admin)");
+        }
+    }
+
+    private static async Task EnsureWorkerColumnAsync(FleetDbContext db, string columnName, string columnDefinition)
+    {
+        var exists = (await db.Database
+            .SqlQueryRaw<long>($"SELECT COUNT(*) AS \"Value\" FROM pragma_table_info('Workers') WHERE name='{columnName}'")
+            .ToListAsync()).FirstOrDefault() > 0;
+        if (!exists)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                $"ALTER TABLE \"Workers\" ADD COLUMN \"{columnName}\" {columnDefinition}");
         }
     }
 
