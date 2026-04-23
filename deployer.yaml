@@ -19,6 +19,22 @@ github:
           arch: [x64]
         - type: dmg
           arch: [x64, arm64]
+    - project: src/DotnetFleet.Android/DotnetFleet.Android.csproj
+      formats:
+        - type: Apk
+          arch: [arm64]
+          signing:
+            keystore:
+              from: env
+              name: ANDROID_KEYSTORE_BASE64
+              encoding: base64
+            storePassword:
+              from: env
+              name: ANDROID_SIGNING_STORE_PASS
+            keyAlias: android
+            keyPassword:
+              from: env
+              name: ANDROID_SIGNING_KEY_PASS
 
 nuget:
   enabled: true

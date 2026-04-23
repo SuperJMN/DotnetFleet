@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <SupportedOSPlatformVersion>23</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DotnetFleet.Android</RootNamespace>
+    <AssemblyName>DotnetFleet.Android</AssemblyName>
+    <ApplicationId>com.superjmn.dotnetfleet</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationTitle>DotnetFleet</ApplicationTitle>
+    <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <ApplicationId>com.superjmn.dotnetfleet.debug</ApplicationId>
+    <ApplicationTitle>DotnetFleet (Debug)</ApplicationTitle>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <PublishTrimmed>false</PublishTrimmed>
+    <TrimMode>none</TrimMode>
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <EnableAssemblyILStripping>false</EnableAssemblyILStripping>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Android" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DotnetFleet\DotnetFleet.csproj" />
+  </ItemGroup>
+</Project>

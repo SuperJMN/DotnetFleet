@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/DotnetFleet.Api.Client/DotnetFleet.Api.Client.csproj" />
     <Project Path="src/DotnetFleet.Browser/DotnetFleet.Browser.csproj" />
+    <Project Path="src/DotnetFleet.Android/DotnetFleet.Android.csproj" />
     <Project Path="src/DotnetFleet.Coordinator/DotnetFleet.Coordinator.csproj" />
     <Project Path="src/DotnetFleet.Core/DotnetFleet.Core.csproj" />
     <Project Path="src/DotnetFleet.Desktop/DotnetFleet.Desktop.csproj" />
