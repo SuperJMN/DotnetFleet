@@ -145,6 +145,12 @@ public class RemoteWorkerBackgroundService : BackgroundService
             await logBuffer.AppendAsync(line);
         }
 
+        // Tracks whether the coordinator has told us to abort. When set, we MUST NOT
+        // call ReportJobCompletedAsync (or any best-effort variant) afterwards: the
+        // coordinator has already moved on and any further write would either 404 or
+        // overwrite a terminal state.
+        var aborted = false;
+
         try
         {
             await SetWorkerBusy(true, ct);
@@ -165,61 +171,84 @@ public class RemoteWorkerBackgroundService : BackgroundService
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, cancelCts.Token);
             var jobCt = linkedCts.Token;
 
-            _ = PollForCancellationAsync(job.Id, cancelCts, ct);
+            // Monitor task is scoped to jobCt — it will end automatically when the job ends
+            // OR when the host shuts down. We also keep a reference and await it in `finally`
+            // so it can never outlive its job (this used to be fire-and-forget against the
+            // host token, which leaked one polling task per job and could pin the worker
+            // online-but-idle for hours).
+            var monitorTask = MonitorJobActionAsync(job.Id, cancelCts, () => aborted = true, jobCt);
 
-            await Log($"=== DotnetFleet Worker | Job {job.Id} ===");
-            await Log($"Project: {project.Name} | Branch: {project.Branch}");
-            await Log($"Git URL: {project.GitUrl}");
-
-            await GitHelper.CloneOrFetchAsync(project.GitUrl, project.Branch, localPath,
-                msg => logBuffer.AppendAsync(msg), jobCt, project.GitToken);
-            await logBuffer.FlushAsync();
-
-            var cacheSize = GitHelper.GetDirectorySize(localPath);
             try
             {
-                await coordinator.UpsertRepoCacheAsync(workerId, new RepoCache
+                await Log($"=== DotnetFleet Worker | Job {job.Id} ===");
+                await Log($"Project: {project.Name} | Branch: {project.Branch}");
+                await Log($"Git URL: {project.GitUrl}");
+
+                await GitHelper.CloneOrFetchAsync(project.GitUrl, project.Branch, localPath,
+                    msg => logBuffer.AppendAsync(msg), jobCt, project.GitToken);
+                await logBuffer.FlushAsync();
+
+                var cacheSize = GitHelper.GetDirectorySize(localPath);
+                try
                 {
-                    WorkerId = workerId,
-                    ProjectId = project.Id,
-                    LocalPath = localPath,
-                    SizeBytes = cacheSize,
-                    LastUsedAt = DateTimeOffset.UtcNow,
-                    LastKnownCommitSha = job.TriggerCommitSha
-                }, ct);
+                    await coordinator.UpsertRepoCacheAsync(workerId, new RepoCache
+                    {
+                        WorkerId = workerId,
+                        ProjectId = project.Id,
+                        LocalPath = localPath,
+                        SizeBytes = cacheSize,
+                        LastUsedAt = DateTimeOffset.UtcNow,
+                        LastKnownCommitSha = job.TriggerCommitSha
+                    }, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to upsert repo cache metadata.");
+                }
+
+                await Log("=== Invoking DotnetDeployer ===");
+
+                var globalSecrets = await coordinator.GetGlobalSecretsAsync(ct);
+                var projectSecrets = await coordinator.GetProjectSecretsAsync(project.Id, ct);
+
+                var envVars = globalSecrets
+                    .Concat(projectSecrets)
+                    .GroupBy(s => s.Name)
+                    .ToDictionary(g => g.Key, g => g.Last().Value);
+
+                var (success, error) = await DeployerRunner.RunAsync(
+                    localPath,
+                    onLine: line => logBuffer.AppendAsync(line),
+                    envVars: envVars,
+                    jobCt);
+
+                await logBuffer.FlushAsync();
+
+                if (aborted)
+                {
+                    logger.LogWarning("Job {JobId} aborted by coordinator instruction; not reporting completion.", job.Id);
+                }
+                else if (success)
+                {
+                    await Log("=== Deployment SUCCEEDED ===");
+                    await jobSource.ReportJobCompletedAsync(job.Id, true, null, ct);
+                }
+                else
+                {
+                    await Log($"=== Deployment FAILED: {error} ===");
+                    await jobSource.ReportJobCompletedAsync(job.Id, false, error, ct);
+                }
             }
-            catch (Exception ex)
+            finally
             {
-                logger.LogWarning(ex, "Failed to upsert repo cache metadata.");
-            }
-
-            await Log("=== Invoking DotnetDeployer ===");
-
-            var globalSecrets = await coordinator.GetGlobalSecretsAsync(ct);
-            var projectSecrets = await coordinator.GetProjectSecretsAsync(project.Id, ct);
-
-            var envVars = globalSecrets
-                .Concat(projectSecrets)
-                .GroupBy(s => s.Name)
-                .ToDictionary(g => g.Key, g => g.Last().Value);
-
-            var (success, error) = await DeployerRunner.RunAsync(
-                localPath,
-                onLine: line => logBuffer.AppendAsync(line),
-                envVars: envVars,
-                jobCt);
-
-            await logBuffer.FlushAsync();
-
-            if (success)
-            {
-                await Log("=== Deployment SUCCEEDED ===");
-                await jobSource.ReportJobCompletedAsync(job.Id, true, null, ct);
-            }
-            else
-            {
-                await Log($"=== Deployment FAILED: {error} ===");
-                await jobSource.ReportJobCompletedAsync(job.Id, false, error, ct);
+                // Stop the monitor and wait for it to actually exit before the parent
+                // method returns. This guarantees no stray polling tasks survive past
+                // the job's lifetime.
+                if (!cancelCts.IsCancellationRequested)
+                {
+                    try { await cancelCts.CancelAsync(); } catch { /* already disposed */ }
+                }
+                try { await monitorTask; } catch { /* monitor swallows everything anyway */ }
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -228,14 +257,22 @@ public class RemoteWorkerBackgroundService : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            // User-initiated cancellation
-            try
+            // Either user-initiated cancellation or coordinator-instructed Abort.
+            // Distinguish: on Abort we must remain silent.
+            if (aborted)
             {
-                await Log("=== Deployment CANCELLED by user ===");
-                await logBuffer.FlushAsync();
+                logger.LogWarning("Job {JobId} aborted by coordinator instruction; not reporting completion.", job.Id);
             }
-            catch { /* best effort */ }
-            await ReportJobFailedBestEffort(job.Id, "Cancelled by user", ct);
+            else
+            {
+                try
+                {
+                    await Log("=== Deployment CANCELLED by user ===");
+                    await logBuffer.FlushAsync();
+                }
+                catch { /* best effort */ }
+                await ReportJobFailedBestEffort(job.Id, "Cancelled by user", ct);
+            }
         }
         catch (Exception ex)
         {
@@ -245,7 +282,8 @@ public class RemoteWorkerBackgroundService : BackgroundService
                 await logBuffer.FlushAsync();
             }
             catch { /* best effort */ }
-            await ReportJobFailedBestEffort(job.Id, ex.Message, ct);
+            if (!aborted)
+                await ReportJobFailedBestEffort(job.Id, ex.Message, ct);
         }
         finally
         {
@@ -265,24 +303,39 @@ public class RemoteWorkerBackgroundService : BackgroundService
         }
     }
 
-    private async Task PollForCancellationAsync(Guid jobId, CancellationTokenSource cancelCts, CancellationToken hostCt)
+    private async Task MonitorJobActionAsync(
+        Guid jobId,
+        CancellationTokenSource cancelCts,
+        Action onAbort,
+        CancellationToken jobCt)
     {
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
-            while (await timer.WaitForNextTickAsync(hostCt))
+            while (await timer.WaitForNextTickAsync(jobCt))
             {
-                if (cancelCts.IsCancellationRequested) break;
-                if (await jobSource.IsJobCancelledAsync(jobId, hostCt))
+                var action = await jobSource.GetJobActionAsync(jobId, jobCt);
+                switch (action)
                 {
-                    logger.LogInformation("Cancellation requested for job {JobId}", jobId);
-                    await cancelCts.CancelAsync();
-                    break;
+                    case JobAction.Cancel:
+                        logger.LogInformation("Cancellation requested for job {JobId}", jobId);
+                        await cancelCts.CancelAsync();
+                        return;
+                    case JobAction.Abort:
+                        logger.LogWarning(
+                            "Coordinator instructed worker to abort job {JobId} (terminal/orphaned). Releasing slot.",
+                            jobId);
+                        onAbort();
+                        await cancelCts.CancelAsync();
+                        return;
+                    case JobAction.Continue:
+                    default:
+                        continue;
                 }
             }
         }
-        catch (OperationCanceledException) { /* host shutting down or job finished */ }
-        catch (Exception ex) { logger.LogWarning(ex, "Cancellation poll error for job {JobId}", jobId); }
+        catch (OperationCanceledException) { /* job finished or host shutting down */ }
+        catch (Exception ex) { logger.LogWarning(ex, "Job action monitor error for {JobId}", jobId); }
     }
 
     private async Task ManageDiskSpaceAsync(CancellationToken ct)

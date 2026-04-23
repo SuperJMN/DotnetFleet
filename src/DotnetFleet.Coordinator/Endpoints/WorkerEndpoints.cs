@@ -1,5 +1,6 @@
 using static BCrypt.Net.BCrypt;
 using DotnetFleet.Coordinator.Auth;
+using DotnetFleet.Coordinator.Services;
 using DotnetFleet.Core.Domain;
 using DotnetFleet.Core.Interfaces;
 using Microsoft.AspNetCore.Http;
@@ -134,7 +135,8 @@ public static class WorkerEndpoints
         Guid id,
         [FromBody] UpdateWorkerStatusRequest req,
         HttpContext httpContext,
-        IFleetStorage storage)
+        IFleetStorage storage,
+        LogBroadcaster broadcaster)
     {
         if (!TryGetClaimedWorkerId(httpContext, out var claimed) || claimed != id)
             return Results.Forbid();
@@ -145,6 +147,21 @@ public static class WorkerEndpoints
         worker.Status = req.Status;
         worker.LastSeenAt = DateTimeOffset.UtcNow;
         await storage.UpdateWorkerAsync(worker);
+
+        // Self-heal on (re)start: when a worker announces Online it is, by definition,
+        // not running anything. If the coordinator still has live jobs assigned to it,
+        // those are leftovers from a crash/restart and must be failed immediately —
+        // otherwise the worker would be unable to claim new work (its slot is "taken"
+        // by ghost jobs) and the StaleJobReaper cannot help because heartbeats keep
+        // flowing. This makes the coordinator authoritative on lifecycle.
+        if (req.Status == WorkerStatus.Online)
+        {
+            var failed = await storage.FailJobsForWorkerAsync(id,
+                "Worker restarted while running this job.");
+            foreach (var jobId in failed)
+                broadcaster.Complete(jobId);
+        }
+
         return Results.Ok();
     }
 

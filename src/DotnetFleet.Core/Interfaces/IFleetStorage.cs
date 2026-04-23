@@ -89,6 +89,15 @@ public interface IFleetStorage
     /// </summary>
     Task<IReadOnlyList<Guid>> FailStuckAssignedJobsAsync(TimeSpan assignedTimeout, CancellationToken ct = default);
 
+    /// <summary>
+    /// Fails every non-terminal job (<see cref="JobStatus.Assigned"/> or <see cref="JobStatus.Running"/>)
+    /// owned by <paramref name="workerId"/>. Used when the worker explicitly announces that it is no longer
+    /// running anything (e.g. it just (re)started and reported <see cref="WorkerStatus.Online"/>): if the
+    /// coordinator still has live jobs assigned to it, the worker crashed mid-job.
+    /// Returns the IDs of the jobs that were marked as failed.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> FailJobsForWorkerAsync(Guid workerId, string reason, CancellationToken ct = default);
+
     // Secrets
     /// <summary>Returns global secrets when <paramref name="projectId"/> is null, or project-scoped secrets otherwise.</summary>
     Task<IReadOnlyList<Secret>> GetSecretsAsync(Guid? projectId, CancellationToken ct = default);

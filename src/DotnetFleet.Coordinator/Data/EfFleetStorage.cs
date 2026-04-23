@@ -241,6 +241,30 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory) : IFleetS
         return timedOutJobs.Select(j => j.Id).ToList();
     }
 
+    public async Task<IReadOnlyList<Guid>> FailJobsForWorkerAsync(Guid workerId, string reason, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+
+        var liveJobs = await db.DeploymentJobs
+            .Where(j => j.WorkerId == workerId
+                        && (j.Status == JobStatus.Running || j.Status == JobStatus.Assigned))
+            .ToListAsync(ct);
+
+        if (liveJobs.Count == 0)
+            return Array.Empty<Guid>();
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var job in liveJobs)
+        {
+            job.Status = JobStatus.Failed;
+            job.FinishedAt = now;
+            job.ErrorMessage = reason;
+        }
+
+        await db.SaveChangesAsync(ct);
+        return liveJobs.Select(j => j.Id).ToList();
+    }
+
     public async Task<IReadOnlyList<Guid>> FailStuckAssignedJobsAsync(TimeSpan assignedTimeout, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);

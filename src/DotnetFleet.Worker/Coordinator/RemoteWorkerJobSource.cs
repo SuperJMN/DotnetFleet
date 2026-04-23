@@ -54,21 +54,42 @@ public class RemoteWorkerJobSource : IWorkerJobSource
         resp.EnsureSuccessStatusCode();
     }
 
-    public async Task<bool> IsJobCancelledAsync(Guid jobId, CancellationToken ct = default)
+    public async Task<JobAction> GetJobActionAsync(Guid jobId, CancellationToken ct = default)
     {
         try
         {
             var resp = await http.GetAsync($"/api/queue/jobs/{jobId}/should-cancel", ct);
-            if (!resp.IsSuccessStatusCode) return false;
+
+            // 404 from an older coordinator (or a deleted job) means the coordinator no
+            // longer knows about this job — the worker must release it.
+            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return JobAction.Abort;
+
+            // Any other non-success keeps the previous "best effort" behaviour: assume
+            // the job is still ours and keep working — the next poll will settle it.
+            if (!resp.IsSuccessStatusCode)
+                return JobAction.Continue;
+
             var result = await resp.Content.ReadFromJsonAsync<ShouldCancelResponse>(ct);
-            return result?.ShouldCancel ?? false;
+            if (result is null) return JobAction.Continue;
+
+            // Prefer the new explicit field; fall back to the legacy boolean for
+            // backward compatibility with older coordinators that only return
+            // { shouldCancel: bool }.
+            if (!string.IsNullOrEmpty(result.Action)
+                && Enum.TryParse<JobAction>(result.Action, ignoreCase: true, out var parsed))
+            {
+                return parsed;
+            }
+
+            return result.ShouldCancel ? JobAction.Cancel : JobAction.Continue;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Failed to check cancellation for job {JobId}", jobId);
-            return false;
+            logger.LogWarning(ex, "Failed to check job action for {JobId}", jobId);
+            return JobAction.Continue;
         }
     }
 
-    private record ShouldCancelResponse(bool ShouldCancel);
+    private record ShouldCancelResponse(bool ShouldCancel, string? Action = null);
 }

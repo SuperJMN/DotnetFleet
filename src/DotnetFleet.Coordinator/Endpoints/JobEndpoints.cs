@@ -274,11 +274,44 @@ public static class JobEndpoints
         return Results.Ok(job);
     }
 
-    private static async Task<IResult> ShouldCancel(Guid id, IFleetStorage storage)
+    private static async Task<IResult> ShouldCancel(Guid id, HttpContext ctx, IFleetStorage storage)
     {
+        if (!TryGetWorkerId(ctx, out var callerWorkerId))
+            return Results.Forbid();
+
         var job = await storage.GetJobAsync(id);
-        if (job is null) return Results.NotFound();
-        return Results.Ok(new { shouldCancel = job.CancellationRequestedAt is not null });
+
+        // Job no longer exists or has reached a terminal state — the worker must
+        // abort whatever in-memory state it still holds for it. The coordinator has
+        // already moved on; reporting completion would either 404 or rewrite a
+        // terminal state.
+        if (job is null
+            || job.Status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled)
+        {
+            return Results.Ok(new
+            {
+                shouldCancel = false,
+                action = nameof(JobAction.Abort)
+            });
+        }
+
+        // Ownership lost (e.g. reaper failed the job and it was re-queued and claimed
+        // by another worker). The current worker must release it.
+        if (job.WorkerId is not null && job.WorkerId != callerWorkerId)
+        {
+            return Results.Ok(new
+            {
+                shouldCancel = false,
+                action = nameof(JobAction.Abort)
+            });
+        }
+
+        var cancelRequested = job.CancellationRequestedAt is not null;
+        return Results.Ok(new
+        {
+            shouldCancel = cancelRequested,
+            action = (cancelRequested ? JobAction.Cancel : JobAction.Continue).ToString()
+        });
     }
 
     private static bool TryGetWorkerId(HttpContext ctx, out Guid workerId)

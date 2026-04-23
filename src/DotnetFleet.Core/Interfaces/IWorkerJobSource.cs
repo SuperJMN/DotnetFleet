@@ -13,6 +13,10 @@ public interface IWorkerJobSource
     Task SendLogChunkAsync(Guid jobId, IEnumerable<string> lines, CancellationToken ct = default);
     Task ReportJobCompletedAsync(Guid jobId, bool success, string? errorMessage, CancellationToken ct = default);
 
-    /// <summary>Returns true if cancellation has been requested for this job.</summary>
-    Task<bool> IsJobCancelledAsync(Guid jobId, CancellationToken ct = default);
+    /// <summary>
+    /// Asks the coordinator what the worker should do next for this job: keep going,
+    /// stop because of a user-requested cancellation, or abort because the coordinator
+    /// no longer considers the worker the owner (terminal state, lost ownership, …).
+    /// </summary>
+    Task<JobAction> GetJobActionAsync(Guid jobId, CancellationToken ct = default);
 }
