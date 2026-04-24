@@ -1,8 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:DotnetFleet.Shell"
-             xmlns:za="clr-namespace:Zafiro.Avalonia.Controls;assembly=Zafiro.Avalonia"
-             xmlns:nav="clr-namespace:Zafiro.Avalonia.Controls.Navigation;assembly=Zafiro.Avalonia"
+             xmlns:shell="clr-namespace:Zafiro.Avalonia.Controls.Shell;assembly=Zafiro.Avalonia"
              xmlns:conv="clr-namespace:DotnetFleet.Converters"
              x:Class="DotnetFleet.Shell.AppShellView"
              x:DataType="vm:AppShellViewModel">
@@ -65,18 +64,7 @@
             </Grid>
         </Border>
 
-        <Grid ColumnDefinitions="Auto,*">
-            <za:SectionStrip Grid.Column="0"
-                             Sections="{Binding Sections}"
-                             SelectedSection="{Binding SelectedSection, Mode=TwoWay}" />
-            <nav:Frame Grid.Column="1"
-                       Content="{Binding CurrentContent}"
-                       BackCommand="{Binding BackCommand}">
-                <Interaction.Behaviors>
-                    <nav:AutoHeaderFooterBehavior />
-                </Interaction.Behaviors>
-            </nav:Frame>
-        </Grid>
+        <shell:ShellView DataContext="{Binding Shell}" />
 
     </DockPanel>
 
