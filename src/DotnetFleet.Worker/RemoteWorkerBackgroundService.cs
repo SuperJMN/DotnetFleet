@@ -107,8 +107,14 @@ public class RemoteWorkerBackgroundService : BackgroundService
             {
                 await coordinator.SendHeartbeatAsync(workerId, WorkerVersion, ct);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Includes TaskCanceledException from per-call HttpClient timeouts —
+                // swallow and keep looping so the worker stays alive.
                 logger.LogWarning(ex, "Heartbeat failed");
             }
         }
@@ -124,8 +130,16 @@ public class RemoteWorkerBackgroundService : BackgroundService
                 if (job is null) continue;
                 await ExecuteJobAsync(job, ct);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Includes TaskCanceledException from HttpClient.Timeout. The previous
+                // `when (ex is not OperationCanceledException)` filter let those escape
+                // and silently killed the poll loop while heartbeats kept the worker
+                // marked Online — leaving queued jobs without a claimer until restart.
                 logger.LogError(ex, "Error in poll loop");
             }
         }
