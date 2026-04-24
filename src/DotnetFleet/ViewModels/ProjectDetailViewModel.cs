@@ -31,6 +31,7 @@ public partial class ProjectDetailViewModel : ReactiveObject
 
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadJobsAsync);
         DeployCommand = ReactiveCommand.CreateFromTask(DeployAsync);
+        ClearFinishedJobsCommand = ReactiveCommand.CreateFromTask(ClearFinishedJobsAsync);
         BackCommand = ReactiveCommand.CreateFromTask(async () => { await _navigator.GoBack(); });
         EditCommand = ReactiveCommand.Create(() =>
         {
@@ -39,11 +40,13 @@ public partial class ProjectDetailViewModel : ReactiveObject
 
         RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         DeployCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
+        ClearFinishedJobsCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         RefreshCommand.Execute(Unit.Default).Subscribe();
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> DeployCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearFinishedJobsCommand { get; }
     public ReactiveCommand<Unit, Unit> BackCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
 
@@ -68,6 +71,12 @@ public partial class ProjectDetailViewModel : ReactiveObject
         var job = await _client.EnqueueDeployAsync(Project.Id);
         Jobs.Insert(0, new JobViewModel(job, _client, _navigator, this));
         await _navigator.Go(() => new JobDetailViewModel(job, _client, _navigator, this));
+    }
+
+    private async Task ClearFinishedJobsAsync()
+    {
+        await _client.DeleteFinishedProjectJobsAsync(Project.Id);
+        await LoadJobsAsync();
     }
 }
 

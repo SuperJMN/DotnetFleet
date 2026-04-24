@@ -73,6 +73,7 @@ public class AppendLogsTrackerFailureTests : IDisposable
         public Task<IReadOnlyList<DeploymentJob>> GetJobsAsync(CancellationToken ct = default) => inner.GetJobsAsync(ct);
         public Task<IReadOnlyList<DeploymentJob>> GetJobsByProjectAsync(Guid projectId, CancellationToken ct = default) => inner.GetJobsByProjectAsync(projectId, ct);
         public Task UpdateJobAsync(DeploymentJob job, CancellationToken ct = default) => inner.UpdateJobAsync(job, ct);
+        public Task<int> DeleteFinishedJobsAsync(Guid? projectId, CancellationToken ct = default) => inner.DeleteFinishedJobsAsync(projectId, ct);
         public Task<DeploymentJob?> ClaimNextJobAsync(Guid workerId, CancellationToken ct = default) => inner.ClaimNextJobAsync(workerId, ct);
         public Task<IReadOnlyList<Worker>> GetWorkersAsync(CancellationToken ct = default) => inner.GetWorkersAsync(ct);
         public Task<Worker?> GetWorkerAsync(Guid id, CancellationToken ct = default) => inner.GetWorkerAsync(id, ct);
@@ -100,6 +101,17 @@ public class AppendLogsTrackerFailureTests : IDisposable
         public Task AddSecretAsync(Secret secret, CancellationToken ct = default) => inner.AddSecretAsync(secret, ct);
         public Task UpdateSecretAsync(Secret secret, CancellationToken ct = default) => inner.UpdateSecretAsync(secret, ct);
         public Task DeleteSecretAsync(Guid id, CancellationToken ct = default) => inner.DeleteSecretAsync(id, ct);
+
+        // Push-scheduler additions.
+        public Task<IReadOnlyList<DeploymentJob>> GetUnassignedQueuedJobsAsync(CancellationToken ct = default) => inner.GetUnassignedQueuedJobsAsync(ct);
+        public Task<IReadOnlyList<DeploymentJob>> GetActiveJobsForWorkerAsync(Guid workerId, CancellationToken ct = default) => inner.GetActiveJobsForWorkerAsync(workerId, ct);
+        public Task<bool> AssignJobToWorkerAsync(Guid jobId, Guid workerId, long? estimatedDurationMs, CancellationToken ct = default) => inner.AssignJobToWorkerAsync(jobId, workerId, estimatedDurationMs, ct);
+        public Task<DeploymentJob?> GetNextAssignedJobForWorkerAsync(Guid workerId, CancellationToken ct = default) => inner.GetNextAssignedJobForWorkerAsync(workerId, ct);
+        public Task<bool> TryStealAssignedJobAsync(Guid jobId, Guid newWorkerId, Guid expectedCurrentWorkerId, long? estimatedDurationMs, CancellationToken ct = default) => inner.TryStealAssignedJobAsync(jobId, newWorkerId, expectedCurrentWorkerId, estimatedDurationMs, ct);
+        public Task<IReadOnlyList<Guid>> UnassignJobsOfOfflineWorkersAsync(TimeSpan staleThreshold, CancellationToken ct = default) => inner.UnassignJobsOfOfflineWorkersAsync(staleThreshold, ct);
+        public Task<JobDurationStat?> GetJobDurationStatAsync(Guid projectId, Guid workerId, CancellationToken ct = default) => inner.GetJobDurationStatAsync(projectId, workerId, ct);
+        public Task<IReadOnlyList<JobDurationStat>> GetJobDurationStatsForProjectAsync(Guid projectId, CancellationToken ct = default) => inner.GetJobDurationStatsForProjectAsync(projectId, ct);
+        public Task UpsertJobDurationStatAsync(Guid projectId, Guid workerId, double newEwmaMs, int samples, CancellationToken ct = default) => inner.UpsertJobDurationStatAsync(projectId, workerId, newEwmaMs, samples, ct);
     }
 
     private sealed class CapturingLoggerProvider : ILoggerProvider

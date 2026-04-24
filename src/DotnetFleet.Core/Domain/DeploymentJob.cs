@@ -12,9 +12,18 @@ public class DeploymentJob
 
     public bool IsAutoTriggered { get; set; } = false;
     public DateTimeOffset EnqueuedAt { get; set; } = DateTimeOffset.UtcNow;
+    /// <summary>When the coordinator placed this job in a worker's queue (Status=Assigned).</summary>
+    public DateTimeOffset? AssignedAt { get; set; }
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Coordinator's prediction of how long this job will take on the assigned worker, in
+    /// milliseconds. Set when the job is pushed to a worker's queue. Informational — the
+    /// scheduler uses it to estimate downstream queue depth.
+    /// </summary>
+    public long? EstimatedDurationMs { get; set; }
 
     /// <summary>Set when a user requests cancellation. Workers poll this to abort in-flight jobs.</summary>
     public DateTimeOffset? CancellationRequestedAt { get; set; }

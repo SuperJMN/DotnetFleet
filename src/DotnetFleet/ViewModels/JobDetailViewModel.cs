@@ -30,9 +30,12 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     [Reactive] private string _statusText = string.Empty;
     [Reactive] private bool _isStreaming;
     [Reactive] private bool _canCancel;
+    [Reactive] private string? _errorMessage;
     [Reactive] private LogSeverity _minSeverity = LogSeverity.None;
     [Reactive] private string _searchText = string.Empty;
     [Reactive] private string _searchResultText = string.Empty;
+
+    public bool HasError => !string.IsNullOrWhiteSpace(_errorMessage);
 
     public ReadOnlyObservableCollection<LogLine> FilteredLogs { get; }
 
@@ -55,6 +58,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         _navigator = navigator;
         _parentProject = parentProject;
         _statusText = FormatStatus(job.Status);
+        _errorMessage = job.ErrorMessage;
 
         BackCommand = ReactiveCommand.Create(GoBack);
         CopyLogsCommand = ReactiveCommand.CreateFromTask(CopyLogsToClipboard);
@@ -206,7 +210,12 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 
         var updated = await _client.GetJobAsync(Job.Id);
         if (updated is not null)
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => StatusText = FormatStatus(updated.Status));
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                StatusText = FormatStatus(updated.Status);
+                ErrorMessage = updated.ErrorMessage;
+                this.RaisePropertyChanged(nameof(HasError));
+            });
     }
 
     private static string FormatStatus(JobStatus status) => status switch

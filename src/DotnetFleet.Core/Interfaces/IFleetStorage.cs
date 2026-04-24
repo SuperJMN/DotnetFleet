@@ -19,6 +19,14 @@ public interface IFleetStorage
     Task UpdateJobAsync(DeploymentJob job, CancellationToken ct = default);
 
     /// <summary>
+    /// Deletes every job in a terminal state (<see cref="JobStatus.Succeeded"/>,
+    /// <see cref="JobStatus.Failed"/> or <see cref="JobStatus.Cancelled"/>) along with
+    /// their log entries. When <paramref name="projectId"/> is null, applies globally;
+    /// otherwise only jobs for that project are removed. Returns the number of jobs deleted.
+    /// </summary>
+    Task<int> DeleteFinishedJobsAsync(Guid? projectId, CancellationToken ct = default);
+
+    /// <summary>
     /// Atomically sets <see cref="DeploymentJob.Version"/> for the given job
     /// only if it is currently NULL. Returns true if the row was updated, false
     /// if the job did not exist or already had a version. Single SQL UPDATE
@@ -28,11 +36,70 @@ public interface IFleetStorage
     Task<bool> SetJobVersionIfUnsetAsync(Guid jobId, string version, CancellationToken ct = default);
 
     /// <summary>
-    /// Atomically claims the oldest Queued job for the given worker.
-    /// Transitions the job to <see cref="JobStatus.Assigned"/> and sets <c>WorkerId</c> in a single
-    /// serialized transaction so concurrent workers cannot pick the same job.
-    /// Returns the claimed job, or null if none was available.
+    /// Returns jobs in <see cref="JobStatus.Queued"/> with no assigned worker, oldest first.
+    /// Used by the JobAssignmentService to pick the next jobs to push into worker queues.
     /// </summary>
+    Task<IReadOnlyList<DeploymentJob>> GetUnassignedQueuedJobsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns jobs in flight for a worker (Assigned + Running). Used to estimate the
+    /// worker's pending workload when scheduling a new job.
+    /// </summary>
+    Task<IReadOnlyList<DeploymentJob>> GetActiveJobsForWorkerAsync(Guid workerId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically transitions a Queued, unassigned job to Assigned and pushes it to
+    /// <paramref name="workerId"/>'s queue. Returns true if the assignment took effect.
+    /// Returns false if the job was already claimed or no longer queued.
+    /// </summary>
+    Task<bool> AssignJobToWorkerAsync(Guid jobId, Guid workerId, long? estimatedDurationMs, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the next <see cref="JobStatus.Assigned"/> job for <paramref name="workerId"/>,
+    /// oldest assignment first. Does not transition state — the worker calls
+    /// <c>ReportStarted</c> later to flip to Running.
+    /// </summary>
+    Task<DeploymentJob?> GetNextAssignedJobForWorkerAsync(Guid workerId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically reassigns an Assigned (not yet Running) job from its current worker to
+    /// <paramref name="newWorkerId"/>. Returns true if the steal succeeded. Used for
+    /// work-stealing: an idle worker pulls a job from a busy worker's queue when it can
+    /// finish it sooner.
+    /// </summary>
+    Task<bool> TryStealAssignedJobAsync(Guid jobId, Guid newWorkerId, Guid expectedCurrentWorkerId, long? estimatedDurationMs, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns Assigned jobs whose worker has been offline for more than
+    /// <paramref name="staleThreshold"/> back to <see cref="JobStatus.Queued"/> (clears
+    /// WorkerId and AssignedAt). Returns the IDs so the caller can notify the assigner.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> UnassignJobsOfOfflineWorkersAsync(TimeSpan staleThreshold, CancellationToken ct = default);
+
+    /// <summary>
+    /// Reads the EWMA duration estimate for the (project, worker) pair, or null if no
+    /// samples have been recorded yet.
+    /// </summary>
+    Task<JobDurationStat?> GetJobDurationStatAsync(Guid projectId, Guid workerId, CancellationToken ct = default);
+
+    /// <summary>
+    /// All EWMA stats for a project across workers. Used as a fallback when the (project,
+    /// worker) pair has no samples but other workers have run the project.
+    /// </summary>
+    Task<IReadOnlyList<JobDurationStat>> GetJobDurationStatsForProjectAsync(Guid projectId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates the EWMA for the given (project, worker) with a new observed duration.
+    /// </summary>
+    Task UpsertJobDurationStatAsync(Guid projectId, Guid workerId, double newEwmaMs, int samples, CancellationToken ct = default);
+
+    /// <summary>
+    /// [Obsolete] Pull-based claim used by older worker builds. Prefer
+    /// <see cref="GetNextAssignedJobForWorkerAsync"/> in conjunction with the push-based
+    /// <c>JobAssignmentService</c>. Kept temporarily so any in-flight worker can still
+    /// drain itself during a rolling upgrade.
+    /// </summary>
+    [Obsolete("Replaced by the push-based scheduler. Use GetNextAssignedJobForWorkerAsync.")]
     Task<DeploymentJob?> ClaimNextJobAsync(Guid workerId, CancellationToken ct = default);
 
     // Logs

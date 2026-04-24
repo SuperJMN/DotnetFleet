@@ -30,6 +30,24 @@
             </StackPanel>
         </Grid>
 
+        <!-- Error banner: shown when the job has an ErrorMessage (Failed/Cancelled). -->
+        <Border DockPanel.Dock="Top"
+                IsVisible="{Binding HasError}"
+                Background="#3A1F1F"
+                BorderBrush="#8B2C2C"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="12"
+                Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="❌" FontSize="18" VerticalAlignment="Top" />
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Job error" FontWeight="SemiBold" Foreground="#FF6B6B" />
+                    <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- Toolbar: search + severity filter -->
         <Border DockPanel.Dock="Top"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"

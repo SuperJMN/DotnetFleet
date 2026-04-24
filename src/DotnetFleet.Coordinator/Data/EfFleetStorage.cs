@@ -85,6 +85,26 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<int> DeleteFinishedJobsAsync(Guid? projectId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+
+        var terminal = new[] { JobStatus.Succeeded, JobStatus.Failed, JobStatus.Cancelled };
+
+        // Resolve target job IDs first so log deletion uses the same set as the job
+        // deletion. There is no FK cascade configured between LogEntry and DeploymentJob.
+        var jobIdsQuery = db.DeploymentJobs.Where(j => terminal.Contains(j.Status));
+        if (projectId is { } pid)
+            jobIdsQuery = jobIdsQuery.Where(j => j.ProjectId == pid);
+
+        var jobIds = await jobIdsQuery.Select(j => j.Id).ToListAsync(ct);
+        if (jobIds.Count == 0) return 0;
+
+        await db.LogEntries.Where(l => jobIds.Contains(l.JobId)).ExecuteDeleteAsync(ct);
+        var deleted = await db.DeploymentJobs.Where(j => jobIds.Contains(j.Id)).ExecuteDeleteAsync(ct);
+        return deleted;
+    }
+
     public async Task<bool> SetJobVersionIfUnsetAsync(Guid jobId, string version, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
@@ -99,52 +119,151 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         return rows > 0;
     }
 
-    public async Task<DeploymentJob?> ClaimNextJobAsync(Guid workerId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<DeploymentJob>> GetUnassignedQueuedJobsAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        // Serializable on Microsoft.Data.Sqlite maps to BEGIN IMMEDIATE, which acquires the
-        // write lock up-front. This serializes concurrent claims so the SELECT+UPDATE pair
-        // behaves atomically across workers.
-        await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
-
-        var job = await db.DeploymentJobs
-            .Where(j => j.Status == JobStatus.Queued)
+        return await db.DeploymentJobs
+            .Where(j => j.Status == JobStatus.Queued && j.WorkerId == null)
             .OrderBy(j => j.EnqueuedAt)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<DeploymentJob>> GetActiveJobsForWorkerAsync(Guid workerId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.DeploymentJobs
+            .Where(j => j.WorkerId == workerId
+                        && (j.Status == JobStatus.Assigned || j.Status == JobStatus.Running))
+            .OrderBy(j => j.AssignedAt ?? j.EnqueuedAt)
+            .ToListAsync(ct);
+    }
+
+    public async Task<bool> AssignJobToWorkerAsync(Guid jobId, Guid workerId, long? estimatedDurationMs, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+
+        // Atomic guard: only flip Queued+unassigned → Assigned. Concurrent assigners
+        // (or a leftover ClaimNextJobAsync caller) cannot overwrite each other because
+        // the WHERE clause matches at most one row per call.
+        var rows = await db.DeploymentJobs
+            .Where(j => j.Id == jobId && j.Status == JobStatus.Queued && j.WorkerId == null)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(j => j.Status, JobStatus.Assigned)
+                .SetProperty(j => j.WorkerId, workerId)
+                .SetProperty(j => j.AssignedAt, now)
+                .SetProperty(j => j.EstimatedDurationMs, estimatedDurationMs), ct);
+
+        return rows > 0;
+    }
+
+    public async Task<DeploymentJob?> GetNextAssignedJobForWorkerAsync(Guid workerId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.DeploymentJobs
+            .Where(j => j.Status == JobStatus.Assigned && j.WorkerId == workerId)
+            .OrderBy(j => j.AssignedAt ?? j.EnqueuedAt)
             .FirstOrDefaultAsync(ct);
+    }
 
-        if (job is null)
-        {
-            await tx.CommitAsync(ct);
-            return null;
-        }
+    public async Task<bool> TryStealAssignedJobAsync(Guid jobId, Guid newWorkerId, Guid expectedCurrentWorkerId, long? estimatedDurationMs, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var now = DateTimeOffset.UtcNow;
 
-        // Capability-aware selection: only let the caller claim if it is the best
-        // currently-idle worker (Online == idle here; Busy workers are running a job
-        // and Offline workers are out of the pool). When a beefier worker is also
-        // idle, return null and let it claim on its own next poll.
-        // The caller is always treated as a candidate (even if its DB row is still
-        // Offline or absent) so a freshly-online or unregistered worker can still
-        // claim when it is the only contender — preserving backward compatibility
-        // with workers that don't yet report capabilities.
-        var idleOthers = await db.Workers
-            .Where(w => w.Status == WorkerStatus.Online && w.Id != workerId)
+        // The Status==Assigned guard ensures we only steal queued (not in-flight) work,
+        // and the WorkerId==expectedCurrentWorkerId guard prevents stealing from a worker
+        // that already lost the job to someone else (or to the assigner reassigning it).
+        var rows = await db.DeploymentJobs
+            .Where(j => j.Id == jobId
+                        && j.Status == JobStatus.Assigned
+                        && j.WorkerId == expectedCurrentWorkerId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(j => j.WorkerId, newWorkerId)
+                .SetProperty(j => j.AssignedAt, now)
+                .SetProperty(j => j.EstimatedDurationMs, estimatedDurationMs), ct);
+
+        return rows > 0;
+    }
+
+    public async Task<IReadOnlyList<Guid>> UnassignJobsOfOfflineWorkersAsync(TimeSpan staleThreshold, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var cutoff = DateTimeOffset.UtcNow - staleThreshold;
+
+        // Targets: Assigned (queued on a worker) jobs whose worker is Offline AND has not
+        // been seen for longer than the stale threshold. We do NOT touch Running jobs here
+        // — those are owned by FailStaleJobsAsync (the worker actually died mid-run).
+        var orphaned = await db.DeploymentJobs
+            .Where(j => j.Status == JobStatus.Assigned && j.WorkerId != null)
+            .Join(
+                db.Workers.Where(w => w.Status == WorkerStatus.Offline
+                                      && w.LastSeenAt != null
+                                      && w.LastSeenAt < cutoff),
+                j => j.WorkerId, w => w.Id, (j, _) => j)
             .ToListAsync(ct);
 
-        var callerRow = await db.Workers.FirstOrDefaultAsync(w => w.Id == workerId, ct);
-        var callerCandidate = callerRow ?? new Worker { Id = workerId };
+        if (orphaned.Count == 0)
+            return Array.Empty<Guid>();
 
-        var candidates = idleOthers.Append(callerCandidate);
-        var best = selector.SelectBest(candidates);
-        if (best is null || best.Id != workerId)
+        foreach (var job in orphaned)
         {
-            await tx.CommitAsync(ct);
-            return null;
+            job.Status = JobStatus.Queued;
+            job.WorkerId = null;
+            job.AssignedAt = null;
+            job.EstimatedDurationMs = null;
         }
 
-        job.Status = JobStatus.Assigned;
-        job.WorkerId = workerId;
         await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+        return orphaned.Select(j => j.Id).ToList();
+    }
+
+    public async Task<JobDurationStat?> GetJobDurationStatAsync(Guid projectId, Guid workerId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.JobDurationStats.FindAsync([projectId, workerId], ct);
+    }
+
+    public async Task<IReadOnlyList<JobDurationStat>> GetJobDurationStatsForProjectAsync(Guid projectId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.JobDurationStats.Where(s => s.ProjectId == projectId).ToListAsync(ct);
+    }
+
+    public async Task UpsertJobDurationStatAsync(Guid projectId, Guid workerId, double newEwmaMs, int samples, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var existing = await db.JobDurationStats.FindAsync([projectId, workerId], ct);
+        var now = DateTimeOffset.UtcNow;
+        if (existing is null)
+        {
+            db.JobDurationStats.Add(new JobDurationStat
+            {
+                ProjectId = projectId,
+                WorkerId = workerId,
+                EwmaMs = newEwmaMs,
+                Samples = samples,
+                LastUpdated = now,
+            });
+        }
+        else
+        {
+            existing.EwmaMs = newEwmaMs;
+            existing.Samples = samples;
+            existing.LastUpdated = now;
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    [Obsolete("Replaced by JobAssignmentService + GetNextAssignedJobForWorkerAsync.")]
+    public async Task<DeploymentJob?> ClaimNextJobAsync(Guid workerId, CancellationToken ct = default)
+    {
+        // Backwards-compat shim for in-flight workers that still poll the legacy endpoint:
+        // hand them whatever the new push scheduler has already assigned to them. Returns
+        // null if nothing is queued for this worker — old workers will simply re-poll.
+        var job = await GetNextAssignedJobForWorkerAsync(workerId, ct);
+        if (job is not null)
+            _ = selector; // selector kept as a dependency for backwards-compat tests.
         return job;
     }
 

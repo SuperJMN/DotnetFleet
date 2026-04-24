@@ -15,12 +15,14 @@ public class PollingBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ILogger<PollingBackgroundService> logger;
+    private readonly JobAssignmentSignal signal;
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(60);
 
-    public PollingBackgroundService(IServiceScopeFactory scopeFactory, ILogger<PollingBackgroundService> logger)
+    public PollingBackgroundService(IServiceScopeFactory scopeFactory, ILogger<PollingBackgroundService> logger, JobAssignmentSignal signal)
     {
         this.scopeFactory = scopeFactory;
         this.logger = logger;
+        this.signal = signal;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -102,6 +104,8 @@ public class PollingBackgroundService : BackgroundService
 
         await storage.AddJobAsync(job, ct);
         await storage.UpdateProjectAsync(project, ct);
+
+        signal.Notify();
     }
 
     private async Task<string?> GetLatestCommitShaAsync(string gitUrl, string branch, string? gitToken, CancellationToken ct)

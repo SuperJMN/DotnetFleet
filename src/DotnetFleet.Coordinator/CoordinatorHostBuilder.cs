@@ -76,7 +76,10 @@ public static class CoordinatorHostBuilder
         // ── Services ─────────────────────────────────────────────────────────
         builder.Services.AddSingleton<LogBroadcaster>();
         builder.Services.AddSingleton<Endpoints.WorkerLivenessFilter>();
+        builder.Services.AddSingleton<JobAssignmentSignal>();
+        builder.Services.AddSingleton<IDurationEstimator, EwmaDurationEstimator>();
         builder.Services.AddHostedService<PollingBackgroundService>();
+        builder.Services.AddHostedService<JobAssignmentService>();
         builder.Services.AddHostedService<StaleJobReaperService>();
 
         // ── mDNS LAN auto-discovery ──────────────────────────────────────────
@@ -180,6 +183,24 @@ public static class CoordinatorHostBuilder
             await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"DeploymentJobs\" ADD COLUMN \"Version\" TEXT NULL");
         }
 
+        // Smart-scheduler columns: AssignedAt + EstimatedDurationMs (issue: smart scheduling).
+        await EnsureJobColumnAsync(db, "AssignedAt", "INTEGER NULL");
+        await EnsureJobColumnAsync(db, "EstimatedDurationMs", "INTEGER NULL");
+
+        // EWMA stats table (per project + worker, used by JobAssignmentService).
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "JobDurationStats" (
+                "ProjectId"   TEXT NOT NULL,
+                "WorkerId"    TEXT NOT NULL,
+                "EwmaMs"      REAL NOT NULL,
+                "Samples"     INTEGER NOT NULL,
+                "LastUpdated" INTEGER NOT NULL,
+                CONSTRAINT "PK_JobDurationStats" PRIMARY KEY ("ProjectId", "WorkerId")
+            )
+            """);
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS \"IX_JobDurationStats_WorkerId\" ON \"JobDurationStats\" (\"WorkerId\")");
+
         // ── Startup reconciliation ─────────────────────────────────────────
         // Jobs that were Running or Assigned during the last shutdown can never
         // complete because the worker context is lost. Fail them so they don't
@@ -235,6 +256,18 @@ public static class CoordinatorHostBuilder
         {
             await db.Database.ExecuteSqlRawAsync(
                 $"ALTER TABLE \"Workers\" ADD COLUMN \"{columnName}\" {columnDefinition}");
+        }
+    }
+
+    private static async Task EnsureJobColumnAsync(FleetDbContext db, string columnName, string columnDefinition)
+    {
+        var exists = (await db.Database
+            .SqlQueryRaw<long>($"SELECT COUNT(*) AS \"Value\" FROM pragma_table_info('DeploymentJobs') WHERE name='{columnName}'")
+            .ToListAsync()).FirstOrDefault() > 0;
+        if (!exists)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                $"ALTER TABLE \"DeploymentJobs\" ADD COLUMN \"{columnName}\" {columnDefinition}");
         }
     }
 

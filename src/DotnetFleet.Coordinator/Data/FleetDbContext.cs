@@ -13,6 +13,7 @@ public class FleetDbContext : DbContext
     public DbSet<LogEntry> LogEntries => Set<LogEntry>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Secret> Secrets => Set<Secret>();
+    public DbSet<JobDurationStat> JobDurationStats => Set<JobDurationStat>();
 
     public FleetDbContext(DbContextOptions<FleetDbContext> options) : base(options) { }
 
@@ -71,6 +72,12 @@ public class FleetDbContext : DbContext
             e.HasKey(s => s.Id);
             e.HasIndex(s => s.ProjectId);
             e.HasIndex(s => new { s.ProjectId, s.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<JobDurationStat>(e =>
+        {
+            e.HasKey(s => new { s.ProjectId, s.WorkerId });
+            e.HasIndex(s => s.WorkerId);
         });
     }
 }

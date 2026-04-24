@@ -20,4 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DotnetFleet.Core\DotnetFleet.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DotnetFleet.Tests" />
+  </ItemGroup>
 </Project>

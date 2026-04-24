@@ -156,7 +156,8 @@ public static class WorkerEndpoints
         [FromBody] UpdateWorkerStatusRequest req,
         HttpContext httpContext,
         IFleetStorage storage,
-        LogBroadcaster broadcaster)
+        LogBroadcaster broadcaster,
+        JobAssignmentSignal signal)
     {
         if (!TryGetClaimedWorkerId(httpContext, out var claimed) || claimed != id)
             return Results.Forbid();
@@ -164,6 +165,7 @@ public static class WorkerEndpoints
         var worker = await storage.GetWorkerAsync(id);
         if (worker is null) return Results.NotFound();
 
+        var wasOffline = worker.Status == WorkerStatus.Offline;
         worker.Status = req.Status;
         worker.LastSeenAt = DateTimeOffset.UtcNow;
         await storage.UpdateWorkerAsync(worker);
@@ -180,6 +182,10 @@ public static class WorkerEndpoints
                 "Worker restarted while running this job.");
             foreach (var jobId in failed)
                 broadcaster.Complete(jobId);
+
+            // A previously-offline worker becoming online means new capacity for the
+            // scheduler — wake it so any orphaned Queued jobs land here.
+            if (wasOffline) signal.Notify();
         }
 
         return Results.Ok();

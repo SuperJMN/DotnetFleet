@@ -125,13 +125,15 @@ public class StaleJobReaperTests : IDisposable
             LastSeenAt = DateTimeOffset.UtcNow.AddMinutes(-10)
         });
 
+        // SQLite's text-roundtripped DateTimeOffset can lose a few microseconds
+        // of precision, so allow a small tolerance instead of strict ordering.
         var before = DateTimeOffset.UtcNow;
         var existed = await storage.TouchWorkerAsync(workerId);
         existed.Should().BeTrue();
 
         var refreshed = await storage.GetWorkerAsync(workerId);
         refreshed!.LastSeenAt.Should().NotBeNull();
-        refreshed.LastSeenAt!.Value.Should().BeOnOrAfter(before);
+        refreshed.LastSeenAt!.Value.Should().BeCloseTo(before, TimeSpan.FromSeconds(5));
         refreshed.Status.Should().Be(WorkerStatus.Online,
             "TouchWorkerAsync must revive a worker that was previously declared Offline");
     }

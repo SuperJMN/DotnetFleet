@@ -1,21 +1,26 @@
 using DotnetFleet.Coordinator.Data;
+using DotnetFleet.Coordinator.Services;
 using DotnetFleet.Core.Domain;
 using DotnetFleet.Core.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DotnetFleet.Tests;
 
 /// <summary>
-/// End-to-end style integration test for the capability-aware claim path. Two workers
-/// register with different specs and both poll for a single queued job; only the
-/// higher-spec worker is allowed to claim it. The lower-spec worker may only claim
-/// after the better one becomes Busy/Offline (i.e. is no longer in the idle pool).
+/// End-to-end tests for the push-based scheduler. Drives
+/// <see cref="JobAssignmentService.AssignPendingAsync"/> directly against a real
+/// SQLite-backed <see cref="EfFleetStorage"/> and verifies the assigner's picks.
 /// </summary>
 public class CapabilityClaimIntegrationTests : IDisposable
 {
     private readonly string dbPath;
     private readonly IDbContextFactory<FleetDbContext> factory;
     private readonly IWorkerSelector selector = new CapabilityWorkerSelector();
+    private readonly ServiceProvider services;
+    private readonly JobAssignmentService assigner;
+    private readonly IFleetStorage storage;
 
     public CapabilityClaimIntegrationTests()
     {
@@ -25,8 +30,24 @@ public class CapabilityClaimIntegrationTests : IDisposable
             .Options;
         factory = new InlineFactory(options);
 
-        using var db = factory.CreateDbContext();
-        db.Database.EnsureCreated();
+        using (var db = factory.CreateDbContext())
+            db.Database.EnsureCreated();
+
+        var sc = new ServiceCollection();
+        sc.AddSingleton<IDbContextFactory<FleetDbContext>>(factory);
+        sc.AddSingleton<IWorkerSelector>(selector);
+        sc.AddSingleton<IFleetStorage, EfFleetStorage>();
+        sc.AddSingleton<IDurationEstimator, EwmaDurationEstimator>();
+        sc.AddSingleton<JobAssignmentSignal>();
+        sc.AddSingleton<LogBroadcaster>();
+        sc.AddSingleton<JobAssignmentService>(sp => new JobAssignmentService(
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<JobAssignmentSignal>(),
+            sp.GetRequiredService<LogBroadcaster>(),
+            NullLogger<JobAssignmentService>.Instance));
+        services = sc.BuildServiceProvider();
+        assigner = services.GetRequiredService<JobAssignmentService>();
+        storage = services.GetRequiredService<IFleetStorage>();
     }
 
     private sealed class InlineFactory(DbContextOptions<FleetDbContext> options)
@@ -37,10 +58,11 @@ public class CapabilityClaimIntegrationTests : IDisposable
 
     public void Dispose()
     {
+        services.Dispose();
         try { File.Delete(dbPath); } catch { /* best-effort */ }
     }
 
-    private async Task<DeploymentJob> SeedJobAsync(IFleetStorage storage)
+    private async Task<DeploymentJob> SeedJobAsync()
     {
         var projectId = Guid.NewGuid();
         await storage.AddProjectAsync(new Project
@@ -57,81 +79,72 @@ public class CapabilityClaimIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task High_spec_worker_wins_the_job_over_low_spec_worker()
+    public async Task Single_idle_worker_gets_the_job_when_no_history_exists()
     {
-        var storage = new EfFleetStorage(factory, selector);
+        var w = new Worker { Name = "only", Status = WorkerStatus.Online };
+        await storage.AddWorkerAsync(w);
+        var job = await SeedJobAsync();
 
-        var rpi = new Worker
-        {
-            Name = "rpi4", Status = WorkerStatus.Online,
-            ProcessorCount = 4, TotalMemoryMb = 4 * 1024, Architecture = "Arm64"
-        };
-        var pc = new Worker
-        {
-            Name = "pc", Status = WorkerStatus.Online,
-            ProcessorCount = 8, TotalMemoryMb = 16 * 1024, Architecture = "X64"
-        };
-        await storage.AddWorkerAsync(rpi);
-        await storage.AddWorkerAsync(pc);
+        await assigner.AssignPendingAsync(CancellationToken.None);
 
-        var job = await SeedJobAsync(storage);
-
-        // The lower-spec worker polls first — it must be told "no job for you" because
-        // a better worker is also idle. The job stays Queued.
-        var rpiClaim = await storage.ClaimNextJobAsync(rpi.Id);
-        rpiClaim.Should().BeNull("the higher-spec PC is idle and should preempt the RPi");
-
-        var stillQueued = await storage.GetJobAsync(job.Id);
-        stillQueued!.Status.Should().Be(JobStatus.Queued);
-        stillQueued.WorkerId.Should().BeNull();
-
-        // The PC polls next — it wins the job.
-        var pcClaim = await storage.ClaimNextJobAsync(pc.Id);
-        pcClaim.Should().NotBeNull();
-        pcClaim!.WorkerId.Should().Be(pc.Id);
-
-        var afterClaim = await storage.GetJobAsync(job.Id);
-        afterClaim!.Status.Should().Be(JobStatus.Assigned);
-        afterClaim.WorkerId.Should().Be(pc.Id);
+        var after = await storage.GetJobAsync(job.Id);
+        after!.Status.Should().Be(JobStatus.Assigned);
+        after.WorkerId.Should().Be(w.Id);
     }
 
     [Fact]
-    public async Task Low_spec_worker_can_claim_when_high_spec_worker_is_busy()
+    public async Task Loaded_worker_is_skipped_in_favor_of_idle_one()
     {
-        var storage = new EfFleetStorage(factory, selector);
+        // Two compatible workers; one already has an Assigned job (queue depth > 0),
+        // the other is idle. Idle worker has lower ETA → wins the new job.
+        var loaded = new Worker { Name = "loaded", Status = WorkerStatus.Online };
+        var idle = new Worker { Name = "idle", Status = WorkerStatus.Online };
+        await storage.AddWorkerAsync(loaded);
+        await storage.AddWorkerAsync(idle);
 
-        var rpi = new Worker
-        {
-            Name = "rpi4", Status = WorkerStatus.Online,
-            ProcessorCount = 4, TotalMemoryMb = 4 * 1024, Architecture = "Arm64"
-        };
-        var pc = new Worker
-        {
-            // Already running another job → Busy → not in the idle pool.
-            Name = "pc", Status = WorkerStatus.Busy,
-            ProcessorCount = 8, TotalMemoryMb = 16 * 1024, Architecture = "X64"
-        };
-        await storage.AddWorkerAsync(rpi);
-        await storage.AddWorkerAsync(pc);
+        // Seed a long-running job already assigned to the loaded worker.
+        var preexisting = await SeedJobAsync();
+        await storage.AssignJobToWorkerAsync(preexisting.Id, loaded.Id, estimatedDurationMs: 600_000);
 
-        await SeedJobAsync(storage);
+        var job = await SeedJobAsync();
+        await assigner.AssignPendingAsync(CancellationToken.None);
 
-        var rpiClaim = await storage.ClaimNextJobAsync(rpi.Id);
-        rpiClaim.Should().NotBeNull("the only idle worker must be allowed to claim");
-        rpiClaim!.WorkerId.Should().Be(rpi.Id);
+        var after = await storage.GetJobAsync(job.Id);
+        after!.Status.Should().Be(JobStatus.Assigned);
+        after.WorkerId.Should().Be(idle.Id);
     }
 
     [Fact]
-    public async Task Single_idle_worker_claims_even_with_no_capabilities_reported()
+    public async Task Job_remains_queued_when_no_workers_exist()
     {
-        var storage = new EfFleetStorage(factory, selector);
+        var job = await SeedJobAsync();
 
-        var legacy = new Worker { Name = "legacy", Status = WorkerStatus.Online };
-        await storage.AddWorkerAsync(legacy);
-        await SeedJobAsync(storage);
+        await assigner.AssignPendingAsync(CancellationToken.None);
 
-        var claim = await storage.ClaimNextJobAsync(legacy.Id);
-        claim.Should().NotBeNull();
-        claim!.WorkerId.Should().Be(legacy.Id);
+        var after = await storage.GetJobAsync(job.Id);
+        after!.Status.Should().Be(JobStatus.Queued);
+        after.WorkerId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Faster_worker_per_history_is_preferred_when_both_idle()
+    {
+        // Both workers idle, both compatible, but project history says worker A is much
+        // faster on this project. Assigner must pick A.
+        var fast = new Worker { Name = "fast", Status = WorkerStatus.Online,
+            ProcessorCount = 8, TotalMemoryMb = 16 * 1024 };
+        var slow = new Worker { Name = "slow", Status = WorkerStatus.Online,
+            ProcessorCount = 2, TotalMemoryMb = 1024 };
+        await storage.AddWorkerAsync(fast);
+        await storage.AddWorkerAsync(slow);
+
+        var job = await SeedJobAsync();
+        await storage.UpsertJobDurationStatAsync(job.ProjectId, fast.Id, newEwmaMs: 5_000, samples: 5);
+        await storage.UpsertJobDurationStatAsync(job.ProjectId, slow.Id, newEwmaMs: 60_000, samples: 5);
+
+        await assigner.AssignPendingAsync(CancellationToken.None);
+
+        var after = await storage.GetJobAsync(job.Id);
+        after!.WorkerId.Should().Be(fast.Id);
     }
 }

@@ -1,5 +1,6 @@
 using DotnetFleet.Core.Domain;
 using DotnetFleet.Core.Interfaces;
+using DotnetFleet.Coordinator.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DotnetFleet.Coordinator.Endpoints;
@@ -17,6 +18,7 @@ public static class ProjectEndpoints
         group.MapDelete("/{id:guid}", Delete);
         group.MapPost("/{id:guid}/deploy", EnqueueDeploy);
         group.MapGet("/{id:guid}/jobs", GetJobsForProject);
+        group.MapDelete("/{id:guid}/jobs/finished", DeleteFinishedJobs);
     }
 
     private static async Task<IResult> GetAll(IFleetStorage storage)
@@ -70,7 +72,7 @@ public static class ProjectEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> EnqueueDeploy(Guid id, IFleetStorage storage)
+    private static async Task<IResult> EnqueueDeploy(Guid id, IFleetStorage storage, JobAssignmentSignal signal)
     {
         var project = await storage.GetProjectAsync(id);
         if (project is null)
@@ -83,6 +85,7 @@ public static class ProjectEndpoints
         };
 
         await storage.AddJobAsync(job);
+        signal.Notify();
         return Results.Created($"/api/jobs/{job.Id}", job);
     }
 
@@ -90,6 +93,16 @@ public static class ProjectEndpoints
     {
         var jobs = await storage.GetJobsByProjectAsync(id);
         return Results.Ok(jobs);
+    }
+
+    private static async Task<IResult> DeleteFinishedJobs(Guid id, IFleetStorage storage)
+    {
+        var project = await storage.GetProjectAsync(id);
+        if (project is null)
+            return Results.NotFound();
+
+        var deleted = await storage.DeleteFinishedJobsAsync(id);
+        return Results.Ok(new { deleted });
     }
 
     public record CreateProjectRequest(string Name, string GitUrl, string Branch = "main", int PollingIntervalMinutes = 0, string? GitToken = null);

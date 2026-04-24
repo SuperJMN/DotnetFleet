@@ -166,13 +166,84 @@ public static class JobEndpoints
 
     private static async Task<IResult> GetNextJob(
         HttpContext httpContext,
-        IFleetStorage storage)
+        IFleetStorage storage,
+        IDurationEstimator estimator,
+        LogBroadcaster broadcaster)
     {
         if (!TryGetWorkerId(httpContext, out var workerId))
             return Results.Forbid();
 
-        var job = await storage.ClaimNextJobAsync(workerId);
-        return job is null ? Results.NoContent() : Results.Ok(job);
+        // Push model: the coordinator has already assigned jobs to this worker. Hand
+        // back the oldest one. Workers running the legacy ClaimNextJobAsync code path
+        // will still get fed because EfFleetStorage.ClaimNextJobAsync now delegates to
+        // the same query.
+        var assigned = await storage.GetNextAssignedJobForWorkerAsync(workerId);
+        if (assigned is not null)
+            return Results.Ok(assigned);
+
+        // Caller's queue is empty. Try to steal a queued (Assigned, not yet Running) job
+        // from a busy worker if we can finish it materially sooner. The threshold avoids
+        // ping-pong between workers with similar specs.
+        var caller = await storage.GetWorkerAsync(workerId);
+        if (caller is null)
+            return Results.NoContent();
+
+        var allWorkers = await storage.GetWorkersAsync();
+        var workersById = allWorkers.ToDictionary(w => w.Id);
+
+        // Build a queue per worker so we can compute ETA-of-this-job-on-its-current-owner.
+        var jobsByWorker = new Dictionary<Guid, List<DeploymentJob>>();
+        foreach (var w in allWorkers)
+        {
+            var jobs = await storage.GetActiveJobsForWorkerAsync(w.Id);
+            jobsByWorker[w.Id] = jobs.ToList();
+        }
+
+        const double stealRatio = 1.2; // require ≥20% improvement to steal.
+        DeploymentJob? stolen = null;
+
+        // Walk other workers and look at the *tail* of each queue first (cheapest to steal).
+        foreach (var (otherId, otherJobs) in jobsByWorker)
+        {
+            if (otherId == workerId) continue;
+
+            for (var i = otherJobs.Count - 1; i >= 0; i--)
+            {
+                var candidate = otherJobs[i];
+                if (candidate.Status != JobStatus.Assigned) continue;
+
+                if (!JobAssignmentService.IsCompatible(candidate, caller)) continue;
+
+                // ETA for the candidate as it sits today on its current owner = sum of
+                // remaining time of the jobs ahead of it (indexes 0..i-1 in this sorted
+                // list, since AssignedAt asc). Then add the candidate's own estimate.
+                var aheadOfCandidate = otherJobs.Take(i).ToList();
+                var currentEta = JobAssignmentService.ComputeWorkerLoadMs(aheadOfCandidate)
+                                 + (candidate.EstimatedDurationMs ?? EwmaDurationEstimator.DefaultMs);
+
+                var newEstimate = await estimator.EstimateAsync(candidate, caller);
+                var callerEta = newEstimate; // caller's own queue is empty (we checked above).
+
+                if (currentEta > callerEta * stealRatio)
+                {
+                    var ok = await storage.TryStealAssignedJobAsync(candidate.Id, workerId, otherId, newEstimate);
+                    if (ok)
+                    {
+                        stolen = await storage.GetJobAsync(candidate.Id);
+                        var line = $"[scheduler] Stolen by {(string.IsNullOrWhiteSpace(caller.Name) ? caller.Id.ToString("N")[..8] : caller.Name)} " +
+                                   $"(ETA improved from ~{currentEta / 1000.0:0.#}s to ~{callerEta / 1000.0:0.#}s).";
+                        var entry = new LogEntry { JobId = candidate.Id, Line = line, Timestamp = DateTimeOffset.UtcNow };
+                        await storage.AddLogEntriesAsync([entry]);
+                        broadcaster.Publish(candidate.Id, entry);
+                        break;
+                    }
+                }
+            }
+
+            if (stolen is not null) break;
+        }
+
+        return stolen is not null ? Results.Ok(stolen) : Results.NoContent();
     }
 
     private static async Task<IResult> ReportStarted(
@@ -243,7 +314,8 @@ public static class JobEndpoints
         [FromBody] CompleteJobRequest req,
         HttpContext httpContext,
         IFleetStorage storage,
-        LogBroadcaster broadcaster)
+        LogBroadcaster broadcaster,
+        JobAssignmentSignal signal)
     {
         if (!TryGetWorkerId(httpContext, out var workerId))
             return Results.Forbid();
@@ -252,14 +324,32 @@ public static class JobEndpoints
         if (job is null) return Results.NotFound();
         if (job.WorkerId != workerId) return Results.Forbid();
 
+        var now = DateTimeOffset.UtcNow;
         job.Status = job.CancellationRequestedAt is not null && !req.Success
             ? JobStatus.Cancelled
             : req.Success ? JobStatus.Succeeded : JobStatus.Failed;
-        job.FinishedAt = DateTimeOffset.UtcNow;
+        job.FinishedAt = now;
         job.ErrorMessage = req.ErrorMessage;
         await storage.UpdateJobAsync(job);
 
+        // EWMA update: only on success — failed runs are noise, not signal. We need a
+        // measured StartedAt to compute duration; a worker that never reported start
+        // (legacy or buggy) just doesn't contribute to the model.
+        if (job.Status == JobStatus.Succeeded && job.StartedAt is { } startedAt)
+        {
+            var observedMs = Math.Max(1, (long)(now - startedAt).TotalMilliseconds);
+            var existing = await storage.GetJobDurationStatAsync(job.ProjectId, workerId);
+            const double alpha = 0.3;
+            var newEwma = existing is null ? observedMs : alpha * observedMs + (1 - alpha) * existing.EwmaMs;
+            var samples = (existing?.Samples ?? 0) + 1;
+            await storage.UpsertJobDurationStatAsync(job.ProjectId, workerId, newEwma, samples);
+        }
+
         broadcaster.Complete(id);
+
+        // The worker just freed a slot — wake the scheduler so the next queued job (if
+        // any) gets considered for this worker straight away.
+        signal.Notify();
         return Results.Ok();
     }
 
