@@ -147,4 +147,33 @@ public class CapabilityClaimIntegrationTests : IDisposable
         var after = await storage.GetJobAsync(job.Id);
         after!.WorkerId.Should().Be(fast.Id);
     }
+
+    [Fact]
+    public async Task Offline_workers_are_not_assignment_candidates()
+    {
+        var offlineFast = new Worker
+        {
+            Name = "offline-fast",
+            Status = WorkerStatus.Offline,
+            LastSeenAt = DateTimeOffset.UtcNow.AddMinutes(-10)
+        };
+        var onlineSlow = new Worker
+        {
+            Name = "online-slow",
+            Status = WorkerStatus.Online,
+            LastSeenAt = DateTimeOffset.UtcNow
+        };
+        await storage.AddWorkerAsync(offlineFast);
+        await storage.AddWorkerAsync(onlineSlow);
+
+        var job = await SeedJobAsync();
+        await storage.UpsertJobDurationStatAsync(job.ProjectId, offlineFast.Id, newEwmaMs: 5_000, samples: 5);
+        await storage.UpsertJobDurationStatAsync(job.ProjectId, onlineSlow.Id, newEwmaMs: 60_000, samples: 5);
+
+        await assigner.AssignPendingAsync(CancellationToken.None);
+
+        var after = await storage.GetJobAsync(job.Id);
+        after!.Status.Should().Be(JobStatus.Assigned);
+        after.WorkerId.Should().Be(onlineSlow.Id);
+    }
 }

@@ -14,12 +14,12 @@ namespace DotnetFleet.Coordinator.Services;
 /// <code>eta(worker) = sum(estimate of jobs already in this worker's queue)
 ///                  + estimate(job, worker)</code>
 ///
-/// This deliberately ignores whether the worker is currently <c>Busy</c>: a faster
-/// machine with one job in flight may still beat an idle slow machine, and the smart
-/// thing is to queue work behind it.
+/// This deliberately ignores whether an available worker is currently <c>Busy</c>: a
+/// faster machine with one job in flight may still beat an idle slow machine, and the
+/// smart thing is to queue work behind it.
 ///
-/// Compatibility filtering is intentionally permissive (any registered worker is a
-/// candidate). The hook <see cref="IsCompatible"/> is the future extension point for
+/// Compatibility filtering excludes offline workers and is otherwise intentionally
+/// permissive. The hook <see cref="IsCompatible"/> is the future extension point for
 /// arch / OS / secrets matching.
 /// </summary>
 public class JobAssignmentService : BackgroundService
@@ -171,8 +171,9 @@ public class JobAssignmentService : BackgroundService
         return total;
     }
 
-    /// <summary>Compatibility hook. Today: every registered worker is a candidate.</summary>
-    internal static bool IsCompatible(DeploymentJob job, Worker worker) => true;
+    /// <summary>Compatibility hook. Today: every non-offline worker is a candidate.</summary>
+    internal static bool IsCompatible(DeploymentJob job, Worker worker) =>
+        worker.Status != WorkerStatus.Offline;
 
     /// <summary>
     /// Sum of remaining estimated time across a worker's Assigned + Running jobs. Used

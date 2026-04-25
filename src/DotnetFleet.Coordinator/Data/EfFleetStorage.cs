@@ -354,8 +354,7 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         var cutoff = DateTimeOffset.UtcNow - staleThreshold;
 
         var staleJobs = await db.DeploymentJobs
-            .Where(j => (j.Status == JobStatus.Running || j.Status == JobStatus.Assigned)
-                        && j.WorkerId != null)
+            .Where(j => j.Status == JobStatus.Running && j.WorkerId != null)
             .Join(db.Workers.Where(w => w.LastSeenAt != null && w.LastSeenAt < cutoff),
                   j => j.WorkerId, w => w.Id, (j, _) => j)
             .ToListAsync(ct);
@@ -580,4 +579,3 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         }
     }
 }
-

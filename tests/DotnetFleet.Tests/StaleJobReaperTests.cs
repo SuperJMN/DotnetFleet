@@ -37,6 +37,92 @@ public class StaleJobReaperTests : IDisposable
     }
 
     [Fact]
+    public async Task Assigned_jobs_on_stale_workers_are_requeued_instead_of_failed()
+    {
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
+        var projectId = Guid.NewGuid();
+        var workerId = Guid.NewGuid();
+
+        await storage.AddProjectAsync(new Project
+        {
+            Id = projectId, Name = "test", GitUrl = "https://example.com/r.git", Branch = "main"
+        });
+
+        await storage.AddWorkerAsync(new Worker
+        {
+            Id = workerId,
+            Name = "stale-worker",
+            Status = WorkerStatus.Online,
+            LastSeenAt = DateTimeOffset.UtcNow.AddMinutes(-10)
+        });
+
+        var assignedJob = new DeploymentJob
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            WorkerId = workerId,
+            Status = JobStatus.Assigned,
+            EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            AssignedAt = DateTimeOffset.UtcNow.AddMinutes(-1)
+        };
+        await storage.AddJobAsync(assignedJob);
+
+        await storage.MarkOfflineWorkersAsync(TimeSpan.FromSeconds(90));
+        var failedIds = await storage.FailStaleJobsAsync(TimeSpan.FromSeconds(90));
+        var reclaimedIds = await storage.UnassignJobsOfOfflineWorkersAsync(TimeSpan.FromSeconds(90));
+
+        failedIds.Should().BeEmpty();
+        reclaimedIds.Should().ContainSingle().Which.Should().Be(assignedJob.Id);
+
+        var job = await storage.GetJobAsync(assignedJob.Id);
+        job!.Status.Should().Be(JobStatus.Queued);
+        job.WorkerId.Should().BeNull();
+        job.AssignedAt.Should().BeNull();
+        job.ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Running_jobs_on_stale_workers_are_failed()
+    {
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
+        var projectId = Guid.NewGuid();
+        var workerId = Guid.NewGuid();
+
+        await storage.AddProjectAsync(new Project
+        {
+            Id = projectId, Name = "test", GitUrl = "https://example.com/r.git", Branch = "main"
+        });
+
+        await storage.AddWorkerAsync(new Worker
+        {
+            Id = workerId,
+            Name = "stale-worker",
+            Status = WorkerStatus.Busy,
+            LastSeenAt = DateTimeOffset.UtcNow.AddMinutes(-10)
+        });
+
+        var runningJob = new DeploymentJob
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = projectId,
+            WorkerId = workerId,
+            Status = JobStatus.Running,
+            EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            AssignedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-4)
+        };
+        await storage.AddJobAsync(runningJob);
+
+        var failedIds = await storage.FailStaleJobsAsync(TimeSpan.FromSeconds(90));
+
+        failedIds.Should().ContainSingle().Which.Should().Be(runningJob.Id);
+
+        var job = await storage.GetJobAsync(runningJob.Id);
+        job!.Status.Should().Be(JobStatus.Failed);
+        job.ErrorMessage.Should().Contain("Worker unresponsive");
+    }
+
+    [Fact]
     public async Task FailStuckAssignedJobsAsync_fails_assigned_jobs_past_timeout()
     {
         var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());

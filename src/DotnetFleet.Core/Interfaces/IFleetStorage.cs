@@ -144,8 +144,9 @@ public interface IFleetStorage
     Task<int> MarkOfflineWorkersAsync(TimeSpan staleThreshold, CancellationToken ct = default);
 
     /// <summary>
-    /// Fails jobs that are still <see cref="JobStatus.Running"/> or <see cref="JobStatus.Assigned"/>
-    /// but whose worker has not heartbeated within <paramref name="staleThreshold"/>.
+    /// Fails jobs that are still <see cref="JobStatus.Running"/> but whose worker has not
+    /// heartbeated within <paramref name="staleThreshold"/>. Assigned jobs have not started
+    /// yet and should be reclaimed through <see cref="UnassignJobsOfOfflineWorkersAsync"/>.
     /// Returns the IDs of the jobs that were marked as failed.
     /// </summary>
     Task<IReadOnlyList<Guid>> FailStaleJobsAsync(TimeSpan staleThreshold, CancellationToken ct = default);
