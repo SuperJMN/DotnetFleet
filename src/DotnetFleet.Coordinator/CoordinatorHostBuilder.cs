@@ -34,7 +34,11 @@ public static class CoordinatorHostBuilder
         options ??= new CoordinatorStartupOptions();
 
         var builder = WebApplication.CreateBuilder(args);
-        builder.Host.UseSerilog();
+        builder.Host.UseSerilog((ctx, services, lc) => lc
+            .ReadFrom.Configuration(ctx.Configuration)
+            .ReadFrom.Services(services)
+            .Enrich.FromLogContext()
+            .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"));
 
         // Apply CLI overrides to configuration
         ApplyOverrides(builder.Configuration, options);
