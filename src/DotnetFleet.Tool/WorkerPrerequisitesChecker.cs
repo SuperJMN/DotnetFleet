@@ -105,6 +105,17 @@ internal static class WorkerPrerequisitesChecker
                 [PackageManager.Dnf] = ["unzip"],
                 [PackageManager.Pacman] = ["unzip"],
             });
+
+        yield return new Dependency(
+            DisplayName: "GNU as (binutils)",
+            Reason: "required by Android AOT publish on linux-arm64 (the LLVM tarball does not bundle a GNU assembler)",
+            Probe: () => HasBinaryOnPath("as"),
+            Packages: new()
+            {
+                [PackageManager.Apt] = ["binutils"],
+                [PackageManager.Dnf] = ["binutils"],
+                [PackageManager.Pacman] = ["binutils"],
+            });
     }
 
     // ── Probes ────────────────────────────────────────────────────────────
