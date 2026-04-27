@@ -30,6 +30,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="DotnetFleet.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\DotnetFleet.Coordinator\DotnetFleet.Coordinator.csproj" />
     <ProjectReference Include="..\DotnetFleet.Worker\DotnetFleet.Worker.csproj" />
   </ItemGroup>

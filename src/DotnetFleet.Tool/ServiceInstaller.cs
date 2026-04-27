@@ -172,6 +172,8 @@ public static class ServiceInstaller
         await ChownRecursiveAsync(opts.DataDir, user);
         await InstallUnitAsync(serviceName, unit);
 
+        WorkerPrerequisitesChecker.ReportMissingDependencies();
+
         Console.WriteLine();
         Console.WriteLine($"  ✓ Worker '{opts.Name}' installed as systemd service '{serviceName}'");
         Console.WriteLine($"    Coordinator: {opts.CoordinatorUrl}");
