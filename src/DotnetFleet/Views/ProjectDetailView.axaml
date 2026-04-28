@@ -6,25 +6,30 @@
 
     <DockPanel Margin="16">
 
-        <!-- Header -->
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="0,0,0,16">
-            <Button Grid.Column="0" Content="← Back" Command="{Binding BackCommand}" Margin="0,0,12,0" />
-            <StackPanel Grid.Column="1" Spacing="2">
-                <TextBlock Text="{Binding Project.Name}" FontSize="20" FontWeight="Bold" />
-                <TextBlock FontSize="12" Opacity="0.6">
+        <!-- Header: wraps on narrow widths -->
+        <FlexPanel DockPanel.Dock="Top"
+                   Wrap="Wrap" Gap="8" AlignItems="Center"
+                   Margin="0,0,0,16">
+            <Button Content="← Back" Command="{Binding BackCommand}" />
+            <StackPanel Spacing="2"
+                        FlexPanel.Grow="1" MinWidth="200">
+                <TextBlock Text="{Binding Project.Name}" FontSize="20" FontWeight="Bold"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock FontSize="12" Opacity="0.6" TextTrimming="CharacterEllipsis">
                     <Run Text="{Binding Project.GitUrl}" />
                     <Run Text=" @ " />
                     <Run Text="{Binding Project.Branch}" />
                 </TextBlock>
             </StackPanel>
-            <Button Grid.Column="2" Content="✏ Edit" Command="{Binding EditCommand}" Margin="0,0,8,0" />
-            <Button Grid.Column="3" Content="🧹 Clear finished"
-                    Command="{Binding ClearFinishedJobsCommand}"
-                    ToolTip.Tip="Delete all jobs that have already finished (succeeded, failed or cancelled)."
-                    Margin="0,0,8,0" />
-            <Button Grid.Column="4" Content="↺" Command="{Binding RefreshCommand}" Margin="0,0,8,0" />
-            <Button Grid.Column="5" Content="🚀 Deploy Now" Command="{Binding DeployCommand}" />
-        </Grid>
+            <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
+                <Button Content="✏ Edit" Command="{Binding EditCommand}" />
+                <Button Content="🧹 Clear finished"
+                        Command="{Binding ClearFinishedJobsCommand}"
+                        ToolTip.Tip="Delete all jobs that have already finished (succeeded, failed or cancelled)." />
+                <Button Content="↺" Command="{Binding RefreshCommand}" />
+                <Button Content="🚀 Deploy Now" Command="{Binding DeployCommand}" />
+            </FlexPanel>
+        </FlexPanel>
 
         <TextBlock DockPanel.Dock="Top" Text="{Binding Error}"
                    Foreground="Red" Margin="0,0,0,8"
@@ -33,21 +38,23 @@
         <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True"
                      IsVisible="{Binding IsLoading}" Height="4" Margin="0,0,0,8" />
 
-        <!-- Main content: jobs (left) + project secrets (right) -->
-        <Grid ColumnDefinitions="*,Auto,300">
+        <!-- Main content: jobs + project secrets. Side-by-side on wide, stacked on narrow. -->
+        <FlexPanel Direction="Row" Wrap="Wrap" Gap="12" AlignItems="Stretch">
 
             <!-- Job list -->
-            <ListBox Grid.Column="0" ItemsSource="{Binding Jobs}" Background="Transparent">
+            <ListBox FlexPanel.Grow="1" FlexPanel.Basis="320" MinWidth="280"
+                     ItemsSource="{Binding Jobs}" Background="Transparent">
                 <ListBox.ItemTemplate>
                     <DataTemplate DataType="vm:JobViewModel">
                         <Border Padding="12,8" Margin="0,2"
                                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                                 CornerRadius="4">
-                            <Grid ColumnDefinitions="Auto,*,Auto">
-                                <TextBlock Grid.Column="0" Text="{Binding StatusBadge}"
+                            <FlexPanel Wrap="Wrap" Gap="12" AlignItems="Center">
+                                <TextBlock Text="{Binding StatusBadge}"
                                            FontFamily="Consolas,monospace" VerticalAlignment="Center"
                                            MinWidth="140" />
-                                <StackPanel Grid.Column="1" Spacing="2" Margin="12,0">
+                                <StackPanel Spacing="2"
+                                            MinWidth="180" FlexPanel.Grow="1">
                                     <TextBlock FontSize="13" FontWeight="SemiBold"
                                                Text="{Binding DisplayName}" />
                                     <TextBlock FontSize="12" Opacity="0.6">
@@ -60,18 +67,16 @@
                                         <Run Text="{Binding Job.TriggerCommitSha}" />
                                     </TextBlock>
                                 </StackPanel>
-                                <Button Grid.Column="2" Content="View Logs" Command="{Binding OpenCommand}" />
-                            </Grid>
+                                <Button Content="View Logs" Command="{Binding OpenCommand}" />
+                            </FlexPanel>
                         </Border>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <!-- Splitter -->
-            <GridSplitter Grid.Column="1" Width="1" Background="{DynamicResource SystemControlForegroundBaseMediumLowBrush}" />
-
             <!-- Project secrets panel -->
-            <DockPanel Grid.Column="2" Margin="12,0,0,0"
+            <DockPanel FlexPanel.Grow="1" FlexPanel.Basis="280"
+                       MinWidth="240" MaxWidth="400"
                        DataContext="{Binding ProjectSecrets}">
 
                 <!-- Secrets header -->
@@ -148,7 +153,7 @@
 
             </DockPanel>
 
-        </Grid>
+        </FlexPanel>
 
     </DockPanel>
 

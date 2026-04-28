@@ -7,11 +7,14 @@
 
     <DockPanel Margin="16">
 
-        <!-- Header -->
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,12">
-            <Button Grid.Column="0" Content="← Back" Command="{Binding BackCommand}" Margin="0,0,12,0" />
-            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                <TextBlock FontSize="16" FontWeight="Bold">
+        <!-- Header: wraps on narrow widths -->
+        <FlexPanel DockPanel.Dock="Top"
+                   Wrap="Wrap" Gap="12" AlignItems="Center"
+                   Margin="0,0,0,12">
+            <Button Content="← Back" Command="{Binding BackCommand}" />
+            <StackPanel Spacing="2" VerticalAlignment="Center"
+                        FlexPanel.Grow="1" MinWidth="200">
+                <TextBlock FontSize="16" FontWeight="Bold" TextTrimming="CharacterEllipsis">
                     <Run Text="Job — " />
                     <Run Text="{Binding Job.Id}" />
                 </TextBlock>
@@ -20,15 +23,15 @@
                     <Run Text="{Binding StatusText}" FontWeight="SemiBold" />
                 </TextBlock>
             </StackPanel>
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+            <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
                 <Button Content="⛔ Cancel" Command="{Binding CancelJobCommand}"
-                        IsVisible="{Binding CanCancel}" Margin="0,0,8,0" />
+                        IsVisible="{Binding CanCancel}" />
                 <ProgressBar Width="80" Height="8" IsIndeterminate="True"
                              IsVisible="{Binding IsStreaming}" />
                 <TextBlock Text="Streaming…" FontSize="11" Opacity="0.6"
                            IsVisible="{Binding IsStreaming}" VerticalAlignment="Center" />
-            </StackPanel>
-        </Grid>
+            </FlexPanel>
+        </FlexPanel>
 
         <!-- Error banner: shown when the job has an ErrorMessage (Failed/Cancelled). -->
         <Border DockPanel.Dock="Top"
@@ -48,36 +51,6 @@
             </StackPanel>
         </Border>
 
-        <!-- Toolbar: search + severity filter -->
-        <Border DockPanel.Dock="Top"
-                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                Padding="8" Margin="0,0,0,8" CornerRadius="4">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="8">
-                <TextBox Grid.Column="0" Name="SearchBox"
-                         PlaceholderText="Search…" MinWidth="180"
-                         Text="{Binding SearchText}" />
-                <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="11" Opacity="0.7"
-                           Text="{Binding SearchResultText}" />
-                <Button Grid.Column="2" Content="▼" Padding="6,4"
-                        Command="{Binding NextSearchResultCommand}"
-                        ToolTip.Tip="Next match" />
-                <ComboBox Grid.Column="3"
-                          ItemsSource="{Binding AvailableSeverities}"
-                          SelectedItem="{Binding MinSeverity}"
-                          MinWidth="120"
-                          HorizontalAlignment="Right"
-                          ToolTip.Tip="Minimum severity to show" />
-                <Button Grid.Column="4" Content="Copy All"
-                        Command="{Binding CopyLogsCommand}"
-                        ToolTip.Tip="Copy all log lines to clipboard" />
-            </Grid>
-        </Border>
-
-        <!-- Terminal log viewer -->
-        <terminal:TerminalControl Name="LogTerminal"
-                                  FontFamily="Consolas,Courier New,monospace"
-                                  FontSize="12" />
-
         <!-- Current phase badge: shown while a phase is in flight -->
         <Border DockPanel.Dock="Top"
                 IsVisible="{Binding HasCurrentPhase}"
@@ -87,13 +60,14 @@
                 CornerRadius="4"
                 Padding="10,6"
                 Margin="0,0,0,8">
-            <StackPanel Orientation="Horizontal" Spacing="10">
+            <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
                 <TextBlock Text="🔧" FontSize="14" VerticalAlignment="Center" />
                 <TextBlock Text="Current phase:" FontWeight="SemiBold"
                            VerticalAlignment="Center" Opacity="0.8" />
                 <TextBlock Text="{Binding CurrentPhaseDisplay}"
-                           FontWeight="SemiBold" VerticalAlignment="Center" />
-            </StackPanel>
+                           FontWeight="SemiBold" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+            </FlexPanel>
         </Border>
 
         <!-- Phase timeline: collapsed expander to keep the log viewer the focus -->
@@ -101,20 +75,52 @@
                   Header="Phase timeline"
                   IsExpanded="False"
                   Margin="0,0,0,8"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Stretch"
                   IsVisible="{Binding HasPhases}">
             <ItemsControl ItemsSource="{Binding Phases}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:JobPhaseRow">
                         <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
                             <TextBlock Grid.Column="0" Text="{Binding Icon}" Margin="0,0,8,0" />
-                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}" />
+                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                       TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2" Text="{Binding DurationText}"
-                                       Opacity="0.6" FontSize="11" />
+                                       Opacity="0.6" FontSize="11" Margin="8,0,0,0" />
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Expander>
+
+        <!-- Toolbar: search + severity filter (wraps on narrow widths) -->
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                Padding="8" Margin="0,0,0,8" CornerRadius="4">
+            <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
+                <TextBox Name="SearchBox"
+                         PlaceholderText="Search…" MinWidth="180"
+                         FlexPanel.Grow="1"
+                         Text="{Binding SearchText}" />
+                <TextBlock VerticalAlignment="Center" FontSize="11" Opacity="0.7"
+                           Text="{Binding SearchResultText}" />
+                <Button Content="▼" Padding="6,4"
+                        Command="{Binding NextSearchResultCommand}"
+                        ToolTip.Tip="Next match" />
+                <ComboBox ItemsSource="{Binding AvailableSeverities}"
+                          SelectedItem="{Binding MinSeverity}"
+                          MinWidth="120"
+                          ToolTip.Tip="Minimum severity to show" />
+                <Button Content="Copy All"
+                        Command="{Binding CopyLogsCommand}"
+                        ToolTip.Tip="Copy all log lines to clipboard" />
+            </FlexPanel>
+        </Border>
+
+        <!-- Terminal log viewer (LAST child = fills remaining space) -->
+        <terminal:TerminalControl Name="LogTerminal"
+                                  FontFamily="Consolas,Courier New,monospace"
+                                  FontSize="12" />
 
     </DockPanel>
 
