@@ -20,3 +20,4 @@ deployer.secrets.yaml
 .idea/
 .runtime/
 DotnetAndroidArm64Shims/
+nupkg/

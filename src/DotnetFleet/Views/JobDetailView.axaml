@@ -78,6 +78,44 @@
                                   FontFamily="Consolas,Courier New,monospace"
                                   FontSize="12" />
 
+        <!-- Current phase badge: shown while a phase is in flight -->
+        <Border DockPanel.Dock="Top"
+                IsVisible="{Binding HasCurrentPhase}"
+                Background="#1F2A3A"
+                BorderBrush="#3A5A8A"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="10,6"
+                Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="🔧" FontSize="14" VerticalAlignment="Center" />
+                <TextBlock Text="Current phase:" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Opacity="0.8" />
+                <TextBlock Text="{Binding CurrentPhaseDisplay}"
+                           FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <!-- Phase timeline: collapsed expander to keep the log viewer the focus -->
+        <Expander DockPanel.Dock="Top"
+                  Header="Phase timeline"
+                  IsExpanded="False"
+                  Margin="0,0,0,8"
+                  IsVisible="{Binding HasPhases}">
+            <ItemsControl ItemsSource="{Binding Phases}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:JobPhaseRow">
+                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
+                            <TextBlock Grid.Column="0" Text="{Binding Icon}" Margin="0,0,8,0" />
+                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}" />
+                            <TextBlock Grid.Column="2" Text="{Binding DurationText}"
+                                       Opacity="0.6" FontSize="11" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Expander>
+
     </DockPanel>
 
 </UserControl>

@@ -198,8 +198,26 @@ public class RemoteWorkerBackgroundService : BackgroundService
                 await Log($"Project: {project.Name} | Branch: {project.Branch}");
                 await Log($"Git URL: {project.GitUrl}");
 
-                await GitHelper.CloneOrFetchAsync(project.GitUrl, project.Branch, localPath,
-                    msg => logBuffer.AppendAsync(msg), jobCt, project.GitToken);
+                // worker.git.clone — the worker emits its own phases for steps that
+                // happen BEFORE DotnetDeployer is invoked (clone/fetch). DotnetDeployer
+                // emits the rest from inside the build.
+                await EmitPhaseAsync(job.Id, PhaseEventKind.Start, "worker.git.clone",
+                    attrs: new() { ["branch"] = project.Branch ?? "" }, ct: jobCt);
+                var gitSw = System.Diagnostics.Stopwatch.StartNew();
+                bool gitOk = false;
+                try
+                {
+                    await GitHelper.CloneOrFetchAsync(project.GitUrl, project.Branch, localPath,
+                        msg => logBuffer.AppendAsync(msg), jobCt, project.GitToken);
+                    gitOk = true;
+                }
+                finally
+                {
+                    gitSw.Stop();
+                    await EmitPhaseAsync(job.Id, PhaseEventKind.End, "worker.git.clone",
+                        status: gitOk ? PhaseStatus.Ok : PhaseStatus.Fail,
+                        durationMs: gitSw.ElapsedMilliseconds, ct: jobCt);
+                }
                 await logBuffer.FlushAsync();
 
                 var cacheSize = GitHelper.GetDirectorySize(localPath);
@@ -230,11 +248,25 @@ public class RemoteWorkerBackgroundService : BackgroundService
                     .GroupBy(s => s.Name)
                     .ToDictionary(g => g.Key, g => g.Last().Value);
 
+                // worker.deployer.invoke wraps the entire DotnetDeployer process. The
+                // marker stream parsed by DeployerRunner produces nested phases
+                // (version.resolve, package.generate.*, github.release.upload, …)
+                // that the coordinator persists alongside this one.
+                await EmitPhaseAsync(job.Id, PhaseEventKind.Start, "worker.deployer.invoke",
+                    ct: jobCt);
+                var deploySw = System.Diagnostics.Stopwatch.StartNew();
+
                 var (success, error) = await DeployerRunner.RunAsync(
                     localPath,
                     onLine: line => logBuffer.AppendAsync(line),
                     envVars: envVars,
-                    jobCt);
+                    onPhase: ev => jobSource.PostJobPhaseAsync(job.Id, ev, jobCt),
+                    ct: jobCt);
+
+                deploySw.Stop();
+                await EmitPhaseAsync(job.Id, PhaseEventKind.End, "worker.deployer.invoke",
+                    status: success ? PhaseStatus.Ok : PhaseStatus.Fail,
+                    durationMs: deploySw.ElapsedMilliseconds, ct: jobCt);
 
                 await logBuffer.FlushAsync();
 
@@ -414,4 +446,29 @@ public class RemoteWorkerBackgroundService : BackgroundService
     private static string SanitizeName(string name) =>
         string.Concat(name.Select(c => Path.GetInvalidPathChars().Contains(c) ? '_' : c))
               .Replace(' ', '-');
+
+    /// <summary>
+    /// Sends a worker-side phase event (e.g. <c>worker.git.clone</c>) to the
+    /// coordinator. Telemetry-only — failures are swallowed by
+    /// <see cref="IWorkerJobSource.PostJobPhaseAsync"/> and never break the build.
+    /// </summary>
+    private Task EmitPhaseAsync(
+        Guid jobId,
+        PhaseEventKind kind,
+        string name,
+        PhaseStatus status = PhaseStatus.Unknown,
+        long? durationMs = null,
+        Dictionary<string, string>? attrs = null,
+        CancellationToken ct = default)
+    {
+        var ev = new PhaseEvent
+        {
+            Kind = kind,
+            Name = name,
+            Status = status,
+            DurationMs = durationMs,
+            Attrs = attrs ?? new Dictionary<string, string>()
+        };
+        return jobSource.PostJobPhaseAsync(jobId, ev, ct);
+    }
 }

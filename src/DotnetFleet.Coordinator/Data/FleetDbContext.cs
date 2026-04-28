@@ -14,6 +14,7 @@ public class FleetDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Secret> Secrets => Set<Secret>();
     public DbSet<JobDurationStat> JobDurationStats => Set<JobDurationStat>();
+    public DbSet<JobPhase> JobPhases => Set<JobPhase>();
 
     public FleetDbContext(DbContextOptions<FleetDbContext> options) : base(options) { }
 
@@ -78,6 +79,13 @@ public class FleetDbContext : DbContext
         {
             e.HasKey(s => new { s.ProjectId, s.WorkerId });
             e.HasIndex(s => s.WorkerId);
+        });
+
+        modelBuilder.Entity<JobPhase>(e =>
+        {
+            e.HasKey(p => p.Id);
+            e.HasIndex(p => p.JobId);
+            e.HasIndex(p => new { p.JobId, p.StartedAt });
         });
     }
 }

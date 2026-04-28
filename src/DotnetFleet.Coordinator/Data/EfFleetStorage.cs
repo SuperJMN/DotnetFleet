@@ -284,6 +284,118 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         await db.SaveChangesAsync(ct);
     }
 
+    // Phases
+    public async Task RecordJobPhaseAsync(Guid jobId, PhaseEvent ev, DateTimeOffset receivedAt, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+
+        switch (ev.Kind)
+        {
+            case PhaseEventKind.Start:
+            {
+                var row = new JobPhase
+                {
+                    JobId = jobId,
+                    Name = ev.Name,
+                    StartedAt = receivedAt,
+                    Status = PhaseStatus.Unknown,
+                    AttrsJson = ev.Attrs.Count > 0
+                        ? System.Text.Json.JsonSerializer.Serialize(ev.Attrs)
+                        : null
+                };
+                db.JobPhases.Add(row);
+
+                var job = await db.DeploymentJobs.FindAsync([jobId], ct);
+                if (job is not null)
+                {
+                    job.CurrentPhase = ev.Name;
+                    job.CurrentPhaseStartedAt = receivedAt;
+                }
+                break;
+            }
+
+            case PhaseEventKind.End:
+            {
+                // Match the most recent open row with the same name.
+                var open = await db.JobPhases
+                    .Where(p => p.JobId == jobId && p.Name == ev.Name && p.EndedAt == null)
+                    .OrderByDescending(p => p.StartedAt)
+                    .FirstOrDefaultAsync(ct);
+
+                if (open is not null)
+                {
+                    open.EndedAt = receivedAt;
+                    open.Status = ev.Status;
+                    open.DurationMs = ev.DurationMs ?? (long)(receivedAt - open.StartedAt).TotalMilliseconds;
+                    if (ev.Attrs.Count > 0)
+                    {
+                        // Merge end attrs (e.g. size_bytes) into the persisted row.
+                        var existing = string.IsNullOrEmpty(open.AttrsJson)
+                            ? new Dictionary<string, string>()
+                            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(open.AttrsJson)
+                                ?? new Dictionary<string, string>();
+                        foreach (var kv in ev.Attrs) existing[kv.Key] = kv.Value;
+                        open.AttrsJson = System.Text.Json.JsonSerializer.Serialize(existing);
+                    }
+                }
+                else
+                {
+                    // No matching open row — record a synthetic closed entry so the timeline
+                    // still reflects the event (e.g. lost start due to crash on the worker).
+                    db.JobPhases.Add(new JobPhase
+                    {
+                        JobId = jobId,
+                        Name = ev.Name,
+                        StartedAt = receivedAt,
+                        EndedAt = receivedAt,
+                        Status = ev.Status,
+                        DurationMs = ev.DurationMs,
+                        AttrsJson = ev.Attrs.Count > 0
+                            ? System.Text.Json.JsonSerializer.Serialize(ev.Attrs)
+                            : null
+                    });
+                }
+
+                // Clear desnormalized cache only if it still points at this phase.
+                var job = await db.DeploymentJobs.FindAsync([jobId], ct);
+                if (job is not null && job.CurrentPhase == ev.Name)
+                {
+                    job.CurrentPhase = null;
+                    job.CurrentPhaseStartedAt = null;
+                }
+                break;
+            }
+
+            case PhaseEventKind.Info:
+            {
+                db.JobPhases.Add(new JobPhase
+                {
+                    JobId = jobId,
+                    Name = ev.Name,
+                    StartedAt = receivedAt,
+                    EndedAt = receivedAt,
+                    Status = PhaseStatus.Unknown,
+                    Message = ev.Message,
+                    AttrsJson = ev.Attrs.Count > 0
+                        ? System.Text.Json.JsonSerializer.Serialize(ev.Attrs)
+                        : null
+                });
+                break;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<JobPhase>> GetJobPhasesAsync(Guid jobId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.JobPhases
+            .Where(p => p.JobId == jobId)
+            .OrderBy(p => p.StartedAt)
+            .ToListAsync(ct);
+    }
+
     // Workers
     public async Task<IReadOnlyList<Worker>> GetWorkersAsync(CancellationToken ct = default)
     {

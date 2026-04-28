@@ -106,6 +106,22 @@ public interface IFleetStorage
     Task<IReadOnlyList<LogEntry>> GetLogsAsync(Guid jobId, CancellationToken ct = default);
     Task AddLogEntriesAsync(IEnumerable<LogEntry> entries, CancellationToken ct = default);
 
+    // Phases
+    /// <summary>
+    /// Records a phase event (start/end/info) for a job. For <c>start</c> events,
+    /// inserts a new row. For <c>end</c> events, updates the most recent matching
+    /// open row (same JobId+Name). For <c>info</c> events, inserts a self-contained
+    /// row with EndedAt == StartedAt. Also updates the desnormalized
+    /// <c>Job.CurrentPhase</c> / <c>Job.CurrentPhaseStartedAt</c> caches so
+    /// <c>GetJobAsync</c> can render "current phase" without a join.
+    /// </summary>
+    Task RecordJobPhaseAsync(Guid jobId, PhaseEvent ev, DateTimeOffset receivedAt, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the chronological phase timeline for a job (oldest first).
+    /// </summary>
+    Task<IReadOnlyList<JobPhase>> GetJobPhasesAsync(Guid jobId, CancellationToken ct = default);
+
     // Workers
     Task<IReadOnlyList<Worker>> GetWorkersAsync(CancellationToken ct = default);
     Task<Worker?> GetWorkerAsync(Guid id, CancellationToken ct = default);

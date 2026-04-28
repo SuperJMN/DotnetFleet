@@ -47,6 +47,30 @@ public class RemoteWorkerJobSource : IWorkerJobSource
             logger.LogWarning("POST /api/queue/jobs/{JobId}/logs failed with {Status}", jobId, (int)resp.StatusCode);
     }
 
+    public async Task PostJobPhaseAsync(Guid jobId, PhaseEvent ev, CancellationToken ct = default)
+    {
+        var payload = new
+        {
+            kind = ev.Kind.ToString(),
+            name = ev.Name,
+            status = ev.Status == PhaseStatus.Unknown ? null : ev.Status.ToString(),
+            durationMs = ev.DurationMs,
+            message = ev.Message,
+            attrs = ev.Attrs.Count == 0 ? null : ev.Attrs
+        };
+        try
+        {
+            var resp = await http.PostAsJsonAsync($"/api/queue/jobs/{jobId}/phase", payload, ct);
+            if (!resp.IsSuccessStatusCode)
+                logger.LogDebug("POST /api/queue/jobs/{JobId}/phase failed with {Status}", jobId, (int)resp.StatusCode);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Phase telemetry must never break a deployment.
+            logger.LogDebug(ex, "Posting phase event for {JobId} failed", jobId);
+        }
+    }
+
     public async Task ReportJobCompletedAsync(Guid jobId, bool success, string? errorMessage, CancellationToken ct = default)
     {
         var payload = new { success, errorMessage };

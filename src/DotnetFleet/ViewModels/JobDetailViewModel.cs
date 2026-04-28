@@ -34,6 +34,16 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     [Reactive] private LogSeverity _minSeverity = LogSeverity.None;
     [Reactive] private string _searchText = string.Empty;
     [Reactive] private string _searchResultText = string.Empty;
+    [Reactive] private string? _currentPhase;
+    [Reactive] private DateTimeOffset? _currentPhaseStartedAt;
+
+    public ObservableCollection<JobPhaseRow> Phases { get; } = new();
+
+    public bool HasPhases => Phases.Count > 0;
+    public bool HasCurrentPhase => !string.IsNullOrEmpty(_currentPhase);
+    public string CurrentPhaseDisplay => string.IsNullOrEmpty(_currentPhase)
+        ? string.Empty
+        : FormatPhaseName(_currentPhase!);
 
     public bool HasError => !string.IsNullOrWhiteSpace(_errorMessage);
 
@@ -87,9 +97,84 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         {
             CanCancel = true;
             StartStreaming();
+            StartPhasePolling();
         }
         else
+        {
             LoadLogsAsync().ConfigureAwait(false);
+            // One-shot phase load for terminal jobs so the timeline still shows up.
+            _ = RefreshPhasesAsync(default);
+        }
+    }
+
+    /// <summary>
+    /// Polls <c>/api/jobs/{id}/phases</c> every 2s while the job is in flight.
+    /// Cheap (one row per phase event, indexed by JobId) and simpler than a
+    /// dedicated SSE channel for what is essentially low-frequency data.
+    /// </summary>
+    private void StartPhasePolling()
+    {
+        if (_cts is null) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!_cts.IsCancellationRequested)
+                {
+                    await RefreshPhasesAsync(_cts.Token);
+                    try { await Task.Delay(TimeSpan.FromSeconds(2), _cts.Token); }
+                    catch (OperationCanceledException) { break; }
+                }
+            }
+            catch { /* phase polling is telemetry — never let it crash the VM */ }
+        });
+    }
+
+    private async Task RefreshPhasesAsync(CancellationToken ct)
+    {
+        try
+        {
+            var phases = await _client.GetJobPhasesAsync(Job.Id);
+            var job = await _client.GetJobAsync(Job.Id);
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                Phases.Clear();
+                foreach (var p in phases) Phases.Add(JobPhaseRow.From(p, FormatPhaseName));
+                CurrentPhase = job?.CurrentPhase;
+                CurrentPhaseStartedAt = job?.CurrentPhaseStartedAt;
+                this.RaisePropertyChanged(nameof(HasCurrentPhase));
+                this.RaisePropertyChanged(nameof(HasPhases));
+                this.RaisePropertyChanged(nameof(CurrentPhaseDisplay));
+            });
+        }
+        catch { /* ignore transient fetch errors */ }
+    }
+
+    /// <summary>
+    /// Maps a phase id (e.g. <c>package.generate.deb.x64</c>) to a human label
+    /// (e.g. "Package · deb · x64"). Keeps the UI readable without forcing
+    /// the backend to localise.
+    /// </summary>
+    private static string FormatPhaseName(string name)
+    {
+        return name switch
+        {
+            "worker.git.clone" => "Cloning repository",
+            "worker.deployer.invoke" => "Running DotnetDeployer",
+            "version.resolve" => "Resolving version",
+            "workload.restore" => "Restoring workloads",
+            "android.prereqs" => "Installing Android prerequisites",
+            "nuget.deploy" => "Publishing to NuGet",
+            "nuget.pack" => "Packing NuGet",
+            "nuget.push" => "Pushing NuGet",
+            "github.deploy" => "Publishing to GitHub Releases",
+            "github.pages.deploy" => "Publishing to GitHub Pages",
+            "github.release.create" => "Creating GitHub release",
+            "github.release.upload" => "Uploading release asset",
+            _ when name.StartsWith("package.generate.") =>
+                "Packaging · " + name["package.generate.".Length..].Replace('.', ' '),
+            _ => name
+        };
     }
 
     public ReactiveCommand<Unit, Unit> BackCommand { get; }

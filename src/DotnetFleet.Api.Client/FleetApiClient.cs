@@ -165,6 +165,15 @@ public class FleetApiClient
     public async Task<DeploymentJob?> GetJobAsync(Guid id) =>
         await http.GetFromJsonAsync<DeploymentJob>($"/api/jobs/{id}", JsonOptions);
 
+    /// <summary>
+    /// Returns the chronological phase timeline for a job (oldest first).
+    /// Phases are emitted by the worker (<c>worker.git.clone</c>,
+    /// <c>worker.deployer.invoke</c>) and by DotnetDeployer itself
+    /// (<c>version.resolve</c>, <c>package.generate.*</c>, …).
+    /// </summary>
+    public async Task<List<JobPhase>> GetJobPhasesAsync(Guid id) =>
+        await http.GetFromJsonAsync<List<JobPhase>>($"/api/jobs/{id}/phases", JsonOptions) ?? [];
+
     public async Task CancelJobAsync(Guid jobId)
     {
         var response = await http.PostAsync($"/api/jobs/{jobId}/cancel", null);

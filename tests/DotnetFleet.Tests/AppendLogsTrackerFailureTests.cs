@@ -112,6 +112,10 @@ public class AppendLogsTrackerFailureTests : IDisposable
         public Task<JobDurationStat?> GetJobDurationStatAsync(Guid projectId, Guid workerId, CancellationToken ct = default) => inner.GetJobDurationStatAsync(projectId, workerId, ct);
         public Task<IReadOnlyList<JobDurationStat>> GetJobDurationStatsForProjectAsync(Guid projectId, CancellationToken ct = default) => inner.GetJobDurationStatsForProjectAsync(projectId, ct);
         public Task UpsertJobDurationStatAsync(Guid projectId, Guid workerId, double newEwmaMs, int samples, CancellationToken ct = default) => inner.UpsertJobDurationStatAsync(projectId, workerId, newEwmaMs, samples, ct);
+
+        // Phase tracking additions.
+        public Task RecordJobPhaseAsync(Guid jobId, PhaseEvent ev, DateTimeOffset receivedAt, CancellationToken ct = default) => inner.RecordJobPhaseAsync(jobId, ev, receivedAt, ct);
+        public Task<IReadOnlyList<JobPhase>> GetJobPhasesAsync(Guid jobId, CancellationToken ct = default) => inner.GetJobPhasesAsync(jobId, ct);
     }
 
     private sealed class CapturingLoggerProvider : ILoggerProvider

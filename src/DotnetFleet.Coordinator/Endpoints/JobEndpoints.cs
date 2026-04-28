@@ -15,6 +15,7 @@ public static class JobEndpoints
         group.MapGet("/", GetAll);
         group.MapGet("/{id:guid}", GetById);
         group.MapGet("/{id:guid}/logs", StreamLogs);
+        group.MapGet("/{id:guid}/phases", GetPhases);
         group.MapPost("/{id:guid}/cancel", CancelJob);
 
         // Worker internal endpoints (authenticated by worker secret header)
@@ -22,6 +23,7 @@ public static class JobEndpoints
         workerGroup.MapGet("/next", GetNextJob).RequireAuthorization("Worker");
         workerGroup.MapPost("/jobs/{id:guid}/start", ReportStarted).RequireAuthorization("Worker");
         workerGroup.MapPost("/jobs/{id:guid}/logs", AppendLogs).RequireAuthorization("Worker");
+        workerGroup.MapPost("/jobs/{id:guid}/phase", AppendPhase).RequireAuthorization("Worker");
         workerGroup.MapPost("/jobs/{id:guid}/complete", ReportCompleted).RequireAuthorization("Worker");
         workerGroup.MapGet("/jobs/{id:guid}/should-cancel", ShouldCancel).RequireAuthorization("Worker");
     }
@@ -355,6 +357,62 @@ public static class JobEndpoints
 
     public record AppendLogsRequest(string[] Lines);
     public record CompleteJobRequest(bool Success, string? ErrorMessage);
+
+    /// <summary>
+    /// Wire-format for a phase event posted by a worker. Mirrors
+    /// <see cref="PhaseEvent"/> but uses string Kind/Status to keep the wire
+    /// stable across enum reorderings.
+    /// </summary>
+    public record AppendPhaseRequest(
+        string Kind,
+        string Name,
+        string? Status,
+        long? DurationMs,
+        string? Message,
+        Dictionary<string, string>? Attrs);
+
+    private static async Task<IResult> GetPhases(Guid id, IFleetStorage storage)
+    {
+        var phases = await storage.GetJobPhasesAsync(id);
+        return Results.Ok(phases);
+    }
+
+    private static async Task<IResult> AppendPhase(
+        Guid id,
+        [FromBody] AppendPhaseRequest req,
+        HttpContext httpContext,
+        IFleetStorage storage)
+    {
+        if (!TryGetWorkerId(httpContext, out var workerId))
+            return Results.Forbid();
+
+        var job = await storage.GetJobAsync(id);
+        if (job is null) return Results.NotFound();
+        if (job.WorkerId != workerId) return Results.Forbid();
+
+        if (string.IsNullOrEmpty(req.Name))
+            return Results.BadRequest(new { error = "name is required" });
+
+        if (!Enum.TryParse<PhaseEventKind>(req.Kind, ignoreCase: true, out var kind))
+            return Results.BadRequest(new { error = $"unknown kind '{req.Kind}'" });
+
+        var status = PhaseStatus.Unknown;
+        if (!string.IsNullOrEmpty(req.Status))
+            Enum.TryParse(req.Status, ignoreCase: true, out status);
+
+        var ev = new PhaseEvent
+        {
+            Kind = kind,
+            Name = req.Name,
+            Status = status,
+            DurationMs = req.DurationMs,
+            Message = req.Message,
+            Attrs = req.Attrs ?? new Dictionary<string, string>()
+        };
+
+        await storage.RecordJobPhaseAsync(id, ev, DateTimeOffset.UtcNow);
+        return Results.Ok();
+    }
 
     private static async Task<IResult> CancelJob(
         Guid id,

@@ -34,4 +34,19 @@ public class DeploymentJob
     /// output. Null until the first version line is observed; once set, it is not overwritten.
     /// </summary>
     public string? Version { get; set; }
+
+    /// <summary>
+    /// Desnormalized cache of the most recent open phase for this job (e.g.
+    /// <c>worker.git.clone</c>, <c>package.generate.deb.x64</c>). Updated by the
+    /// coordinator from worker phase events. Null when no phase is in flight.
+    /// Persisted alongside <see cref="DeploymentJob"/> so the UI can render
+    /// "current phase" without joining the JobPhases timeline.
+    /// </summary>
+    public string? CurrentPhase { get; set; }
+
+    /// <summary>
+    /// Timestamp of the most recent <c>phase.start</c> for this job. Used by the
+    /// UI to compute "elapsed in current phase".
+    /// </summary>
+    public DateTimeOffset? CurrentPhaseStartedAt { get; set; }
 }

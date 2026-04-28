@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Threading.Channels;
+using DotnetFleet.Core.Domain;
 
 namespace DotnetFleet.WorkerService.Execution;
 
@@ -13,6 +14,8 @@ public static class DeployerRunner
     /// that isn't always present (e.g. runtime-only installs, older .NET 10 previews,
     /// or service environments where it isn't on <c>PATH</c>).
     /// Captures stdout/stderr line by line via <paramref name="onLine"/>.
+    /// Lines matching the <c>##deployer[phase.*]</c> protocol are parsed and routed
+    /// to <paramref name="onPhase"/> instead (and NOT forwarded to <paramref name="onLine"/>).
     /// Injects <paramref name="envVars"/> as extra environment variables for the child process.
     /// Returns true on exit code 0.
     /// </summary>
@@ -20,6 +23,7 @@ public static class DeployerRunner
         string workingDirectory,
         Func<string, Task> onLine,
         IReadOnlyDictionary<string, string>? envVars = null,
+        Func<PhaseEvent, Task>? onPhase = null,
         CancellationToken ct = default)
     {
         var dotnet = ResolveDotnetExecutable();
@@ -83,6 +87,21 @@ public static class DeployerRunner
             {
                 await foreach (var line in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
                 {
+                    // Detect ##deployer[phase.*] markers and route them to onPhase.
+                    // Markers are stripped from the line stream so they don't
+                    // pollute the human-readable log.
+                    if (onPhase is not null)
+                    {
+                        var ev = PhaseMarkerParser.TryParse(line);
+                        if (ev is not null)
+                        {
+                            try { await onPhase(ev).ConfigureAwait(false); }
+                            catch (OperationCanceledException) { throw; }
+                            catch { /* never let phase-event delivery tear down the build */ }
+                            continue;
+                        }
+                    }
+
                     try { await onLine(line).ConfigureAwait(false); }
                     catch (OperationCanceledException) { throw; }
                     catch { /* never let a transient log delivery failure tear down the build */ }

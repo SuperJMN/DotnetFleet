@@ -191,6 +191,30 @@ public static class CoordinatorHostBuilder
         await EnsureJobColumnAsync(db, "AssignedAt", "INTEGER NULL");
         await EnsureJobColumnAsync(db, "EstimatedDurationMs", "INTEGER NULL");
 
+        // High-level phase tracking: desnormalized cache of the current phase
+        // for cheap "fase actual" reads, plus a JobPhases timeline table.
+        await EnsureJobColumnAsync(db, "CurrentPhase", "TEXT NULL");
+        await EnsureJobColumnAsync(db, "CurrentPhaseStartedAt", "INTEGER NULL");
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "JobPhases" (
+                "Id"          TEXT NOT NULL CONSTRAINT "PK_JobPhases" PRIMARY KEY,
+                "JobId"       TEXT NOT NULL,
+                "Name"        TEXT NOT NULL,
+                "StartedAt"   INTEGER NOT NULL,
+                "EndedAt"     INTEGER NULL,
+                "Status"      INTEGER NOT NULL,
+                "DurationMs"  INTEGER NULL,
+                "Message"     TEXT NULL,
+                "AttrsJson"   TEXT NULL,
+                FOREIGN KEY ("JobId") REFERENCES "DeploymentJobs"("Id") ON DELETE CASCADE
+            )
+            """);
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS \"IX_JobPhases_JobId\" ON \"JobPhases\" (\"JobId\")");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS \"IX_JobPhases_JobId_StartedAt\" ON \"JobPhases\" (\"JobId\", \"StartedAt\")");
+
         // EWMA stats table (per project + worker, used by JobAssignmentService).
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "JobDurationStats" (
