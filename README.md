@@ -138,6 +138,33 @@ cd src/DotnetFleet.Desktop
 dotnet run
 ```
 
+#### Auto-updates on Linux (recommended)
+
+The desktop app does not self-update. On Linux, install the AppImage with an
+external manager so new releases are pulled automatically — the same idea as
+[Obtainium](https://github.com/ImranR98/Obtainium) on Android.
+
+The most convenient option today is [Zap](https://github.com/srevinsaju/zap):
+
+```bash
+# Install the manager once
+curl https://raw.githubusercontent.com/srevinsaju/zap/main/install.sh | bash
+
+# Install DotnetFleet from GitHub Releases (picks the right arch automatically)
+zap install --from-github SuperJMN/DotnetFleet
+
+# Later, update everything tracked by Zap
+zap update --all
+```
+
+Alternatives: [AM / AppMan](https://github.com/ivan-hc/AM) (CLI, broader catalog)
+or [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) (GTK4 GUI for
+GNOME). Both can track the GitHub release feed and surface updates without any
+support code in DotnetFleet itself.
+
+On Windows and macOS, just download the new installer / DMG from the releases
+page when you want to upgrade.
+
 ---
 
 ## Getting Started
