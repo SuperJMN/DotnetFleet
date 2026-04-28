@@ -356,12 +356,21 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
                     });
                 }
 
-                // Clear desnormalized cache only if it still points at this phase.
+                // Update denormalized cache. If this end matches the current cache,
+                // walk back to the most-recent still-open phase (LIFO stack semantics):
+                // when an inner phase ends inside a wrapper (e.g. github.release.create
+                // ending while github.deploy is still open), the UI should fall back to
+                // showing the wrapper rather than blanking out.
                 var job = await db.DeploymentJobs.FindAsync([jobId], ct);
                 if (job is not null && job.CurrentPhase == ev.Name)
                 {
-                    job.CurrentPhase = null;
-                    job.CurrentPhaseStartedAt = null;
+                    var stillOpen = await db.JobPhases
+                        .Where(p => p.JobId == jobId && p.EndedAt == null)
+                        .OrderByDescending(p => p.StartedAt)
+                        .Select(p => new { p.Name, p.StartedAt })
+                        .FirstOrDefaultAsync(ct);
+                    job.CurrentPhase = stillOpen?.Name;
+                    job.CurrentPhaseStartedAt = stillOpen?.StartedAt;
                 }
                 break;
             }
