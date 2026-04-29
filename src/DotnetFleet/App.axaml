@@ -42,7 +42,7 @@
                 <ItemsControl ItemsSource="{Binding Actions}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <FlexPanel Wrap="Wrap" RowGap="8" ColumnGap="8" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
