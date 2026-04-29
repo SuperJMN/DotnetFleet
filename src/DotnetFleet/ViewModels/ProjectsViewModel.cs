@@ -9,7 +9,7 @@ using Zafiro.UI.Shell.Utils;
 
 namespace DotnetFleet.ViewModels;
 
-[Section(name: "projects", icon: "mdi-folder-outline", sortIndex: 0)]
+[Section(name: "Projects", icon: "mdi-folder-outline", sortIndex: 0)]
 public partial class ProjectsViewModel : ReactiveObject
 {
     private readonly FleetApiClient _client;

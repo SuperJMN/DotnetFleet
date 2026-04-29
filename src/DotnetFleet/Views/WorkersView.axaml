@@ -22,7 +22,8 @@
                 <ItemsPanelTemplate>
                     <BalancedWrapGrid MinItemWidth="320"
                                       HorizontalSpacing="8"
-                                      VerticalSpacing="8" />
+                                      VerticalSpacing="8"
+                                      VerticalAlignment="Top" />
                 </ItemsPanelTemplate>
             </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>

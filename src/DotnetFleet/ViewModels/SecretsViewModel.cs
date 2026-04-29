@@ -8,7 +8,7 @@ using Zafiro.UI.Shell.Utils;
 
 namespace DotnetFleet.ViewModels;
 
-[Section(name: "secrets", icon: "mdi-key-outline", sortIndex: 2)]
+[Section(name: "Secrets", icon: "mdi-key-outline", sortIndex: 2)]
 public partial class SecretsViewModel : ReactiveObject
 {
     private readonly FleetApiClient _client;

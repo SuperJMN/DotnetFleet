@@ -18,7 +18,7 @@
     <PackageReference Include="ReactiveUI.Avalonia" />
     <PackageReference Include="DynamicData" />
     <PackageReference Include="Zafiro.Avalonia" />
-    <PackageReference Include="Zafiro.Avalonia.Generators" />
+    <PackageReference Include="Zafiro.Avalonia.Generators" PrivateAssets="all" />
     <PackageReference Include="Zafiro.Avalonia.Dialogs" />
     <PackageReference Include="Zafiro.Avalonia.Icons.Optris" />
     <PackageReference Include="Zafiro.UI" />

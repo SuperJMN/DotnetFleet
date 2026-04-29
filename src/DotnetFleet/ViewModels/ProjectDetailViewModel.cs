@@ -32,7 +32,6 @@ public partial class ProjectDetailViewModel : ReactiveObject
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadJobsAsync);
         DeployCommand = ReactiveCommand.CreateFromTask(DeployAsync);
         ClearFinishedJobsCommand = ReactiveCommand.CreateFromTask(ClearFinishedJobsAsync);
-        BackCommand = ReactiveCommand.CreateFromTask(async () => { await _navigator.GoBack(); });
         EditCommand = ReactiveCommand.Create(() =>
         {
             _navigator.Go(() => new EditProjectViewModel(Project, _client, _navigator, projectsForRefresh: null));
@@ -47,7 +46,6 @@ public partial class ProjectDetailViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> DeployCommand { get; }
     public ReactiveCommand<Unit, Unit> ClearFinishedJobsCommand { get; }
-    public ReactiveCommand<Unit, Unit> BackCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
 
     private async Task LoadJobsAsync()

@@ -42,6 +42,14 @@ public partial class AppShellViewModel : ReactiveObject, IDisposable
         LogoutCommand = ReactiveCommand.CreateFromTask(bootstrapper.LogoutAsync);
     }
 
+    public void EnsureInitialSection()
+    {
+        if (Shell.SelectedSection.Value is null)
+        {
+            Shell.GoToSection("Projects");
+        }
+    }
+
     public IShell Shell { get; }
     public ReactiveCommand<Unit, Unit> ReconnectCommand { get; }
     public ReactiveCommand<Unit, Unit> LogoutCommand { get; }

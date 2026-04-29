@@ -11,7 +11,6 @@
         <FlexPanel DockPanel.Dock="Top"
                    Wrap="Wrap" Gap="12" AlignItems="Center"
                    Margin="0,0,0,12">
-            <Button Content="← Back" Command="{Binding BackCommand}" />
             <StackPanel Spacing="2" VerticalAlignment="Center"
                         FlexPanel.Grow="1" MinWidth="200">
                 <TextBlock FontSize="16" FontWeight="Bold" TextTrimming="CharacterEllipsis">

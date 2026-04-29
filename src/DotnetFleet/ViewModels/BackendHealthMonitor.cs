@@ -120,7 +120,7 @@ public sealed class BackendHealthMonitor : IBackendHealthMonitor
             }
 
             var ok = new BackendHealthSnapshot(
-                BackendHealth.Healthy, "Connected", DateTimeOffset.UtcNow, version, sw.Elapsed, endpoint);
+                BackendHealth.Healthy, null, DateTimeOffset.UtcNow, version, sw.Elapsed, endpoint);
             _subject.OnNext(ok);
             return ok;
         }

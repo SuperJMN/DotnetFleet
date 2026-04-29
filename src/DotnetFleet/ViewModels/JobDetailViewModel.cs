@@ -70,7 +70,6 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         _statusText = FormatStatus(job.Status);
         _errorMessage = job.ErrorMessage;
 
-        BackCommand = ReactiveCommand.Create(GoBack);
         CopyLogsCommand = ReactiveCommand.CreateFromTask(CopyLogsToClipboard);
         NextSearchResultCommand = ReactiveCommand.Create(NavigateNextSearchResult);
         CancelJobCommand = ReactiveCommand.CreateFromTask(CancelJobAsync,
@@ -177,7 +176,6 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         };
     }
 
-    public ReactiveCommand<Unit, Unit> BackCommand { get; }
     public ReactiveCommand<Unit, Unit> CopyLogsCommand { get; }
     public ReactiveCommand<Unit, Unit> NextSearchResultCommand { get; }
     public ReactiveCommand<Unit, Unit> CancelJobCommand { get; }
@@ -319,12 +317,6 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         if (TerminalModel is null) return;
         foreach (var line in batch)
             TerminalModel.Feed(LogAnsi.Format(line) + "\r\n");
-    }
-
-    private void GoBack()
-    {
-        _cts?.Cancel();
-        _navigator.GoBack();
     }
 
     public void Dispose()
