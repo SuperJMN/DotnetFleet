@@ -16,6 +16,10 @@
         <Style Selector="icons|Icon">
             <Setter Property="FontSize" Value="14" />
         </Style>
+
+        <Style Selector="Frame">
+            <Setter Property="Padding" Value="0" />
+        </Style>
     </Application.Styles>
 
     <Application.DataTemplates>
