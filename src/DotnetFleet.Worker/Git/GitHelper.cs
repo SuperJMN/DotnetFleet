@@ -33,6 +33,17 @@ public static class GitHelper
             await RunGitAsync(["checkout", branch], localPath, log, ct);
             await RunGitAsync(["reset", "--hard", $"origin/{branch}"], localPath, log, ct);
 
+            // Move every submodule HEAD to the commit recorded in the (just-updated) parent
+            // tree. `git fetch --recurse-submodules` only downloads objects; it does NOT
+            // advance the working tree of the submodules, and neither does `reset --hard`
+            // on the parent. Without an explicit `submodule update`, a submodule cloned at
+            // commit A stays on A forever, even if the parent now points at B — leading to
+            // builds against stale source (e.g. missing APIs added in B).
+            // `sync` first in case the submodule URL changed, `--force` to discard any
+            // working-tree changes inside the submodule.
+            await RunGitAsync(["submodule", "sync", "--recursive"], localPath, log, ct);
+            await RunGitAsync(["submodule", "update", "--init", "--recursive", "--force"], localPath, log, ct);
+
             // Wipe untracked/ignored files (bin/, obj/, generated artifacts, NuGet caches
             // local to the project, etc.) so every job starts from a state equivalent
             // to a fresh clone. Without this, MSBuild's incremental build can reuse
