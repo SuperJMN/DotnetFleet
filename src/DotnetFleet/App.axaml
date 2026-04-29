@@ -47,13 +47,23 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:HeaderAction">
-                            <zac:EnhancedButton Content="{Binding Text}"
-                                                Command="{Binding Command}"
-                                                Classes.Primary="{Binding IsPrimary}">
-                                <zac:EnhancedButton.Icon>
+                            <Panel>
+                                <!-- Primary: icon + text -->
+                                <zac:EnhancedButton Content="{Binding Text}"
+                                                    Command="{Binding Command}"
+                                                    Classes="Primary"
+                                                    IsVisible="{Binding IsPrimary}">
+                                    <zac:EnhancedButton.Icon>
+                                        <icons:Icon Value="{Binding IconCode}" />
+                                    </zac:EnhancedButton.Icon>
+                                </zac:EnhancedButton>
+                                <!-- Secondary: icon-only with tooltip (icon as Content to bypass Zafiro 51.9.0 IconPresenter bug) -->
+                                <zac:EnhancedButton Command="{Binding Command}"
+                                                    ToolTip.Tip="{Binding Text}"
+                                                    IsVisible="{Binding !IsPrimary}">
                                     <icons:Icon Value="{Binding IconCode}" />
-                                </zac:EnhancedButton.Icon>
-                            </zac:EnhancedButton>
+                                </zac:EnhancedButton>
+                            </Panel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

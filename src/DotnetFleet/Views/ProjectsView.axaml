@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             xmlns:icons="clr-namespace:Optris.Icons.Avalonia;assembly=Optris.Icons.Avalonia"
              x:Class="DotnetFleet.Views.ProjectsView"
              x:DataType="vm:ProjectsViewModel">
 
@@ -44,10 +45,12 @@
                             </StackPanel>
                             <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
                                 <EnhancedButton Content="Open" Icon="{Icon mdi-folder-open-outline}" Classes="Primary" Command="{Binding OpenCommand}" />
-                                <EnhancedButton Content="Edit" Icon="{Icon mdi-pencil}" Command="{Binding EditCommand}" />
-                                <EnhancedButton Content="Delete" Icon="{Icon mdi-delete-outline}"
-                                                Classes="Destructive"
-                                                Command="{Binding DeleteCommand}" />
+                                <EnhancedButton ToolTip.Tip="Edit" Command="{Binding EditCommand}">
+                                    <icons:Icon Value="mdi-pencil" />
+                                </EnhancedButton>
+                                <EnhancedButton ToolTip.Tip="Delete" Classes="Destructive" Command="{Binding DeleteCommand}">
+                                    <icons:Icon Value="mdi-delete-outline" />
+                                </EnhancedButton>
                             </FlexPanel>
                         </FlexPanel>
                     </Border>
