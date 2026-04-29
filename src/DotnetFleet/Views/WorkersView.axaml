@@ -12,7 +12,7 @@
         <ListBox ItemsSource="{Binding Workers}" Background="Transparent">
             <ListBox.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <BalancedWrapGrid MinItemWidth="320"
+                    <BalancedWrapGrid MinItemWidth="260"
                                       HorizontalSpacing="8"
                                       VerticalSpacing="8"
                                       VerticalAlignment="Top" />

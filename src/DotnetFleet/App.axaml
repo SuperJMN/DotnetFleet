@@ -28,7 +28,7 @@
         <DataTypeViewLocator />
 
         <DataTemplate DataType="vm:SectionHeader">
-            <FlexPanel Wrap="Wrap" JustifyContent="SpaceBetween" AlignItems="Center"
+            <FlexPanel Wrap="Wrap" AlignItems="Center"
                        RowGap="8" ColumnGap="12" Margin="16,12,16,8">
                 <StackPanel Spacing="2" FlexPanel.Grow="1" MinWidth="160">
                     <TextBlock Text="{Binding Title}"

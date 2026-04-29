@@ -14,7 +14,7 @@
         <ListBox ItemsSource="{Binding Projects}" Background="Transparent">
             <ListBox.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <BalancedWrapGrid MinItemWidth="380"
+                    <BalancedWrapGrid MinItemWidth="280"
                                       HorizontalSpacing="8"
                                       VerticalSpacing="8"
                                       VerticalAlignment="Top" />
