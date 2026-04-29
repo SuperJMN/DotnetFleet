@@ -45,9 +45,12 @@
                        TextWrapping="Wrap" />
 
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <Button Content="Cancel" Command="{Binding CancelCommand}" IsEnabled="{Binding !IsBusy}" />
-                <Button Content="Save"
-                        Command="{Binding SaveCommand}" IsEnabled="{Binding !IsBusy}" />
+                <EnhancedButton Content="Cancel" Icon="{Icon mdi-close}"
+                                Classes="Cancel"
+                                Command="{Binding CancelCommand}" IsEnabled="{Binding !IsBusy}" />
+                <EnhancedButton Content="Save" Icon="{Icon mdi-content-save}"
+                                Classes="Primary"
+                                Command="{Binding SaveCommand}" IsEnabled="{Binding !IsBusy}" />
             </StackPanel>
 
         </StackPanel>

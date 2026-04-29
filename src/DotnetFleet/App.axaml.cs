@@ -1,6 +1,7 @@
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using DotnetFleet.Api.Client;
@@ -12,6 +13,8 @@ using Serilog;
 using Zafiro.Avalonia.Dialogs;
 using Zafiro.Avalonia.Icons;
 using Zafiro.Avalonia.Misc;
+using Zafiro.Avalonia.Storage;
+using Zafiro.UI;
 using Zafiro.UI.Navigation;
 using Zafiro.UI.Shell;
 using Zafiro.UI.Shell.Utils;
@@ -51,6 +54,18 @@ public class App : Application
         services.AddAllSectionsFromAttributes(logger);
 
         services.AddSingleton(DialogService.Create());
+        services.AddSingleton<IFileSystemPicker>(_ => new AvaloniaFileSystemPicker(() =>
+        {
+            var lifetime = Current?.ApplicationLifetime;
+            return lifetime switch
+            {
+                IClassicDesktopStyleApplicationLifetime desktop when desktop.MainWindow is not null
+                    => TopLevel.GetTopLevel(desktop.MainWindow)!.StorageProvider,
+                ISingleViewApplicationLifetime singleView when singleView.MainView is not null
+                    => TopLevel.GetTopLevel(singleView.MainView)!.StorageProvider,
+                _ => throw new InvalidOperationException("No top-level available for file picker."),
+            };
+        }));
         services.AddTransient<ConnectDialogViewModel>();
         services.AddTransient<LoginDialogViewModel>();
         services.AddSingleton<AppBootstrapper>();

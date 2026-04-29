@@ -6,15 +6,6 @@
 
     <DockPanel Margin="16">
 
-        <!-- Toolbar: wraps on narrow widths -->
-        <FlexPanel DockPanel.Dock="Top"
-                   Wrap="Wrap" AlignItems="Center" Gap="8"
-                   Margin="0,0,0,12">
-            <TextBlock Text="Projects" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" />
-            <Button Content="＋ Add Project" Command="{Binding AddProjectCommand}" />
-            <Button Content="↺ Refresh" Command="{Binding RefreshCommand}" />
-        </FlexPanel>
-
         <!-- Loading indicator -->
         <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True"
                      IsVisible="{Binding IsLoading}" Height="4" Margin="0,0,0,8" />
@@ -31,9 +22,11 @@
             </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
                 <DataTemplate DataType="vm:ProjectViewModel">
-                    <Border Padding="12,8"
+                    <Border Padding="12"
                             Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                            CornerRadius="4">
+                            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6">
                         <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
                             <StackPanel Spacing="4" MinWidth="200" FlexPanel.Grow="1">
                                 <TextBlock Text="{Binding Project.Name}"
@@ -50,10 +43,11 @@
                                 </TextBlock>
                             </StackPanel>
                             <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
-                                <Button Content="Open" Command="{Binding OpenCommand}" />
-                                <Button Content="Edit" Command="{Binding EditCommand}" />
-                                <Button Content="Delete" Command="{Binding DeleteCommand}"
-                                        Foreground="Red" />
+                                <EnhancedButton Content="Open" Icon="{Icon mdi-folder-open-outline}" Classes="Primary" Command="{Binding OpenCommand}" />
+                                <EnhancedButton Content="Edit" Icon="{Icon mdi-pencil}" Command="{Binding EditCommand}" />
+                                <EnhancedButton Content="Delete" Icon="{Icon mdi-delete-outline}"
+                                                Classes="Destructive"
+                                                Command="{Binding DeleteCommand}" />
                             </FlexPanel>
                         </FlexPanel>
                     </Border>

@@ -1,16 +1,19 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Linq;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI;
+using Zafiro.UI.Commands;
 using Zafiro.UI.Navigation;
 using Zafiro.UI.Shell.Utils;
 
 namespace DotnetFleet.ViewModels;
 
 [Section(name: "Projects", icon: "mdi-folder-outline", sortIndex: 0)]
-public partial class ProjectsViewModel : ReactiveObject
+public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
 {
     private readonly FleetApiClient _client;
     internal readonly INavigator Navigator;
@@ -25,15 +28,27 @@ public partial class ProjectsViewModel : ReactiveObject
         _client = client;
         Navigator = navigator;
 
-        RefreshCommand = ReactiveCommand.CreateFromTask(LoadProjectsAsync);
-        AddProjectCommand = ReactiveCommand.Create(OpenAddProject);
+        var refresh = ReactiveCommand.CreateFromTask(LoadProjectsAsync);
+        refresh.ThrownExceptions.Subscribe(_ => { });
+        RefreshCommand = refresh.Enhance("Refresh");
 
-        RefreshCommand.ThrownExceptions.Subscribe(_ => { });
-        RefreshCommand.Execute(Unit.Default).Subscribe(_ => { }, _ => { });
+        AddProjectCommand = ReactiveCommand.Create(OpenAddProject).Enhance("Add Project");
+
+        Header = Observable.Return<object>(new SectionHeader("Projects",
+            new HeaderAction("Add Project", "mdi-plus", AddProjectCommand, IsPrimary: true),
+            new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
+
+        // Refresh whenever the client becomes authenticated. BehaviorSubject replays the current
+        // value, so this also covers the "already authenticated when the VM is built" case.
+        _client.AuthenticatedChanges
+            .Where(authenticated => authenticated)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => refresh.Execute(Unit.Default).Subscribe(_ => { }, _ => { }));
     }
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
-    public ReactiveCommand<Unit, Unit> AddProjectCommand { get; }
+    public IEnhancedCommand<Unit> RefreshCommand { get; }
+    public IEnhancedCommand<Unit> AddProjectCommand { get; }
+    public IObservable<object> Header { get; }
 
     private async Task LoadProjectsAsync()
     {

@@ -1,6 +1,9 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:misc="clr-namespace:Zafiro.Avalonia.Misc;assembly=Zafiro.Avalonia"
+             xmlns:icons="clr-namespace:Optris.Icons.Avalonia;assembly=Optris.Icons.Avalonia"
+             xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             xmlns:zac="clr-namespace:Zafiro.Avalonia.Controls;assembly=Zafiro.Avalonia"
              x:Class="DotnetFleet.App"
              RequestedThemeVariant="Dark">
 
@@ -9,12 +12,49 @@
         <StyleInclude Source="avares://Zafiro.Avalonia/Styles.axaml" />
         <StyleInclude Source="avares://Zafiro.Avalonia.Dialogs/Styles.axaml" />
         <StyleInclude Source="avares://AvaloniaTerminal/Styles/Colors.axaml" />
+
+        <Style Selector="icons|Icon">
+            <Setter Property="FontSize" Value="14" />
+        </Style>
     </Application.Styles>
 
     <Application.DataTemplates>
         <misc:DataTemplateInclude Source="avares://Zafiro.Avalonia/DataTemplates.axaml" />
         <NamingConventionGeneratedViewLocator />
         <DataTypeViewLocator />
+
+        <DataTemplate DataType="vm:SectionHeader">
+            <FlexPanel Wrap="Wrap" JustifyContent="SpaceBetween" AlignItems="Center"
+                       RowGap="8" ColumnGap="12" Margin="16,12,16,8">
+                <StackPanel Spacing="2" FlexPanel.Grow="1" MinWidth="160">
+                    <TextBlock Text="{Binding Title}"
+                               FontSize="20" FontWeight="Bold"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Subtitle}"
+                               FontSize="12" Opacity="0.6"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding Subtitle, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding Actions}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <FlexPanel Wrap="Wrap" RowGap="8" ColumnGap="8" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:HeaderAction">
+                            <zac:EnhancedButton Content="{Binding Text}"
+                                                Command="{Binding Command}"
+                                                Classes.Primary="{Binding IsPrimary}">
+                                <zac:EnhancedButton.Icon>
+                                    <icons:Icon Value="{Binding IconCode}" />
+                                </zac:EnhancedButton.Icon>
+                            </zac:EnhancedButton>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </FlexPanel>
+        </DataTemplate>
     </Application.DataTemplates>
 
 </Application>

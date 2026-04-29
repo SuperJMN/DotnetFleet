@@ -7,11 +7,14 @@ public static class LogSeverityClassifier
     private static readonly Regex FatalRegex = new(@"\b(FATAL|CRITICAL|PANIC)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Negative lookbehind excludes "0 Error(s)" / "0 errors" (MSBuild summaries).
+    // Negative lookahead excludes "Failed: 0" / "Errors = 0" (test summaries).
     private static readonly Regex ErrorRegex = new(
-        @"\b(ERROR|ERR|FAIL|FAILED|FAILURE|EXCEPTION)\b|\b\w*Exception\b",
+        @"(?<!\b0\s+)(\b(ERROR|ERRORS|ERR|FAIL|FAILED|FAILURE|EXCEPTION)\b|\b\w*Exception\b)(?!\s*[:=]\s*0\b)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static readonly Regex WarningRegex = new(@"\b(WARN|WARNING|WRN)\b",
+    private static readonly Regex WarningRegex = new(
+        @"(?<!\b0\s+)\b(WARN|WARNING|WARNINGS|WRN)\b(?!\s*[:=]\s*0\b)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex InfoRegex = new(@"\b(INFO|INF)\b",

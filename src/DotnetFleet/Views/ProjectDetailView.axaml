@@ -6,30 +6,6 @@
 
     <DockPanel Margin="16">
 
-        <!-- Header: wraps on narrow widths -->
-        <FlexPanel DockPanel.Dock="Top"
-                   Wrap="Wrap" Gap="8" AlignItems="Center"
-                   Margin="0,0,0,16">
-            <StackPanel Spacing="2"
-                        FlexPanel.Grow="1" MinWidth="200">
-                <TextBlock Text="{Binding Project.Name}" FontSize="20" FontWeight="Bold"
-                           TextTrimming="CharacterEllipsis" />
-                <TextBlock FontSize="12" Opacity="0.6" TextTrimming="CharacterEllipsis">
-                    <Run Text="{Binding Project.GitUrl}" />
-                    <Run Text=" @ " />
-                    <Run Text="{Binding Project.Branch}" />
-                </TextBlock>
-            </StackPanel>
-            <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
-                <Button Content="✏ Edit" Command="{Binding EditCommand}" />
-                <Button Content="🧹 Clear finished"
-                        Command="{Binding ClearFinishedJobsCommand}"
-                        ToolTip.Tip="Delete all jobs that have already finished (succeeded, failed or cancelled)." />
-                <Button Content="↺" Command="{Binding RefreshCommand}" />
-                <Button Content="🚀 Deploy Now" Command="{Binding DeployCommand}" />
-            </FlexPanel>
-        </FlexPanel>
-
         <TextBlock DockPanel.Dock="Top" Text="{Binding Error}"
                    Foreground="Red" Margin="0,0,0,8"
                    IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
@@ -49,9 +25,17 @@
                                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                                 CornerRadius="4">
                             <FlexPanel Wrap="Wrap" Gap="12" AlignItems="Center">
-                                <TextBlock Text="{Binding StatusBadge}"
-                                           FontFamily="Consolas,monospace" VerticalAlignment="Center"
-                                           MinWidth="140" />
+                                <StackPanel Orientation="Horizontal" Spacing="6"
+                                            VerticalAlignment="Center" MinWidth="140">
+                                    <ContentControl Content="{Binding StatusIcon}"
+                                                    IconOptions.Fill="{Binding StatusBrush}"
+                                                    IconOptions.Size="16"
+                                                    VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding StatusText}"
+                                               Foreground="{Binding StatusBrush}"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
                                 <StackPanel Spacing="2"
                                             MinWidth="180" FlexPanel.Grow="1">
                                     <TextBlock FontSize="13" FontWeight="SemiBold"
@@ -66,7 +50,7 @@
                                         <Run Text="{Binding Job.TriggerCommitSha}" />
                                     </TextBlock>
                                 </StackPanel>
-                                <Button Content="View Logs" Command="{Binding OpenCommand}" />
+                                <EnhancedButton Content="View Logs" Icon="{Icon mdi-text-box-outline}" Classes="Primary" Command="{Binding OpenCommand}" />
                             </FlexPanel>
                         </Border>
                     </DataTemplate>
@@ -82,7 +66,7 @@
                 <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
                     <TextBlock Grid.Column="0" Text="Project Secrets" FontWeight="SemiBold"
                                VerticalAlignment="Center" />
-                    <Button Grid.Column="1" Content="↺" Command="{Binding RefreshCommand}" />
+                    <EnhancedButton Grid.Column="1" Icon="{Icon mdi-refresh}" Command="{Binding RefreshCommand}" />
                 </Grid>
 
                 <TextBlock DockPanel.Dock="Top" Text="{Binding Error}"
@@ -101,8 +85,9 @@
                         <TextBox Grid.Column="0" Text="{Binding NewValue}"
                                  Watermark="Value" PasswordChar="●"
                                  Margin="0,0,4,0" />
-                        <Button Grid.Column="1" Content="Add"
-                                Command="{Binding AddCommand}" />
+                        <EnhancedButton Grid.Column="1" Content="Add" Icon="{Icon mdi-plus}"
+                                        Classes="Primary"
+                                        Command="{Binding AddCommand}" />
                     </Grid>
                 </Grid>
 
@@ -121,12 +106,13 @@
                                             <TextBlock Grid.Column="0" Text="{Binding Name}"
                                                        FontFamily="Consolas,monospace" FontSize="12"
                                                        VerticalAlignment="Center" />
-                                            <Button Grid.Column="1" Content="✏" FontSize="11"
-                                                    Command="{Binding EditCommand}"
-                                                    Margin="4,0,2,0" Padding="4,2" />
-                                            <Button Grid.Column="2" Content="✕" FontSize="11"
-                                                    Command="{Binding DeleteCommand}"
-                                                    Padding="4,2" />
+                                            <EnhancedButton Grid.Column="1" Icon="{Icon mdi-pencil}"
+                                                            Command="{Binding EditCommand}"
+                                                            Margin="4,0,2,0" Padding="4,2" />
+                                            <EnhancedButton Grid.Column="2" Icon="{Icon mdi-close}"
+                                                            Classes="Destructive"
+                                                            Command="{Binding DeleteCommand}"
+                                                            Padding="4,2" />
                                         </Grid>
 
                                         <!-- Edit mode -->
@@ -136,12 +122,14 @@
                                                 <TextBox Text="{Binding Name}" Watermark="Name" FontSize="12" />
                                                 <TextBox Text="{Binding Value}" Watermark="Value" FontSize="12" />
                                             </StackPanel>
-                                            <Button Grid.Column="1" Content="✓" FontSize="11"
-                                                    Command="{Binding SaveCommand}"
-                                                    Margin="4,0,2,0" Padding="4,2" />
-                                            <Button Grid.Column="2" Content="✕" FontSize="11"
-                                                    Command="{Binding CancelCommand}"
-                                                    Padding="4,2" />
+                                            <EnhancedButton Grid.Column="1" Icon="{Icon mdi-check}"
+                                                            Classes="Primary"
+                                                            Command="{Binding SaveCommand}"
+                                                            Margin="4,0,2,0" Padding="4,2" />
+                                            <EnhancedButton Grid.Column="2" Icon="{Icon mdi-close}"
+                                                            Classes="Cancel"
+                                                            Command="{Binding CancelCommand}"
+                                                            Padding="4,2" />
                                         </Grid>
                                     </Panel>
                                 </Border>

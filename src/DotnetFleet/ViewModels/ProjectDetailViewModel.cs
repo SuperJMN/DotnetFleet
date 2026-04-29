@@ -1,14 +1,17 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Linq;
+using Avalonia.Media;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI;
 using Zafiro.UI.Navigation;
 
 namespace DotnetFleet.ViewModels;
 
-public partial class ProjectDetailViewModel : ReactiveObject
+public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
 {
     private readonly FleetApiClient _client;
     private readonly INavigator _navigator;
@@ -41,12 +44,21 @@ public partial class ProjectDetailViewModel : ReactiveObject
         DeployCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         ClearFinishedJobsCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         RefreshCommand.Execute(Unit.Default).Subscribe();
+
+        Header = Observable.Return<object>(new SectionHeader(
+            Project.Name,
+            $"{Project.GitUrl} @ {Project.Branch}",
+            new HeaderAction("Edit", "mdi-pencil", EditCommand),
+            new HeaderAction("Clear finished", "mdi-broom", ClearFinishedJobsCommand),
+            new HeaderAction("Refresh", "mdi-refresh", RefreshCommand),
+            new HeaderAction("Deploy Now", "mdi-rocket-launch", DeployCommand, IsPrimary: true)));
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> DeployCommand { get; }
     public ReactiveCommand<Unit, Unit> ClearFinishedJobsCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
+    public IObservable<object> Header { get; }
 
     private async Task LoadJobsAsync()
     {
@@ -134,20 +146,45 @@ public partial class JobViewModel : ReactiveObject
         Job.Version = updated.Version;
         Job.Status = updated.Status;
         Version = updated.Version;
+        this.RaisePropertyChanged(nameof(StatusText));
+        this.RaisePropertyChanged(nameof(StatusIcon));
+        this.RaisePropertyChanged(nameof(StatusBrush));
     }
 
     private string ComputeDisplayName(string? version) =>
         string.IsNullOrWhiteSpace(version) ? Job.Id.ToString("N")[..8] : version!;
 
-    public string StatusBadge => Job.Status switch
+    public string StatusText => Job.Status switch
     {
-        JobStatus.Queued => "⏳ Queued",
-        JobStatus.Assigned => "🔄 Assigned",
-        JobStatus.Running => "🚀 Running",
-        JobStatus.Succeeded => "✅ Succeeded",
-        JobStatus.Failed => "❌ Failed",
-        JobStatus.Cancelled => "🚫 Cancelled",
+        JobStatus.Queued => "Queued",
+        JobStatus.Assigned => "Assigned",
+        JobStatus.Running => "Running",
+        JobStatus.Succeeded => "Succeeded",
+        JobStatus.Failed => "Failed",
+        JobStatus.Cancelled => "Cancelled",
         _ => Job.Status.ToString()
+    };
+
+    public IIcon StatusIcon => new Icon(Job.Status switch
+    {
+        JobStatus.Queued => "mdi-clock-outline",
+        JobStatus.Assigned => "mdi-account-arrow-right-outline",
+        JobStatus.Running => "mdi-rocket-launch",
+        JobStatus.Succeeded => "mdi-check-circle",
+        JobStatus.Failed => "mdi-alert-circle",
+        JobStatus.Cancelled => "mdi-cancel",
+        _ => "mdi-help-circle-outline"
+    });
+
+    public IBrush StatusBrush => Job.Status switch
+    {
+        JobStatus.Queued => new SolidColorBrush(Color.Parse("#9E9E9E")),
+        JobStatus.Assigned => new SolidColorBrush(Color.Parse("#42A5F5")),
+        JobStatus.Running => new SolidColorBrush(Color.Parse("#29B6F6")),
+        JobStatus.Succeeded => new SolidColorBrush(Color.Parse("#43A047")),
+        JobStatus.Failed => new SolidColorBrush(Color.Parse("#E53935")),
+        JobStatus.Cancelled => new SolidColorBrush(Color.Parse("#FB8C00")),
+        _ => Brushes.Gray
     };
 
     public ReactiveCommand<System.Reactive.Unit, System.Reactive.Unit> OpenCommand { get; }

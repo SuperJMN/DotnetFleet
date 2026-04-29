@@ -19,6 +19,7 @@ public class FleetApiClient
     private readonly HttpMessageHandler _httpHandler;
     private readonly HttpMessageHandler _streamingHandler;
     private readonly BehaviorSubject<Uri?> _baseAddressSubject;
+    private readonly BehaviorSubject<bool> _authenticatedSubject = new(false);
     private HttpClient http;
     // Long-lived streams (SSE) need an HttpClient with no Timeout, since HttpClient.Timeout
     // covers the entire response — including body reads — even with ResponseHeadersRead.
@@ -60,6 +61,13 @@ public class FleetApiClient
     /// </summary>
     public IObservable<Uri?> BaseAddressChanges => _baseAddressSubject.AsObservable();
 
+    /// <summary>
+    /// Emits the current authentication state and any subsequent change. Replays the latest value
+    /// to new subscribers, so a VM can subscribe at any time and immediately react to whether the
+    /// client is currently authenticated.
+    /// </summary>
+    public IObservable<bool> AuthenticatedChanges => _authenticatedSubject.AsObservable();
+
     public void SetBaseAddress(string baseUrl)
     {
         var uri = new Uri(baseUrl.TrimEnd('/') + "/");
@@ -85,6 +93,7 @@ public class FleetApiClient
         var auth = new AuthenticationHeaderValue("Bearer", jwt);
         http.DefaultRequestHeaders.Authorization = auth;
         streamingHttp.DefaultRequestHeaders.Authorization = auth;
+        _authenticatedSubject.OnNext(true);
     }
 
     public void ClearToken()
@@ -92,6 +101,7 @@ public class FleetApiClient
         token = null;
         http.DefaultRequestHeaders.Authorization = null;
         streamingHttp.DefaultRequestHeaders.Authorization = null;
+        _authenticatedSubject.OnNext(false);
     }
 
     public bool IsAuthenticated => token is not null;

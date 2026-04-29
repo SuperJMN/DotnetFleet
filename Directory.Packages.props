@@ -22,7 +22,7 @@
     <PackageVersion Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.0" />
-    <PackageVersion Include="Zafiro.Avalonia.Mcp.AppHost" Version="0.0.20" />
+    <PackageVersion Include="Zafiro.Avalonia.Mcp.AppHost" Version="0.0.38" />
     <!-- Zafiro -->
     <PackageVersion Include="Zafiro.Avalonia" Version="51.9.0" />
     <PackageVersion Include="Zafiro.Avalonia.Generators" Version="51.9.0" />

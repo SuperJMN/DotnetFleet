@@ -1,48 +1,59 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Linq;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.DivineBytes;
+using Zafiro.UI;
+using Zafiro.UI.Navigation;
 using Zafiro.UI.Shell.Utils;
 
 namespace DotnetFleet.ViewModels;
 
 [Section(name: "Secrets", icon: "mdi-key-outline", sortIndex: 2)]
-public partial class SecretsViewModel : ReactiveObject
+public partial class SecretsViewModel : ReactiveObject, IHaveHeader
 {
     private readonly FleetApiClient _client;
+    private readonly IFileSystemPicker _picker;
 
     [Reactive] private bool _isLoading;
     [Reactive] private string? _error;
     [Reactive] private string _newName = "";
     [Reactive] private string _newValue = "";
-    [Reactive] private string _envFilePath = "/mnt/fast/Repos/Zafiro.Avalonia/.env";
 
     public ObservableCollection<SecretViewModel> Secrets { get; } = [];
 
-    public SecretsViewModel(FleetApiClient client)
+    public SecretsViewModel(FleetApiClient client, IFileSystemPicker picker)
     {
         _client = client;
+        _picker = picker;
 
         var canAdd = this.WhenAnyValue(x => x.NewName, x => x.NewValue,
             (n, v) => !string.IsNullOrWhiteSpace(n) && !string.IsNullOrWhiteSpace(v));
-        var canImport = this.WhenAnyValue(x => x.EnvFilePath, path => !string.IsNullOrWhiteSpace(path));
 
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadAsync);
         AddCommand = ReactiveCommand.CreateFromTask(AddAsync, canAdd);
-        ImportFromEnvCommand = ReactiveCommand.CreateFromTask(ImportFromEnvAsync, canImport);
+        ImportFromEnvCommand = ReactiveCommand.CreateFromTask(ImportFromEnvAsync);
 
         RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         AddCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         ImportFromEnvCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
 
-        RefreshCommand.Execute(Unit.Default).Subscribe(_ => { }, _ => { });
+        Header = Observable.Return<object>(new SectionHeader("Global Secrets",
+            new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
+
+        _client.AuthenticatedChanges
+            .Where(authenticated => authenticated)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => RefreshCommand.Execute(Unit.Default).Subscribe(_ => { }, _ => { }));
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> AddCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportFromEnvCommand { get; }
+    public IObservable<object> Header { get; }
 
     private async Task LoadAsync()
     {
@@ -72,14 +83,34 @@ public partial class SecretsViewModel : ReactiveObject
     private async Task ImportFromEnvAsync()
     {
         Error = null;
-        var path = EnvFilePath.Trim();
 
-        if (!File.Exists(path))
+        var pickResult = await _picker.PickForOpen(
+            new FileTypeFilter("Environment files (*.env)", ["*.env", ".env", "*"]),
+            new FileTypeFilter("All files", ["*"]));
+
+        if (pickResult.IsFailure)
         {
-            throw new FileNotFoundException("The .env file could not be found.", path);
+            throw new InvalidOperationException(pickResult.Error);
         }
 
-        var parsedEntries = File.ReadLines(path)
+        var maybeFile = pickResult.Value;
+        if (maybeFile.HasNoValue)
+        {
+            return;
+        }
+
+        var file = maybeFile.Value;
+        var lines = new List<string>();
+        await using (var stream = file.ToStream())
+        using (var reader = new StreamReader(stream))
+        {
+            while (await reader.ReadLineAsync() is { } line)
+            {
+                lines.Add(line);
+            }
+        }
+
+        var parsedEntries = lines
             .Select(ParseEnvLine)
             .Where(e => e is not null)
             .Select(e => e!.Value)

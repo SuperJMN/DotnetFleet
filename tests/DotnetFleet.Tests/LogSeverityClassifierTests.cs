@@ -56,6 +56,26 @@ public class LogSeverityClassifierTests
         => LogSeverityClassifier.Classify(line).Should().Be(LogSeverity.None);
 
     [Theory]
+    [InlineData("    0 Error(s)")]
+    [InlineData("    0 Warning(s)")]
+    [InlineData("0 errors")]
+    [InlineData("0 warnings")]
+    [InlineData("Build succeeded.")]
+    [InlineData("Failed:     0, Passed:    10, Skipped:     0")]
+    [InlineData("Errors: 0")]
+    [InlineData("Warnings = 0")]
+    public void Zero_counts_are_not_errors_or_warnings(string line)
+        => LogSeverityClassifier.Classify(line).Should().Be(LogSeverity.None);
+
+    [Theory]
+    [InlineData("    1 Error(s)", LogSeverity.Error)]
+    [InlineData("    3 Warning(s)", LogSeverity.Warning)]
+    [InlineData("Failed:     2, Passed:    10, Skipped:     0", LogSeverity.Error)]
+    [InlineData("Errors: 5", LogSeverity.Error)]
+    public void Non_zero_counts_still_classify(string line, LogSeverity expected)
+        => LogSeverityClassifier.Classify(line).Should().Be(expected);
+
+    [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]

@@ -1,14 +1,16 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Linq;
 using DotnetFleet.Api.Client;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI.Navigation;
 using Zafiro.UI.Shell.Utils;
 
 namespace DotnetFleet.ViewModels;
 
 [Section(name: "Workers", icon: "mdi-server", sortIndex: 1)]
-public partial class WorkersViewModel : ReactiveObject
+public partial class WorkersViewModel : ReactiveObject, IHaveHeader
 {
     private readonly FleetApiClient _client;
 
@@ -21,10 +23,18 @@ public partial class WorkersViewModel : ReactiveObject
         _client = client;
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadAsync);
         RefreshCommand.ThrownExceptions.Subscribe(_ => { });
-        RefreshCommand.Execute(Unit.Default).Subscribe(_ => { }, _ => { });
+
+        Header = Observable.Return<object>(new SectionHeader("Workers",
+            new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
+
+        _client.AuthenticatedChanges
+            .Where(authenticated => authenticated)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => RefreshCommand.Execute(Unit.Default).Subscribe(_ => { }, _ => { }));
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public IObservable<object> Header { get; }
 
     private async Task LoadAsync()
     {
