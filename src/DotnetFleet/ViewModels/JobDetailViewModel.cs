@@ -138,7 +138,8 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 Phases.Clear();
-                foreach (var p in phases) Phases.Add(JobPhaseRow.From(p, FormatPhaseName));
+                foreach (var row in JobPhaseRow.BuildHierarchy(phases, FormatPhaseName))
+                    Phases.Add(row);
                 CurrentPhase = job?.CurrentPhase;
                 CurrentPhaseStartedAt = job?.CurrentPhaseStartedAt;
                 this.RaisePropertyChanged(nameof(HasCurrentPhase));
