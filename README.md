@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🚀 DotnetFleet
+<img src="src/DotnetFleet/Assets/SmallLogo.png" alt="DotnetFleet logo" width="96" />
+
+# DotnetFleet
 
 **Self-hosted CI/CD for .NET — up and running in 3 commands.**
 
