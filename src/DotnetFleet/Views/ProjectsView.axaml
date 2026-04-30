@@ -12,17 +12,18 @@
                      IsVisible="{Binding IsLoading}" Height="4" Margin="0,0,0,8" />
 
         <!-- Project list: card grid that adapts column count to width -->
-        <ListBox ItemsSource="{Binding Projects}" Background="Transparent">
-            <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <BalancedWrapGrid MinItemWidth="280"
-                                      HorizontalSpacing="8"
-                                      VerticalSpacing="8"
-                                      VerticalAlignment="Top" />
-                </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-            <ListBox.ItemTemplate>
-                <DataTemplate DataType="vm:ProjectViewModel">
+        <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Projects}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <BalancedWrapGrid MinItemWidth="280"
+                                          HorizontalSpacing="8"
+                                          VerticalSpacing="8"
+                                          VerticalAlignment="Top" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:ProjectViewModel">
                     <Border Padding="12"
                             Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
@@ -54,9 +55,10 @@
                             </FlexPanel>
                         </FlexPanel>
                     </Border>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
     </DockPanel>
 

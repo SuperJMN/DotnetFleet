@@ -17,10 +17,10 @@
         <FlexPanel Direction="Row" Wrap="Wrap" Gap="12" AlignItems="Stretch">
 
             <!-- Job list -->
-            <ListBox FlexPanel.Grow="1" FlexPanel.Basis="320" MinWidth="280"
-                     ItemsSource="{Binding Jobs}" Background="Transparent">
-                <ListBox.ItemTemplate>
-                    <DataTemplate DataType="vm:JobViewModel">
+            <ScrollViewer FlexPanel.Grow="1" FlexPanel.Basis="320" MinWidth="280">
+                <ItemsControl ItemsSource="{Binding Jobs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:JobViewModel">
                         <Border Padding="12,8" Margin="0,2"
                                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                                 CornerRadius="4">
@@ -54,8 +54,9 @@
                             </FlexPanel>
                         </Border>
                     </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            </ScrollViewer>
 
             <!-- Project secrets panel -->
             <DockPanel FlexPanel.Grow="1" FlexPanel.Basis="280"

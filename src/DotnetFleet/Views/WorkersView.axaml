@@ -9,17 +9,18 @@
         <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True"
                      IsVisible="{Binding IsLoading}" Height="4" Margin="0,0,0,8" />
 
-        <ListBox ItemsSource="{Binding Workers}" Background="Transparent">
-            <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <BalancedWrapGrid MinItemWidth="260"
-                                      HorizontalSpacing="8"
-                                      VerticalSpacing="8"
-                                      VerticalAlignment="Top" />
-                </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-            <ListBox.ItemTemplate>
-                <DataTemplate DataType="vm:WorkerItemViewModel">
+        <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Workers}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <BalancedWrapGrid MinItemWidth="260"
+                                          HorizontalSpacing="8"
+                                          VerticalSpacing="8"
+                                          VerticalAlignment="Top" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:WorkerItemViewModel">
                     <Border Padding="12"
                             Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
@@ -65,9 +66,10 @@
                             </StackPanel>
                         </FlexPanel>
                     </Border>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
     </DockPanel>
 
