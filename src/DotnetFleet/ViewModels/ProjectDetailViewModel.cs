@@ -99,7 +99,7 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
 
     private async Task ShowBuildPackagesDialogAsync()
     {
-        await BuildOptions.LoadPackageProjects();
+        _ = BuildOptions.LoadPackageProjects();
 
         ICloseable? closeDialog = null;
         var queueCommand = ReactiveCommand.CreateFromTask(async () =>
