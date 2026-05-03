@@ -3,38 +3,73 @@ using System.Xml.Linq;
 public class ProjectDetailViewLayoutTests
 {
     [Fact]
-    public void ProjectDetailView_ShouldSeparateDeployAndBuildIntoTabs()
+    public void ProjectDetailView_ShouldUseTheFullScreenForJobHistory()
     {
-        var document = XDocument.Load(ProjectDetailViewPath());
+        var document = XDocument.Load(ProjectFilePath("Views", "ProjectDetailView.axaml"));
         XNamespace axaml = "https://github.com/avaloniaui";
 
-        var tabControl = document.Descendants(axaml + "TabControl").SingleOrDefault();
+        document.Descendants(axaml + "TabControl").Should().BeEmpty();
+        document.Descendants(axaml + "ItemsControl")
+            .Select(control => control.Attribute("ItemsSource")?.Value)
+            .Should()
+            .Contain("{Binding Jobs}");
 
-        tabControl.Should().NotBeNull();
-        var tabs = tabControl!.Elements(axaml + "TabItem").ToList();
-        tabs.Select(tab => tab.Attribute("Header")?.Value).Should().Equal("Deploy", "Build");
-        tabs[0].Descendants(axaml + "TextBlock")
+        document.Descendants(axaml + "TextBlock")
             .Select(x => x.Attribute("Text")?.Value)
             .Should()
-            .Contain("Project Secrets");
-        tabs[1].Descendants(axaml + "TextBlock")
+            .NotContain(["Project Secrets", "Package Targets"]);
+    }
+
+    [Fact]
+    public void PackageBuildOptionsDialog_ShouldExposeBuildTargetOptions()
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", "PackageBuildOptionsView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        document.Descendants(axaml + "TextBlock")
             .Select(x => x.Attribute("Text")?.Value)
             .Should()
             .Contain("Package Targets");
+
+        document.Descendants(axaml + "DataTemplate")
+            .Select(template => template.Attribute("DataType")?.Value)
+            .Should()
+            .Contain(["vm:PackagePlatformViewModel", "vm:PackageFormatViewModel", "vm:PackageTargetOptionViewModel"]);
+
+        document.Descendants(axaml + "CheckBox")
+            .Select(checkBox => checkBox.Attribute("IsChecked")?.Value)
+            .Should()
+            .Contain("{Binding IsSelected}");
     }
 
-    private static string ProjectDetailViewPath()
+    [Fact]
+    public void ProjectSecretsView_ShouldBeAvailableAsFlyoutContent()
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", "ProjectSecretsView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        document.Root!.Attribute(XName.Get("DataType", "http://schemas.microsoft.com/winfx/2006/xaml"))!
+            .Value.Should().Be("vm:ProjectSecretsViewModel");
+
+        document.Descendants(axaml + "TextBlock")
+            .Select(x => x.Attribute("Text")?.Value)
+            .Should()
+            .Contain("Project Secrets");
+    }
+
+    private static string ProjectFilePath(params string[] parts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var path = Path.Combine(directory.FullName, "src", "DotnetFleet", "Views", "ProjectDetailView.axaml");
+            var pathParts = new[] { directory.FullName, "src", "DotnetFleet" }.Concat(parts).ToArray();
+            var path = Path.Combine(pathParts);
             if (File.Exists(path))
                 return path;
 
             directory = directory.Parent;
         }
 
-        throw new FileNotFoundException("Could not find ProjectDetailView.axaml from the test output directory.");
+        throw new FileNotFoundException($"Could not find {Path.Combine(parts)} from the test output directory.");
     }
 }

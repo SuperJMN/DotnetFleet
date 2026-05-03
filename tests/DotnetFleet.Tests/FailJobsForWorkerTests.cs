@@ -5,10 +5,8 @@ using Microsoft.EntityFrameworkCore;
 namespace DotnetFleet.Tests;
 
 /// <summary>
-/// Verifies <see cref="EfFleetStorage.FailJobsForWorkerAsync"/> — the self-heal hook
-/// invoked when a worker re-announces Online (i.e. it just (re)started). Any leftover
-/// Assigned/Running jobs owned by that worker must be failed in one shot so the worker
-/// is not blocked from claiming new work.
+/// Verifies <see cref="EfFleetStorage.FailJobsForWorkerAsync"/> — the explicit cleanup
+/// hook for administrative removal/reset of a worker's whole live queue.
 /// </summary>
 public class FailJobsForWorkerTests : IDisposable
 {

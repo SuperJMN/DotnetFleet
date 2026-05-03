@@ -171,14 +171,13 @@ public static class WorkerEndpoints
         await storage.UpdateWorkerAsync(worker);
 
         // Self-heal on (re)start: when a worker announces Online it is, by definition,
-        // not running anything. If the coordinator still has live jobs assigned to it,
-        // those are leftovers from a crash/restart and must be failed immediately —
-        // otherwise the worker would be unable to claim new work (its slot is "taken"
-        // by ghost jobs) and the StaleJobReaper cannot help because heartbeats keep
-        // flowing. This makes the coordinator authoritative on lifecycle.
+        // not running anything. Running rows still owned by it are crash leftovers and
+        // must be failed immediately. Assigned rows are queued work, so keep them
+        // claimable for this worker instead of failing them during a normal Busy->Online
+        // transition.
         if (req.Status == WorkerStatus.Online)
         {
-            var failed = await storage.FailJobsForWorkerAsync(id,
+            var failed = await storage.FailRunningJobsForWorkerAsync(id,
                 "Worker restarted while running this job.");
             foreach (var jobId in failed)
                 broadcaster.Complete(jobId);

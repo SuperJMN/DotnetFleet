@@ -6,8 +6,11 @@ using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.Avalonia.Dialogs;
 using Zafiro.UI;
+using Zafiro.UI.Commands;
 using Zafiro.UI.Navigation;
+using DialogOption = Zafiro.Avalonia.Dialogs.Option;
 
 namespace DotnetFleet.ViewModels;
 
@@ -16,32 +19,31 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
     private readonly FleetApiClient _client;
     private readonly INavigator _navigator;
     private readonly IFileSystemPicker _fileSystemPicker;
+    private readonly IDialog _dialog;
 
     public Project Project { get; }
     public ProjectSecretsViewModel ProjectSecrets { get; }
+    public PackageBuildOptionsViewModel BuildOptions { get; }
 
     [Reactive] private bool _isLoading;
     [Reactive] private string? _error;
-    [Reactive] private string _packageProject = "";
 
     public ObservableCollection<JobViewModel> Jobs { get; } = [];
-    public ObservableCollection<PackagePlatformViewModel> PackagePlatforms { get; } = [];
-    public ObservableCollection<string> PackageProjects { get; } = [];
 
-    public ProjectDetailViewModel(Project project, FleetApiClient client, INavigator navigator, IFileSystemPicker fileSystemPicker)
+    public ProjectDetailViewModel(Project project, FleetApiClient client, INavigator navigator, IFileSystemPicker fileSystemPicker, IDialog dialog)
     {
         Project = project;
         _client = client;
         _navigator = navigator;
         _fileSystemPicker = fileSystemPicker;
+        _dialog = dialog;
 
         ProjectSecrets = new ProjectSecretsViewModel(project.Id, client);
-        foreach (var platform in PackagePlatformViewModel.CreateDefaults())
-            PackagePlatforms.Add(platform);
+        BuildOptions = new PackageBuildOptionsViewModel(project.Id, client);
 
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadJobsAsync);
         DeployCommand = ReactiveCommand.CreateFromTask(DeployAsync);
-        BuildPackagesCommand = ReactiveCommand.CreateFromTask(BuildPackagesAsync);
+        BuildPackagesCommand = ReactiveCommand.CreateFromTask(ShowBuildPackagesDialogAsync);
         ClearFinishedJobsCommand = ReactiveCommand.CreateFromTask(ClearFinishedJobsAsync);
         EditCommand = ReactiveCommand.Create(() =>
         {
@@ -53,15 +55,16 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
         BuildPackagesCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         ClearFinishedJobsCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         RefreshCommand.Execute(Unit.Default).Subscribe();
-        _ = LoadPackageProjectsAsync();
 
         Header = Observable.Return<object>(new SectionHeader(
             Project.Name,
             $"{Project.GitUrl} @ {Project.Branch}",
-            new HeaderAction("Edit", "mdi-pencil", EditCommand),
-            new HeaderAction("Clear finished", "mdi-broom", ClearFinishedJobsCommand),
+            new HeaderAction("Queue Deploy", "mdi-rocket-launch", DeployCommand, isPrimary: true),
+            new HeaderAction("Queue Build", "mdi-package-variant-closed", BuildPackagesCommand, isPrimary: true),
+            new HeaderAction("Clear Builds", "mdi-broom", ClearFinishedJobsCommand),
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand),
-            new HeaderAction("Deploy Now", "mdi-rocket-launch", DeployCommand, IsPrimary: true)));
+            new HeaderAction("Project Secrets", "mdi-dots-horizontal", ProjectSecrets),
+            new HeaderAction("Edit", "mdi-pencil", EditCommand)));
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
@@ -70,8 +73,6 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
     public ReactiveCommand<Unit, Unit> ClearFinishedJobsCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
     public IObservable<object> Header { get; }
-    public int SelectedPackageTargetCount => PackagePlatforms.Sum(p => p.Targets.Count(t => t.IsSelected));
-    public bool HasPackageProjects => PackageProjects.Count > 0;
 
     private async Task LoadJobsAsync()
     {
@@ -91,17 +92,120 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
 
     private async Task DeployAsync()
     {
+        Error = null;
         var job = await _client.EnqueueDeployAsync(Project.Id);
         Jobs.Insert(0, new JobViewModel(job, _client, _navigator, this, _fileSystemPicker));
-        await _navigator.Go(() => new JobDetailViewModel(job, _client, _navigator, this, _fileSystemPicker));
     }
 
-    private async Task BuildPackagesAsync()
+    private async Task ShowBuildPackagesDialogAsync()
     {
+        await BuildOptions.LoadPackageProjects();
+
+        ICloseable? closeDialog = null;
+        var queueCommand = ReactiveCommand.CreateFromTask(async () =>
+        {
+            var request = BuildOptions.CreateRequest();
+            if (request is null) return;
+
+            await QueuePackageBuildAsync(request);
+            closeDialog?.Close();
+        });
+        queueCommand.ThrownExceptions.Subscribe(ex => BuildOptions.Error = ex.Message);
+
+        await _dialog.Show(BuildOptions, "Queue build", (_, closeable) =>
+        {
+            closeDialog = closeable;
+            return new IOption[]
+            {
+                new DialogOption("Cancel",
+                    ReactiveCommand.Create(closeable.Dismiss).Enhance(),
+                    new Settings { IsCancel = true, Role = OptionRole.Cancel }),
+                new DialogOption("Queue Build",
+                    queueCommand.Enhance(),
+                    new Settings { IsDefault = true, Role = OptionRole.Primary }),
+            };
+        }, size: DialogSize.Wide);
+    }
+
+    private async Task QueuePackageBuildAsync(PackageBuildRequest request)
+    {
+        Error = null;
+        var job = await _client.EnqueuePackageBuildAsync(Project.Id, request);
+        Jobs.Insert(0, new JobViewModel(job, _client, _navigator, this, _fileSystemPicker));
+    }
+
+    private async Task ClearFinishedJobsAsync()
+    {
+        await _client.DeleteFinishedProjectJobsAsync(Project.Id);
+        await LoadJobsAsync();
+    }
+}
+
+public partial class PackageBuildOptionsViewModel : ReactiveObject
+{
+    private readonly Guid _projectId;
+    private readonly FleetApiClient _client;
+
+    [Reactive] private bool _isLoading;
+    [Reactive] private string? _error;
+    [Reactive] private string _packageProject = "";
+
+    public PackageBuildOptionsViewModel(Guid projectId, FleetApiClient client)
+    {
+        _projectId = projectId;
+        _client = client;
+
+        foreach (var platform in PackagePlatformViewModel.CreateDefaults())
+            PackagePlatforms.Add(platform);
+
+        foreach (var target in PackagePlatforms.SelectMany(platform => platform.Targets))
+        {
+            target.WhenAnyValue(x => x.IsSelected)
+                .Subscribe(_ =>
+                {
+                    Error = null;
+                    this.RaisePropertyChanged(nameof(SelectedPackageTargetCount));
+                });
+        }
+    }
+
+    public ObservableCollection<PackagePlatformViewModel> PackagePlatforms { get; } = [];
+    public ObservableCollection<string> PackageProjects { get; } = [];
+    public bool HasPackageProjects => PackageProjects.Count > 0;
+    public int SelectedPackageTargetCount => PackagePlatforms.Sum(p => p.Targets.Count(t => t.IsSelected));
+
+    public async Task LoadPackageProjects()
+    {
+        IsLoading = true;
+        try
+        {
+            var projects = await _client.GetPackageProjectsAsync(_projectId);
+            PackageProjects.Clear();
+            foreach (var project in projects)
+                PackageProjects.Add(project);
+
+            if (PackageProjects.Count == 1 && string.IsNullOrWhiteSpace(PackageProject))
+                PackageProject = PackageProjects[0];
+
+            this.RaisePropertyChanged(nameof(HasPackageProjects));
+        }
+        catch
+        {
+            // Package project discovery is advisory; users can still type the project manually.
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    public PackageBuildRequest? CreateRequest()
+    {
+        Error = null;
         if (PackageProjects.Count > 1 && string.IsNullOrWhiteSpace(PackageProject))
         {
             Error = "Select the package project from deployer.yaml.";
-            return;
+            return null;
         }
 
         var targets = PackagePlatforms
@@ -117,42 +221,14 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
         if (targets.Count == 0)
         {
             Error = "Select at least one package target.";
-            return;
+            return null;
         }
 
-        var job = await _client.EnqueuePackageBuildAsync(Project.Id, new PackageBuildRequest
+        return new PackageBuildRequest
         {
             PackageProject = string.IsNullOrWhiteSpace(PackageProject) ? null : PackageProject.Trim(),
             Targets = targets
-        });
-        Jobs.Insert(0, new JobViewModel(job, _client, _navigator, this, _fileSystemPicker));
-        await _navigator.Go(() => new JobDetailViewModel(job, _client, _navigator, this, _fileSystemPicker));
-    }
-
-    private async Task ClearFinishedJobsAsync()
-    {
-        await _client.DeleteFinishedProjectJobsAsync(Project.Id);
-        await LoadJobsAsync();
-    }
-
-    private async Task LoadPackageProjectsAsync()
-    {
-        try
-        {
-            var projects = await _client.GetPackageProjectsAsync(Project.Id);
-            PackageProjects.Clear();
-            foreach (var project in projects)
-                PackageProjects.Add(project);
-
-            if (PackageProjects.Count == 1 && string.IsNullOrWhiteSpace(PackageProject))
-                PackageProject = PackageProjects[0];
-
-            this.RaisePropertyChanged(nameof(HasPackageProjects));
-        }
-        catch
-        {
-            // Package project discovery is advisory; users can still type the project manually.
-        }
+        };
     }
 }
 

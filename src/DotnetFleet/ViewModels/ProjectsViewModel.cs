@@ -5,6 +5,7 @@ using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.Avalonia.Dialogs;
 using Zafiro.UI;
 using Zafiro.UI.Commands;
 using Zafiro.UI.Navigation;
@@ -17,6 +18,7 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
 {
     private readonly FleetApiClient _client;
     private readonly IFileSystemPicker _fileSystemPicker;
+    private readonly IDialog _dialog;
     internal readonly INavigator Navigator;
 
     [Reactive] private ProjectViewModel? _selectedProject;
@@ -24,10 +26,11 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
 
     public ObservableCollection<ProjectViewModel> Projects { get; } = [];
 
-    public ProjectsViewModel(FleetApiClient client, INavigator navigator, IFileSystemPicker fileSystemPicker)
+    public ProjectsViewModel(FleetApiClient client, INavigator navigator, IFileSystemPicker fileSystemPicker, IDialog dialog)
     {
         _client = client;
         _fileSystemPicker = fileSystemPicker;
+        _dialog = dialog;
         Navigator = navigator;
 
         var refresh = ReactiveCommand.CreateFromTask(LoadProjectsAsync);
@@ -37,7 +40,7 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
         AddProjectCommand = ReactiveCommand.Create(OpenAddProject).Enhance("Add Project");
 
         Header = Observable.Return<object>(new SectionHeader("Projects",
-            new HeaderAction("Add Project", "mdi-plus", AddProjectCommand, IsPrimary: true),
+            new HeaderAction("Add Project", "mdi-plus", AddProjectCommand, isPrimary: true),
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
 
         // Refresh whenever the client becomes authenticated. BehaviorSubject replays the current
@@ -60,7 +63,7 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
             var list = await _client.GetProjectsAsync();
             Projects.Clear();
             foreach (var p in list)
-                Projects.Add(new ProjectViewModel(p, _client, Navigator, this, _fileSystemPicker));
+                Projects.Add(new ProjectViewModel(p, _client, Navigator, this, _fileSystemPicker, _dialog));
         }
         finally
         {
@@ -80,6 +83,7 @@ public partial class ProjectViewModel : ReactiveObject
     private readonly INavigator _navigator;
     private readonly ProjectsViewModel _parent;
     private readonly IFileSystemPicker _fileSystemPicker;
+    private readonly IDialog _dialog;
 
     public Project Project { get; }
 
@@ -88,13 +92,15 @@ public partial class ProjectViewModel : ReactiveObject
         FleetApiClient client,
         INavigator navigator,
         ProjectsViewModel parent,
-        IFileSystemPicker fileSystemPicker)
+        IFileSystemPicker fileSystemPicker,
+        IDialog dialog)
     {
         Project = project;
         _client = client;
         _navigator = navigator;
         _parent = parent;
         _fileSystemPicker = fileSystemPicker;
+        _dialog = dialog;
 
         OpenCommand = ReactiveCommand.Create(Open);
         EditCommand = ReactiveCommand.Create(Edit);
@@ -107,7 +113,7 @@ public partial class ProjectViewModel : ReactiveObject
 
     private void Open()
     {
-        _navigator.Go(() => new ProjectDetailViewModel(Project, _client, _navigator, _fileSystemPicker));
+        _navigator.Go(() => new ProjectDetailViewModel(Project, _client, _navigator, _fileSystemPicker, _dialog));
     }
 
     private void Edit()

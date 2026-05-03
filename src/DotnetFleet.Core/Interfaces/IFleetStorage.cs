@@ -183,10 +183,17 @@ public interface IFleetStorage
     Task<IReadOnlyList<Guid>> FailStuckAssignedJobsAsync(TimeSpan assignedTimeout, CancellationToken ct = default);
 
     /// <summary>
+    /// Fails every <see cref="JobStatus.Running"/> job owned by <paramref name="workerId"/>.
+    /// Used when a worker explicitly announces that it is no longer running anything:
+    /// assigned jobs are still queued work and must remain claimable.
+    /// Returns the IDs of the jobs that were marked as failed.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> FailRunningJobsForWorkerAsync(Guid workerId, string reason, CancellationToken ct = default);
+
+    /// <summary>
     /// Fails every non-terminal job (<see cref="JobStatus.Assigned"/> or <see cref="JobStatus.Running"/>)
-    /// owned by <paramref name="workerId"/>. Used when the worker explicitly announces that it is no longer
-    /// running anything (e.g. it just (re)started and reported <see cref="WorkerStatus.Online"/>): if the
-    /// coordinator still has live jobs assigned to it, the worker crashed mid-job.
+    /// owned by <paramref name="workerId"/>. Used for explicit administrative cleanup of a worker's
+    /// whole live queue.
     /// Returns the IDs of the jobs that were marked as failed.
     /// </summary>
     Task<IReadOnlyList<Guid>> FailJobsForWorkerAsync(Guid workerId, string reason, CancellationToken ct = default);

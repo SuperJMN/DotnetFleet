@@ -263,6 +263,12 @@ public static class JobEndpoints
         if (job is null) return Results.NotFound();
         if (job.WorkerId != workerId) return Results.Forbid();
 
+        if (job.Status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled)
+            return Results.Conflict(new { message = "Job is already in a terminal state." });
+
+        if (job.Status != JobStatus.Assigned)
+            return Results.Conflict(new { message = "Job is not assigned." });
+
         job.Status = JobStatus.Running;
         job.StartedAt = DateTimeOffset.UtcNow;
         await storage.UpdateJobAsync(job);
@@ -328,6 +334,9 @@ public static class JobEndpoints
         var job = await storage.GetJobAsync(id);
         if (job is null) return Results.NotFound();
         if (job.WorkerId != workerId) return Results.Forbid();
+
+        if (job.Status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled)
+            return Results.Conflict(new { message = "Job is already in a terminal state." });
 
         var now = DateTimeOffset.UtcNow;
         job.Status = job.CancellationRequestedAt is not null && !req.Success
@@ -498,7 +507,8 @@ public static class JobEndpoints
     private static async Task<IResult> CancelJob(
         Guid id,
         IFleetStorage storage,
-        LogBroadcaster broadcaster)
+        LogBroadcaster broadcaster,
+        JobAssignmentSignal signal)
     {
         var job = await storage.GetJobAsync(id);
         if (job is null) return Results.NotFound();
@@ -506,16 +516,23 @@ public static class JobEndpoints
         if (job.Status is JobStatus.Succeeded or JobStatus.Failed or JobStatus.Cancelled)
             return Results.Conflict(new { message = "Job is already in a terminal state." });
 
-        job.CancellationRequestedAt = DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.UtcNow;
+        job.CancellationRequestedAt = now;
+        var completedImmediately = job.Status is JobStatus.Queued or JobStatus.Assigned;
 
-        if (job.Status is JobStatus.Queued)
+        if (completedImmediately)
         {
             job.Status = JobStatus.Cancelled;
-            job.FinishedAt = DateTimeOffset.UtcNow;
-            broadcaster.Complete(id);
+            job.FinishedAt = now;
         }
 
         await storage.UpdateJobAsync(job);
+        if (completedImmediately)
+        {
+            broadcaster.Complete(id);
+            signal.Notify();
+        }
+
         return Results.Ok(job);
     }
 

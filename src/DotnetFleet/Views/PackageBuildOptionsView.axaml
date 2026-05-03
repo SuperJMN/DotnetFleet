@@ -1,0 +1,81 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             x:Class="DotnetFleet.Views.PackageBuildOptionsView"
+             x:DataType="vm:PackageBuildOptionsViewModel">
+
+    <DockPanel>
+
+        <TextBlock DockPanel.Dock="Top"
+                   Text="{Binding Error}"
+                   Foreground="Red"
+                   Margin="0,0,0,8"
+                   IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+        <ProgressBar DockPanel.Dock="Top"
+                     IsIndeterminate="True"
+                     IsVisible="{Binding IsLoading}"
+                     Height="4"
+                     Margin="0,0,0,8" />
+
+        <ScrollViewer MaxHeight="560"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="10">
+                <TextBlock Text="Package Targets"
+                           FontWeight="SemiBold" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Package project"
+                               FontWeight="SemiBold"
+                               FontSize="12"
+                               Opacity="0.75" />
+                    <ComboBox ItemsSource="{Binding PackageProjects}"
+                              SelectedItem="{Binding PackageProject}"
+                              IsVisible="{Binding HasPackageProjects}"
+                              HorizontalAlignment="Stretch" />
+                    <TextBox Text="{Binding PackageProject}"
+                             PlaceholderText="github.packages project path (optional)"
+                             IsVisible="{Binding !HasPackageProjects}" />
+                </StackPanel>
+
+                <ItemsControl ItemsSource="{Binding PackagePlatforms}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:PackagePlatformViewModel">
+                            <StackPanel Spacing="4"
+                                        Margin="0,2,0,8">
+                                <TextBlock Text="{Binding Name}"
+                                           FontWeight="SemiBold"
+                                           FontSize="12"
+                                           Opacity="0.75" />
+                                <ItemsControl ItemsSource="{Binding Formats}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="vm:PackageFormatViewModel">
+                                            <StackPanel Spacing="2"
+                                                        Margin="0,2,0,4">
+                                                <TextBlock Text="{Binding Label}"
+                                                           FontSize="12" />
+                                                <ItemsControl ItemsSource="{Binding Architectures}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate DataType="vm:PackageTargetOptionViewModel">
+                                                            <CheckBox IsChecked="{Binding IsSelected}"
+                                                                      Margin="8,1,0,1">
+                                                                <TextBlock Text="{Binding ArchitectureLabel}"
+                                                                           Opacity="0.65" />
+                                                            </CheckBox>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+    </DockPanel>
+
+</UserControl>

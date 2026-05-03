@@ -517,13 +517,23 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         return timedOutJobs.Select(j => j.Id).ToList();
     }
 
-    public async Task<IReadOnlyList<Guid>> FailJobsForWorkerAsync(Guid workerId, string reason, CancellationToken ct = default)
+    public Task<IReadOnlyList<Guid>> FailRunningJobsForWorkerAsync(Guid workerId, string reason, CancellationToken ct = default) =>
+        FailJobsForWorker(workerId, reason, new[] { JobStatus.Running }, ct);
+
+    public Task<IReadOnlyList<Guid>> FailJobsForWorkerAsync(Guid workerId, string reason, CancellationToken ct = default) =>
+        FailJobsForWorker(workerId, reason, new[] { JobStatus.Running, JobStatus.Assigned }, ct);
+
+    private async Task<IReadOnlyList<Guid>> FailJobsForWorker(
+        Guid workerId,
+        string reason,
+        JobStatus[] statuses,
+        CancellationToken ct)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
 
         var liveJobs = await db.DeploymentJobs
             .Where(j => j.WorkerId == workerId
-                        && (j.Status == JobStatus.Running || j.Status == JobStatus.Assigned))
+                        && statuses.Contains(j.Status))
             .ToListAsync(ct);
 
         if (liveJobs.Count == 0)

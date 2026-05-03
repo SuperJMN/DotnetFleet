@@ -21,4 +21,28 @@ public sealed class SectionHeader
     public IReadOnlyList<HeaderAction> Actions { get; }
 }
 
-public sealed record HeaderAction(string Text, string IconCode, ICommand Command, bool IsPrimary = false);
+public sealed class HeaderAction
+{
+    public HeaderAction(string text, string iconCode, ICommand command, bool isPrimary = false)
+    {
+        Text = text;
+        IconCode = iconCode;
+        Command = command;
+        IsPrimary = isPrimary;
+    }
+
+    public HeaderAction(string text, string iconCode, object flyoutContent)
+    {
+        Text = text;
+        IconCode = iconCode;
+        FlyoutContent = flyoutContent;
+    }
+
+    public string Text { get; }
+    public string IconCode { get; }
+    public ICommand? Command { get; }
+    public bool IsPrimary { get; }
+    public object? FlyoutContent { get; }
+    public bool HasFlyout => FlyoutContent is not null;
+    public bool IsSecondaryCommand => !IsPrimary && !HasFlyout;
+}

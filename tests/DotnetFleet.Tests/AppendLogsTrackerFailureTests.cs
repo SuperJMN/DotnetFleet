@@ -95,6 +95,7 @@ public class AppendLogsTrackerFailureTests : IDisposable
         public Task<IReadOnlyList<Guid>> FailStaleJobsAsync(TimeSpan staleThreshold, CancellationToken ct = default) => inner.FailStaleJobsAsync(staleThreshold, ct);
         public Task<IReadOnlyList<Guid>> FailTimedOutJobsAsync(TimeSpan queuedTimeout, CancellationToken ct = default) => inner.FailTimedOutJobsAsync(queuedTimeout, ct);
         public Task<IReadOnlyList<Guid>> FailStuckAssignedJobsAsync(TimeSpan assignedTimeout, CancellationToken ct = default) => inner.FailStuckAssignedJobsAsync(assignedTimeout, ct);
+        public Task<IReadOnlyList<Guid>> FailRunningJobsForWorkerAsync(Guid workerId, string reason, CancellationToken ct = default) => inner.FailRunningJobsForWorkerAsync(workerId, reason, ct);
         public Task<IReadOnlyList<Guid>> FailJobsForWorkerAsync(Guid workerId, string reason, CancellationToken ct = default) => inner.FailJobsForWorkerAsync(workerId, reason, ct);
         public Task<IReadOnlyList<Secret>> GetSecretsAsync(Guid? projectId, CancellationToken ct = default) => inner.GetSecretsAsync(projectId, ct);
         public Task<Secret?> GetSecretAsync(Guid id, CancellationToken ct = default) => inner.GetSecretAsync(id, ct);
