@@ -15,25 +15,33 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
 {
     private readonly FleetApiClient _client;
     private readonly INavigator _navigator;
+    private readonly IFileSystemPicker _fileSystemPicker;
 
     public Project Project { get; }
     public ProjectSecretsViewModel ProjectSecrets { get; }
 
     [Reactive] private bool _isLoading;
     [Reactive] private string? _error;
+    [Reactive] private string _packageProject = "";
 
     public ObservableCollection<JobViewModel> Jobs { get; } = [];
+    public ObservableCollection<PackagePlatformViewModel> PackagePlatforms { get; } = [];
+    public ObservableCollection<string> PackageProjects { get; } = [];
 
-    public ProjectDetailViewModel(Project project, FleetApiClient client, INavigator navigator)
+    public ProjectDetailViewModel(Project project, FleetApiClient client, INavigator navigator, IFileSystemPicker fileSystemPicker)
     {
         Project = project;
         _client = client;
         _navigator = navigator;
+        _fileSystemPicker = fileSystemPicker;
 
         ProjectSecrets = new ProjectSecretsViewModel(project.Id, client);
+        foreach (var platform in PackagePlatformViewModel.CreateDefaults())
+            PackagePlatforms.Add(platform);
 
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadJobsAsync);
         DeployCommand = ReactiveCommand.CreateFromTask(DeployAsync);
+        BuildPackagesCommand = ReactiveCommand.CreateFromTask(BuildPackagesAsync);
         ClearFinishedJobsCommand = ReactiveCommand.CreateFromTask(ClearFinishedJobsAsync);
         EditCommand = ReactiveCommand.Create(() =>
         {
@@ -42,8 +50,10 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
 
         RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         DeployCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
+        BuildPackagesCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         ClearFinishedJobsCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
         RefreshCommand.Execute(Unit.Default).Subscribe();
+        _ = LoadPackageProjectsAsync();
 
         Header = Observable.Return<object>(new SectionHeader(
             Project.Name,
@@ -56,9 +66,12 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> DeployCommand { get; }
+    public ReactiveCommand<Unit, Unit> BuildPackagesCommand { get; }
     public ReactiveCommand<Unit, Unit> ClearFinishedJobsCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
     public IObservable<object> Header { get; }
+    public int SelectedPackageTargetCount => PackagePlatforms.Sum(p => p.Targets.Count(t => t.IsSelected));
+    public bool HasPackageProjects => PackageProjects.Count > 0;
 
     private async Task LoadJobsAsync()
     {
@@ -68,7 +81,7 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
             var jobs = await _client.GetProjectJobsAsync(Project.Id);
             Jobs.Clear();
             foreach (var j in jobs.OrderByDescending(j => j.EnqueuedAt))
-                Jobs.Add(new JobViewModel(j, _client, _navigator, this));
+                Jobs.Add(new JobViewModel(j, _client, _navigator, this, _fileSystemPicker));
         }
         finally
         {
@@ -79,8 +92,41 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
     private async Task DeployAsync()
     {
         var job = await _client.EnqueueDeployAsync(Project.Id);
-        Jobs.Insert(0, new JobViewModel(job, _client, _navigator, this));
-        await _navigator.Go(() => new JobDetailViewModel(job, _client, _navigator, this));
+        Jobs.Insert(0, new JobViewModel(job, _client, _navigator, this, _fileSystemPicker));
+        await _navigator.Go(() => new JobDetailViewModel(job, _client, _navigator, this, _fileSystemPicker));
+    }
+
+    private async Task BuildPackagesAsync()
+    {
+        if (PackageProjects.Count > 1 && string.IsNullOrWhiteSpace(PackageProject))
+        {
+            Error = "Select the package project from deployer.yaml.";
+            return;
+        }
+
+        var targets = PackagePlatforms
+            .SelectMany(p => p.Targets)
+            .Where(t => t.IsSelected)
+            .Select(t => new PackageBuildTarget
+            {
+                Format = t.Format,
+                Architecture = t.Architecture
+            })
+            .ToList();
+
+        if (targets.Count == 0)
+        {
+            Error = "Select at least one package target.";
+            return;
+        }
+
+        var job = await _client.EnqueuePackageBuildAsync(Project.Id, new PackageBuildRequest
+        {
+            PackageProject = string.IsNullOrWhiteSpace(PackageProject) ? null : PackageProject.Trim(),
+            Targets = targets
+        });
+        Jobs.Insert(0, new JobViewModel(job, _client, _navigator, this, _fileSystemPicker));
+        await _navigator.Go(() => new JobDetailViewModel(job, _client, _navigator, this, _fileSystemPicker));
     }
 
     private async Task ClearFinishedJobsAsync()
@@ -88,6 +134,145 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
         await _client.DeleteFinishedProjectJobsAsync(Project.Id);
         await LoadJobsAsync();
     }
+
+    private async Task LoadPackageProjectsAsync()
+    {
+        try
+        {
+            var projects = await _client.GetPackageProjectsAsync(Project.Id);
+            PackageProjects.Clear();
+            foreach (var project in projects)
+                PackageProjects.Add(project);
+
+            if (PackageProjects.Count == 1 && string.IsNullOrWhiteSpace(PackageProject))
+                PackageProject = PackageProjects[0];
+
+            this.RaisePropertyChanged(nameof(HasPackageProjects));
+        }
+        catch
+        {
+            // Package project discovery is advisory; users can still type the project manually.
+        }
+    }
+}
+
+public partial class PackagePlatformViewModel : ReactiveObject
+{
+    public PackagePlatformViewModel(string name, IEnumerable<PackageFormatViewModel> formats)
+    {
+        Name = name;
+        Formats = new ObservableCollection<PackageFormatViewModel>(formats);
+    }
+
+    public string Name { get; }
+    public ObservableCollection<PackageFormatViewModel> Formats { get; }
+    public IEnumerable<PackageTargetOptionViewModel> Targets => Formats.SelectMany(format => format.Architectures);
+
+    public static IEnumerable<PackagePlatformViewModel> CreateDefaults()
+    {
+        yield return new PackagePlatformViewModel("Windows",
+        [
+            new("Setup (.exe)", "exe-setup",
+            [
+                new("Setup (.exe)", "exe-setup", "X64", "x64", isSelected: true),
+                new("Setup (.exe)", "exe-setup", "X86", "x86")
+            ]),
+            new("Self-extracting EXE", "exe-sfx",
+            [
+                new("Self-extracting EXE", "exe-sfx", "X64", "x64"),
+                new("Self-extracting EXE", "exe-sfx", "X86", "x86")
+            ]),
+            new("MSIX", "msix",
+            [
+                new("MSIX", "msix", "X64", "x64"),
+                new("MSIX", "msix", "X86", "x86")
+            ])
+        ]);
+
+        yield return new PackagePlatformViewModel("Linux",
+        [
+            new("DEB", "deb",
+            [
+                new("DEB", "deb", "X64", "x64"),
+                new("DEB", "deb", "ARM64", "arm64")
+            ]),
+            new("RPM", "rpm",
+            [
+                new("RPM", "rpm", "X64", "x64"),
+                new("RPM", "rpm", "ARM64", "arm64")
+            ]),
+            new("AppImage", "appimage",
+            [
+                new("AppImage", "appimage", "X64", "x64")
+            ]),
+            new("Flatpak", "flatpak",
+            [
+                new("Flatpak", "flatpak", "X64", "x64")
+            ])
+        ]);
+
+        yield return new PackagePlatformViewModel("macOS",
+        [
+            new("DMG", "dmg",
+            [
+                new("DMG", "dmg", "X64", "x64"),
+                new("DMG", "dmg", "ARM64", "arm64")
+            ])
+        ]);
+
+        yield return new PackagePlatformViewModel("Android",
+        [
+            new("APK", "apk",
+            [
+                new("APK", "apk", "X64", "x64")
+            ]),
+            new("AAB", "aab",
+            [
+                new("AAB", "aab", "X64", "x64")
+            ])
+        ]);
+    }
+}
+
+public class PackageFormatViewModel
+{
+    public PackageFormatViewModel(
+        string label,
+        string format,
+        IEnumerable<PackageTargetOptionViewModel> architectures)
+    {
+        Label = label;
+        Format = format;
+        Architectures = new ObservableCollection<PackageTargetOptionViewModel>(architectures);
+    }
+
+    public string Label { get; }
+    public string Format { get; }
+    public ObservableCollection<PackageTargetOptionViewModel> Architectures { get; }
+}
+
+public partial class PackageTargetOptionViewModel : ReactiveObject
+{
+    public PackageTargetOptionViewModel(
+        string formatLabel,
+        string format,
+        string architectureLabel,
+        string architecture,
+        bool isSelected = false)
+    {
+        FormatLabel = formatLabel;
+        Format = format;
+        ArchitectureLabel = architectureLabel;
+        Architecture = architecture;
+        _isSelected = isSelected;
+    }
+
+    public string FormatLabel { get; }
+    public string Format { get; }
+    public string ArchitectureLabel { get; }
+    public string Architecture { get; }
+
+    [Reactive] private bool _isSelected;
 }
 
 public partial class JobViewModel : ReactiveObject
@@ -95,18 +280,25 @@ public partial class JobViewModel : ReactiveObject
     private readonly FleetApiClient _client;
     private readonly INavigator _navigator;
     private readonly ProjectDetailViewModel _projectDetail;
+    private readonly IFileSystemPicker? _fileSystemPicker;
 
     public DeploymentJob Job { get; }
 
     private string? _version;
     private string _displayName = string.Empty;
 
-    public JobViewModel(DeploymentJob job, FleetApiClient client, INavigator navigator, ProjectDetailViewModel projectDetail)
+    public JobViewModel(
+        DeploymentJob job,
+        FleetApiClient client,
+        INavigator navigator,
+        ProjectDetailViewModel projectDetail,
+        IFileSystemPicker? fileSystemPicker = null)
     {
         Job = job;
         _client = client;
         _navigator = navigator;
         _projectDetail = projectDetail;
+        _fileSystemPicker = fileSystemPicker;
         _version = job.Version;
         _displayName = ComputeDisplayName(job.Version);
 
@@ -165,6 +357,8 @@ public partial class JobViewModel : ReactiveObject
         _ => Job.Status.ToString()
     };
 
+    public string KindText => Job.Kind == JobKind.PackageBuild ? "Packages" : "Deploy";
+
     public IIcon StatusIcon => new Icon(Job.Status switch
     {
         JobStatus.Queued => "mdi-clock-outline",
@@ -191,6 +385,6 @@ public partial class JobViewModel : ReactiveObject
 
     private void Open()
     {
-        _navigator.Go(() => new JobDetailViewModel(Job, _client, _navigator, _projectDetail));
+        _navigator.Go(() => new JobDetailViewModel(Job, _client, _navigator, _projectDetail, _fileSystemPicker));
     }
 }

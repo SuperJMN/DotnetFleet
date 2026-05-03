@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
 using AvaloniaTerminal;
+using CSharpFunctionalExtensions;
 using DynamicData;
 using DynamicData.Binding;
 using DotnetFleet.Api.Client;
@@ -13,7 +14,10 @@ using DotnetFleet.Core.Logging;
 using DotnetFleet.Views.Logging;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.DivineBytes;
+using Zafiro.UI;
 using Zafiro.UI.Navigation;
+using IOPath = System.IO.Path;
 
 namespace DotnetFleet.ViewModels;
 
@@ -21,6 +25,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 {
     private readonly FleetApiClient _client;
     private readonly INavigator _navigator;
+    private readonly IFileSystemPicker? _fileSystemPicker;
     private readonly ProjectDetailViewModel? _parentProject;
     private readonly SourceList<LogLine> _logs = new();
     private readonly IDisposable _filterSubscription;
@@ -38,8 +43,10 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     [Reactive] private DateTimeOffset? _currentPhaseStartedAt;
 
     public ObservableCollection<JobPhaseRow> Phases { get; } = new();
+    public ObservableCollection<PackageArtifactViewModel> Artifacts { get; } = new();
 
     public bool HasPhases => Phases.Count > 0;
+    public bool HasArtifacts => Artifacts.Count > 0;
     public bool HasCurrentPhase => !string.IsNullOrEmpty(_currentPhase);
     public string CurrentPhaseDisplay => string.IsNullOrEmpty(_currentPhase)
         ? string.Empty
@@ -61,19 +68,27 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 
     private CancellationTokenSource? _cts;
 
-    public JobDetailViewModel(DeploymentJob job, FleetApiClient client, INavigator navigator, ProjectDetailViewModel? parentProject = null)
+    public JobDetailViewModel(
+        DeploymentJob job,
+        FleetApiClient client,
+        INavigator navigator,
+        ProjectDetailViewModel? parentProject = null,
+        IFileSystemPicker? fileSystemPicker = null)
     {
         Job = job;
         _client = client;
         _navigator = navigator;
+        _fileSystemPicker = fileSystemPicker;
         _parentProject = parentProject;
         _statusText = FormatStatus(job.Status);
         _errorMessage = job.ErrorMessage;
 
         CopyLogsCommand = ReactiveCommand.CreateFromTask(CopyLogsToClipboard);
+        RefreshArtifactsCommand = ReactiveCommand.CreateFromTask(() => RefreshArtifactsAsync(default));
         NextSearchResultCommand = ReactiveCommand.Create(NavigateNextSearchResult);
         CancelJobCommand = ReactiveCommand.CreateFromTask(CancelJobAsync,
             this.WhenAnyValue(x => x.CanCancel));
+        RefreshArtifactsCommand.ThrownExceptions.Subscribe(ex => ErrorMessage = ex.Message);
 
         var minSeverityChanges = this.WhenAnyValue(x => x.MinSeverity);
 
@@ -103,6 +118,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             LoadLogsAsync().ConfigureAwait(false);
             // One-shot phase load for terminal jobs so the timeline still shows up.
             _ = RefreshPhasesAsync(default);
+            _ = RefreshArtifactsAsync(default);
         }
     }
 
@@ -161,6 +177,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         {
             "worker.git.clone" => "Cloning repository",
             "worker.deployer.invoke" => "Running DotnetDeployer",
+            "worker.artifacts.upload" => "Uploading package artifacts",
             "version.resolve" => "Resolving version",
             "workload.restore" => "Restoring workloads",
             "android.prereqs" => "Installing Android prerequisites",
@@ -178,6 +195,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     }
 
     public ReactiveCommand<Unit, Unit> CopyLogsCommand { get; }
+    public ReactiveCommand<Unit, Unit> RefreshArtifactsCommand { get; }
     public ReactiveCommand<Unit, Unit> NextSearchResultCommand { get; }
     public ReactiveCommand<Unit, Unit> CancelJobCommand { get; }
 
@@ -300,6 +318,66 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
                 ErrorMessage = updated.ErrorMessage;
                 this.RaisePropertyChanged(nameof(HasError));
             });
+
+        await RefreshArtifactsAsync(default);
+    }
+
+    private async Task RefreshArtifactsAsync(CancellationToken ct)
+    {
+        if (Job.Kind != JobKind.PackageBuild)
+            return;
+
+        var artifacts = await _client.GetJobArtifactsAsync(Job.Id);
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            Artifacts.Clear();
+            foreach (var artifact in artifacts)
+                Artifacts.Add(new PackageArtifactViewModel(artifact, this));
+            this.RaisePropertyChanged(nameof(HasArtifacts));
+        });
+    }
+
+    private async Task SaveArtifactAsync(PackageArtifact artifact)
+    {
+        if (_fileSystemPicker is null)
+        {
+            ErrorMessage = "File saving is not available in this host.";
+            this.RaisePropertyChanged(nameof(HasError));
+            return;
+        }
+
+        var destination = await _fileSystemPicker.PickForSave(
+            artifact.FileName,
+            Maybe.From(DefaultExtension(artifact.FileName)),
+            FileTypeFor(artifact.FileName),
+            new FileTypeFilter("All files", ["*"]));
+
+        if (destination.HasNoValue)
+            return;
+
+        var source = ByteSource.FromAsyncStreamFactory(() =>
+            _client.OpenJobArtifactStreamAsync(Job.Id, artifact.RelativePath));
+
+        var result = await destination.Value.SetContents(source);
+        if (result.IsFailure)
+        {
+            ErrorMessage = result.Error;
+            this.RaisePropertyChanged(nameof(HasError));
+        }
+    }
+
+    private static string? DefaultExtension(string fileName)
+    {
+        var extension = IOPath.GetExtension(fileName);
+        return string.IsNullOrWhiteSpace(extension) ? null : extension.TrimStart('.');
+    }
+
+    private static FileTypeFilter FileTypeFor(string fileName)
+    {
+        var extension = IOPath.GetExtension(fileName);
+        return string.IsNullOrWhiteSpace(extension)
+            ? new FileTypeFilter("Package files", ["*"])
+            : new FileTypeFilter($"{extension.TrimStart('.').ToUpperInvariant()} files (*{extension})", [$"*{extension}"]);
     }
 
     private static string FormatStatus(JobStatus status) => status switch
@@ -326,5 +404,34 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         _cts?.Dispose();
         _filterSubscription.Dispose();
         _logs.Dispose();
+    }
+
+    public sealed class PackageArtifactViewModel
+    {
+        private readonly JobDetailViewModel parent;
+
+        public PackageArtifactViewModel(PackageArtifact artifact, JobDetailViewModel parent)
+        {
+            Artifact = artifact;
+            this.parent = parent;
+            SaveCommand = ReactiveCommand.CreateFromTask(() => this.parent.SaveArtifactAsync(Artifact));
+        }
+
+        public PackageArtifact Artifact { get; }
+        public string FileName => Artifact.FileName;
+        public string SizeText => FormatSize(Artifact.SizeBytes);
+        public string Sha256Text => string.IsNullOrWhiteSpace(Artifact.Sha256)
+            ? ""
+            : $"SHA-256 {Artifact.Sha256[..Math.Min(12, Artifact.Sha256.Length)]}";
+        public ReactiveCommand<Unit, Unit> SaveCommand { get; }
+
+        private static string FormatSize(long bytes)
+        {
+            if (bytes >= 1024 * 1024)
+                return $"{bytes / 1024d / 1024d:0.0} MB";
+            if (bytes >= 1024)
+                return $"{bytes / 1024d:0.0} KB";
+            return $"{bytes} B";
+        }
     }
 }

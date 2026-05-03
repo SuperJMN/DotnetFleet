@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Reactive;
 using System.Reactive.Linq;
 using DotnetFleet.Api.Client;
@@ -92,7 +93,7 @@ public partial class WorkerItemViewModel : ReactiveObject
 
             var cores = Worker.ProcessorCount > 0 ? $"{Worker.ProcessorCount} core(s)" : null;
             var memory = Worker.TotalMemoryMb > 0
-                ? $"{Worker.TotalMemoryMb / 1024.0:F1} GB"
+                ? $"{(Worker.TotalMemoryMb / 1024.0).ToString("F1", CultureInfo.InvariantCulture)} GB"
                 : null;
             var arch = !string.IsNullOrWhiteSpace(Worker.Architecture)
                 ? Worker.Architecture

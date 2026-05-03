@@ -11,6 +11,7 @@ public interface IWorkerJobSource
     Task<DeploymentJob?> GetNextJobAsync(Guid workerId, CancellationToken ct = default);
     Task ReportJobStartedAsync(Guid jobId, Guid workerId, CancellationToken ct = default);
     Task SendLogChunkAsync(Guid jobId, IEnumerable<string> lines, CancellationToken ct = default);
+    Task UploadArtifactAsync(Guid jobId, string relativePath, Stream content, CancellationToken ct = default);
     Task ReportJobCompletedAsync(Guid jobId, bool success, string? errorMessage, CancellationToken ct = default);
 
     /// <summary>

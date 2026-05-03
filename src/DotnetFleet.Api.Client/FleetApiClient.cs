@@ -149,6 +149,16 @@ public class FleetApiClient
         return (await response.Content.ReadFromJsonAsync<DeploymentJob>(JsonOptions))!;
     }
 
+    public async Task<DeploymentJob> EnqueuePackageBuildAsync(Guid projectId, PackageBuildRequest request)
+    {
+        var response = await http.PostAsJsonAsync($"/api/projects/{projectId}/packages", request, JsonOptions);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<DeploymentJob>(JsonOptions))!;
+    }
+
+    public async Task<List<string>> GetPackageProjectsAsync(Guid projectId) =>
+        await http.GetFromJsonAsync<List<string>>($"/api/projects/{projectId}/package-projects", JsonOptions) ?? [];
+
     public async Task<List<DeploymentJob>> GetProjectJobsAsync(Guid projectId) =>
         await http.GetFromJsonAsync<List<DeploymentJob>>($"/api/projects/{projectId}/jobs", JsonOptions) ?? [];
 
@@ -183,6 +193,26 @@ public class FleetApiClient
     /// </summary>
     public async Task<List<JobPhase>> GetJobPhasesAsync(Guid id) =>
         await http.GetFromJsonAsync<List<JobPhase>>($"/api/jobs/{id}/phases", JsonOptions) ?? [];
+
+    public async Task<List<PackageArtifact>> GetJobArtifactsAsync(Guid id) =>
+        await http.GetFromJsonAsync<List<PackageArtifact>>($"/api/jobs/{id}/artifacts", JsonOptions) ?? [];
+
+    public async Task<byte[]> DownloadJobArtifactAsync(Guid id, string relativePath, CancellationToken ct = default)
+    {
+        var response = await http.GetAsync($"/api/jobs/{id}/artifacts/{EscapeRelativePath(relativePath)}", ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync(ct);
+    }
+
+    public async Task<Stream> OpenJobArtifactStreamAsync(Guid id, string relativePath, CancellationToken ct = default)
+    {
+        var response = await http.GetAsync($"/api/jobs/{id}/artifacts/{EscapeRelativePath(relativePath)}",
+            HttpCompletionOption.ResponseHeadersRead, ct);
+        response.EnsureSuccessStatusCode();
+
+        var stream = await response.Content.ReadAsStreamAsync(ct);
+        return new HttpResponseMessageStream(stream, response);
+    }
 
     public async Task CancelJobAsync(Guid jobId)
     {
@@ -251,6 +281,49 @@ public class FleetApiClient
     public enum SseEventType { Log, Status }
     public record SseEvent(SseEventType Type, string Data);
 
+    private sealed class HttpResponseMessageStream(Stream inner, HttpResponseMessage response) : Stream
+    {
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => inner.CanSeek;
+        public override bool CanWrite => inner.CanWrite;
+        public override long Length => inner.Length;
+
+        public override long Position
+        {
+            get => inner.Position;
+            set => inner.Position = value;
+        }
+
+        public override void Flush() => inner.Flush();
+        public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            inner.ReadAsync(buffer, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+        public override void SetLength(long value) => inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            inner.WriteAsync(buffer, cancellationToken);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                inner.Dispose();
+                response.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await inner.DisposeAsync();
+            response.Dispose();
+            await base.DisposeAsync();
+        }
+    }
+
     /// <summary>
     /// Sends a request bypassing <c>HttpClient.Timeout</c> so the response body can be streamed indefinitely.
     /// </summary>
@@ -261,6 +334,12 @@ public class FleetApiClient
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, noTimeoutCts.Token);
         return await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linked.Token);
     }
+
+    private static string EscapeRelativePath(string relativePath) =>
+        string.Join('/',
+            relativePath.Replace('\\', '/')
+                .Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Select(Uri.EscapeDataString));
 
     // ── Workers ───────────────────────────────────────────────────────────────
 

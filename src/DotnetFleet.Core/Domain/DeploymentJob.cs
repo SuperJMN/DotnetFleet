@@ -5,6 +5,7 @@ public class DeploymentJob
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid ProjectId { get; set; }
     public Guid? WorkerId { get; set; }
+    public JobKind Kind { get; set; } = JobKind.Deploy;
     public JobStatus Status { get; set; } = JobStatus.Queued;
 
     /// <summary>Commit SHA that triggered this job (null for manual deploys).</summary>
@@ -17,6 +18,12 @@ public class DeploymentJob
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// JSON payload for <see cref="JobKind.PackageBuild"/> jobs. Stored on the
+    /// job so queued work is self-contained even if project settings change later.
+    /// </summary>
+    public string? PackageRequestJson { get; set; }
 
     /// <summary>
     /// Coordinator's prediction of how long this job will take on the assigned worker, in

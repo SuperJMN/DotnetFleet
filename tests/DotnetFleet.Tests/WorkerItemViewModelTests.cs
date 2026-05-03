@@ -26,7 +26,7 @@ public class WorkerItemViewModelTests
     public void CapabilityLabel_renders_cores_memory_and_arch()
     {
         var vm = new WorkerItemViewModel(Info(8, 16 * 1024, "X64"), client: null!);
-        vm.CapabilityLabel.Should().Be("8 core(s) · 16,0 GB · X64");
+        vm.CapabilityLabel.Should().Be("8 core(s) · 16.0 GB · X64");
     }
 
     [Fact]

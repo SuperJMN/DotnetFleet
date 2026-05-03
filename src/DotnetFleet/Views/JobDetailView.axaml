@@ -96,6 +96,38 @@
             </ScrollViewer>
         </Expander>
 
+        <Expander DockPanel.Dock="Top"
+                  Header="Package artifacts"
+                  IsExpanded="True"
+                  Margin="0,0,0,8"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Stretch"
+                  IsVisible="{Binding HasArtifacts}">
+            <ItemsControl ItemsSource="{Binding Artifacts}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Padding="10,6" Margin="0,2"
+                                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                CornerRadius="4">
+                            <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="10">
+                                <TextBlock Grid.Column="0" Text="{Binding FileName}"
+                                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1" Text="{Binding SizeText}"
+                                           Opacity="0.65" VerticalAlignment="Center" />
+                                <EnhancedButton Grid.Column="2" Content="Save"
+                                                Icon="{Icon mdi-download}"
+                                                Command="{Binding SaveCommand}"
+                                                Grid.RowSpan="2" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Sha256Text}"
+                                           FontFamily="Consolas,Courier New,monospace"
+                                           FontSize="11" Opacity="0.55" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Expander>
+
         <!-- Toolbar: search + severity filter (wraps on narrow widths) -->
         <Border DockPanel.Dock="Top"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"

@@ -22,6 +22,7 @@ public static class DeployerRunner
     public static async Task<(bool Success, string? Error)> RunAsync(
         string workingDirectory,
         Func<string, Task> onLine,
+        IReadOnlyList<string>? arguments = null,
         IReadOnlyDictionary<string, string>? envVars = null,
         Func<PhaseEvent, Task>? onPhase = null,
         CancellationToken ct = default)
@@ -39,6 +40,11 @@ public static class DeployerRunner
         psi.ArgumentList.Add("dnx");
         psi.ArgumentList.Add("dotnetdeployer.tool");
         psi.ArgumentList.Add("-y");
+        if (arguments is not null)
+        {
+            foreach (var arg in arguments)
+                psi.ArgumentList.Add(arg);
+        }
 
         EnsureDotnetEnvironment(psi);
 

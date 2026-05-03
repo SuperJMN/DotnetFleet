@@ -159,6 +159,31 @@ public class RemoteWorkerBackgroundService : BackgroundService
             await logBuffer.AppendAsync(line);
         }
 
+        async Task<int> UploadPackageArtifactsAsync(string outputDir, CancellationToken token)
+        {
+            if (!Directory.Exists(outputDir))
+                throw new InvalidOperationException("Deployer completed but did not create the package output directory.");
+
+            var files = Directory.EnumerateFiles(outputDir, "*", SearchOption.AllDirectories)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToList();
+
+            if (files.Count == 0)
+                throw new InvalidOperationException("Deployer completed but did not produce package artifacts.");
+
+            foreach (var file in files)
+            {
+                var relativePath = Path.GetRelativePath(outputDir, file).Replace('\\', '/');
+                await using var stream = File.OpenRead(file);
+                await jobSource.UploadArtifactAsync(job.Id, relativePath, stream, token);
+
+                var size = new FileInfo(file).Length;
+                await Log($"[artifact] Uploaded {relativePath} ({size} bytes)");
+            }
+
+            return files.Count;
+        }
+
         // Tracks whether the coordinator has told us to abort. When set, we MUST NOT
         // call ReportJobCompletedAsync (or any best-effort variant) afterwards: the
         // coordinator has already moved on and any further write would either 404 or
@@ -180,6 +205,7 @@ public class RemoteWorkerBackgroundService : BackgroundService
             await ManageDiskSpaceAsync(ct);
 
             var localPath = Path.Combine(repoStoragePath, SanitizeName(project.Name));
+            var branch = string.IsNullOrWhiteSpace(project.Branch) ? "main" : project.Branch;
 
             using var cancelCts = new CancellationTokenSource();
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, cancelCts.Token);
@@ -195,19 +221,19 @@ public class RemoteWorkerBackgroundService : BackgroundService
             try
             {
                 await Log($"=== DotnetFleet Worker | Job {job.Id} ===");
-                await Log($"Project: {project.Name} | Branch: {project.Branch}");
+                await Log($"Project: {project.Name} | Branch: {branch}");
                 await Log($"Git URL: {project.GitUrl}");
 
                 // worker.git.clone — the worker emits its own phases for steps that
                 // happen BEFORE DotnetDeployer is invoked (clone/fetch). DotnetDeployer
                 // emits the rest from inside the build.
                 await EmitPhaseAsync(job.Id, PhaseEventKind.Start, "worker.git.clone",
-                    attrs: new() { ["branch"] = project.Branch ?? "" }, ct: jobCt);
+                    attrs: new() { ["branch"] = branch }, ct: jobCt);
                 var gitSw = System.Diagnostics.Stopwatch.StartNew();
                 bool gitOk = false;
                 try
                 {
-                    await GitHelper.CloneOrFetchAsync(project.GitUrl, project.Branch, localPath,
+                    await GitHelper.CloneOrFetchAsync(project.GitUrl, branch, localPath,
                         msg => logBuffer.AppendAsync(msg), jobCt, project.GitToken);
                     gitOk = true;
                 }
@@ -238,8 +264,6 @@ public class RemoteWorkerBackgroundService : BackgroundService
                     logger.LogWarning(ex, "Failed to upsert repo cache metadata.");
                 }
 
-                await Log("=== Invoking DotnetDeployer ===");
-
                 var globalSecrets = await coordinator.GetGlobalSecretsAsync(ct);
                 var projectSecrets = await coordinator.GetProjectSecretsAsync(project.Id, ct);
 
@@ -247,6 +271,16 @@ public class RemoteWorkerBackgroundService : BackgroundService
                     .Concat(projectSecrets)
                     .GroupBy(s => s.Name)
                     .ToDictionary(g => g.Key, g => g.Last().Value);
+
+                var packageOutputDir = job.Kind == JobKind.PackageBuild
+                    ? PreparePackageOutputDirectory(job.Id)
+                    : null;
+
+                var deployerArguments = BuildDeployerArguments(job, packageOutputDir);
+
+                await Log(job.Kind == JobKind.PackageBuild
+                    ? "=== Invoking DotnetDeployer (package-only) ==="
+                    : "=== Invoking DotnetDeployer ===");
 
                 // worker.deployer.invoke wraps the entire DotnetDeployer process. The
                 // marker stream parsed by DeployerRunner produces nested phases
@@ -259,6 +293,7 @@ public class RemoteWorkerBackgroundService : BackgroundService
                 var (success, error) = await DeployerRunner.RunAsync(
                     localPath,
                     onLine: line => logBuffer.AppendAsync(line),
+                    arguments: deployerArguments,
                     envVars: envVars,
                     onPhase: ev => jobSource.PostJobPhaseAsync(job.Id, ev, jobCt),
                     ct: jobCt);
@@ -270,18 +305,51 @@ public class RemoteWorkerBackgroundService : BackgroundService
 
                 await logBuffer.FlushAsync();
 
+                if (success && job.Kind == JobKind.PackageBuild && packageOutputDir is not null)
+                {
+                    await EmitPhaseAsync(job.Id, PhaseEventKind.Start, "worker.artifacts.upload", ct: jobCt);
+                    var uploadSw = System.Diagnostics.Stopwatch.StartNew();
+                    var uploadOk = false;
+
+                    try
+                    {
+                        var uploaded = await UploadPackageArtifactsAsync(packageOutputDir, jobCt);
+                        uploadOk = true;
+                        await Log($"=== Uploaded {uploaded} package artifact(s) ===");
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        success = false;
+                        error = ex.Message;
+                        await Log($"=== Artifact upload FAILED: {error} ===");
+                    }
+                    finally
+                    {
+                        uploadSw.Stop();
+                        await EmitPhaseAsync(job.Id, PhaseEventKind.End, "worker.artifacts.upload",
+                            status: uploadOk ? PhaseStatus.Ok : PhaseStatus.Fail,
+                            durationMs: uploadSw.ElapsedMilliseconds, ct: jobCt);
+                    }
+
+                    await logBuffer.FlushAsync();
+                }
+
                 if (aborted)
                 {
                     logger.LogWarning("Job {JobId} aborted by coordinator instruction; not reporting completion.", job.Id);
                 }
                 else if (success)
                 {
-                    await Log("=== Deployment SUCCEEDED ===");
+                    await Log(job.Kind == JobKind.PackageBuild
+                        ? "=== Package build SUCCEEDED ==="
+                        : "=== Deployment SUCCEEDED ===");
                     await jobSource.ReportJobCompletedAsync(job.Id, true, null, ct);
                 }
                 else
                 {
-                    await Log($"=== Deployment FAILED: {error} ===");
+                    await Log(job.Kind == JobKind.PackageBuild
+                        ? $"=== Package build FAILED: {error} ==="
+                        : $"=== Deployment FAILED: {error} ===");
                     await jobSource.ReportJobCompletedAsync(job.Id, false, error, ct);
                 }
             }
@@ -446,6 +514,50 @@ public class RemoteWorkerBackgroundService : BackgroundService
     private static string SanitizeName(string name) =>
         string.Concat(name.Select(c => Path.GetInvalidPathChars().Contains(c) ? '_' : c))
               .Replace(' ', '-');
+
+    private string PreparePackageOutputDirectory(Guid jobId)
+    {
+        var path = Path.Combine(repoStoragePath, ".package-artifacts", jobId.ToString("N"));
+        if (Directory.Exists(path))
+            Directory.Delete(path, recursive: true);
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private static IReadOnlyList<string> BuildDeployerArguments(DeploymentJob job, string? packageOutputDir)
+    {
+        if (job.Kind != JobKind.PackageBuild)
+            return [];
+
+        if (string.IsNullOrWhiteSpace(packageOutputDir))
+            throw new InvalidOperationException("Package output directory is required for package build jobs.");
+
+        var request = PackageBuildRequest.Deserialize(job.PackageRequestJson);
+        if (request.Targets.Count == 0)
+            throw new InvalidOperationException("Package build job has no package targets.");
+
+        var args = new List<string>
+        {
+            "--package-only"
+        };
+
+        if (!string.IsNullOrWhiteSpace(request.PackageProject))
+        {
+            args.Add("--package-project");
+            args.Add(request.PackageProject);
+        }
+
+        foreach (var target in request.Targets)
+        {
+            args.Add("--package-target");
+            args.Add(target.ToDeployerTarget());
+        }
+
+        args.Add("--output-dir");
+        args.Add(packageOutputDir);
+
+        return args;
+    }
 
     /// <summary>
     /// Sends a worker-side phase event (e.g. <c>worker.git.clone</c>) to the

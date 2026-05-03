@@ -41,7 +41,8 @@
                                     <TextBlock FontSize="13" FontWeight="SemiBold"
                                                Text="{Binding DisplayName}" />
                                     <TextBlock FontSize="12" Opacity="0.6">
-                                        <Run Text="Queued: " />
+                                        <Run Text="{Binding KindText}" />
+                                        <Run Text=" · Queued: " />
                                         <Run Text="{Binding Job.EnqueuedAt}" />
                                     </TextBlock>
                                     <TextBlock FontSize="12" Opacity="0.5"
@@ -58,10 +59,65 @@
             </ItemsControl>
             </ScrollViewer>
 
-            <!-- Project secrets panel -->
-            <DockPanel FlexPanel.Grow="1" FlexPanel.Basis="280"
-                       MinWidth="240" MaxWidth="400"
-                       DataContext="{Binding ProjectSecrets}">
+            <!-- Project actions sidebar -->
+            <StackPanel FlexPanel.Grow="1" FlexPanel.Basis="280"
+                        MinWidth="240" MaxWidth="420"
+                        Spacing="12">
+
+                <Border Padding="12"
+                        Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                        CornerRadius="4">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Package Targets" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <EnhancedButton Grid.Column="1" Content="Build" Icon="{Icon mdi-package-variant-closed}"
+                                            Classes="Primary"
+                                            Command="{Binding BuildPackagesCommand}" />
+                        </Grid>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Package project" FontWeight="SemiBold" FontSize="12" Opacity="0.75" />
+                            <ComboBox ItemsSource="{Binding PackageProjects}"
+                                      SelectedItem="{Binding PackageProject}"
+                                      IsVisible="{Binding HasPackageProjects}"
+                                      HorizontalAlignment="Stretch" />
+                            <TextBox Text="{Binding PackageProject}"
+                                     PlaceholderText="github.packages project path (optional)" />
+                        </StackPanel>
+
+                        <ItemsControl ItemsSource="{Binding PackagePlatforms}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="vm:PackagePlatformViewModel">
+                                    <StackPanel Spacing="4" Margin="0,2,0,8">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Opacity="0.75" />
+                                        <ItemsControl ItemsSource="{Binding Formats}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="vm:PackageFormatViewModel">
+                                                    <StackPanel Spacing="2" Margin="0,2,0,4">
+                                                        <TextBlock Text="{Binding Label}" FontSize="12" />
+                                                        <ItemsControl ItemsSource="{Binding Architectures}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate DataType="vm:PackageTargetOptionViewModel">
+                                                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="8,1,0,1">
+                                                                        <TextBlock Text="{Binding ArchitectureLabel}" Opacity="0.65" />
+                                                                    </CheckBox>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Project secrets panel -->
+                <DockPanel DataContext="{Binding ProjectSecrets}">
 
                 <!-- Secrets header -->
                 <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
@@ -139,7 +195,9 @@
                     </ItemsControl>
                 </ScrollViewer>
 
-            </DockPanel>
+                </DockPanel>
+
+            </StackPanel>
 
         </FlexPanel>
 

@@ -39,6 +39,7 @@ public class FleetDbContext : DbContext
         {
             e.HasKey(j => j.Id);
             e.HasIndex(j => j.ProjectId);
+            e.HasIndex(j => j.Kind);
             e.HasIndex(j => j.Status);
             e.HasIndex(j => j.EnqueuedAt);
         });

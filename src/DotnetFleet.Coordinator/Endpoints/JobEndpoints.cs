@@ -16,6 +16,8 @@ public static class JobEndpoints
         group.MapGet("/{id:guid}", GetById);
         group.MapGet("/{id:guid}/logs", StreamLogs);
         group.MapGet("/{id:guid}/phases", GetPhases);
+        group.MapGet("/{id:guid}/artifacts", GetArtifacts);
+        group.MapGet("/{id:guid}/artifacts/{*relativePath}", DownloadArtifact);
         group.MapPost("/{id:guid}/cancel", CancelJob);
 
         // Worker internal endpoints (authenticated by worker secret header)
@@ -24,6 +26,7 @@ public static class JobEndpoints
         workerGroup.MapPost("/jobs/{id:guid}/start", ReportStarted).RequireAuthorization("Worker");
         workerGroup.MapPost("/jobs/{id:guid}/logs", AppendLogs).RequireAuthorization("Worker");
         workerGroup.MapPost("/jobs/{id:guid}/phase", AppendPhase).RequireAuthorization("Worker");
+        workerGroup.MapPost("/jobs/{id:guid}/artifacts", UploadArtifact).RequireAuthorization("Worker");
         workerGroup.MapPost("/jobs/{id:guid}/complete", ReportCompleted).RequireAuthorization("Worker");
         workerGroup.MapGet("/jobs/{id:guid}/should-cancel", ShouldCancel).RequireAuthorization("Worker");
     }
@@ -412,6 +415,84 @@ public static class JobEndpoints
 
         await storage.RecordJobPhaseAsync(id, ev, DateTimeOffset.UtcNow);
         return Results.Ok();
+    }
+
+    private static async Task<IResult> UploadArtifact(
+        Guid id,
+        HttpContext httpContext,
+        IFleetStorage storage,
+        PackageArtifactStore artifacts)
+    {
+        if (!TryGetWorkerId(httpContext, out var workerId))
+            return Results.Forbid();
+
+        var job = await storage.GetJobAsync(id);
+        if (job is null) return Results.NotFound();
+        if (job.WorkerId != workerId) return Results.Forbid();
+        if (job.Kind != JobKind.PackageBuild)
+            return Results.BadRequest(new { error = "Artifacts can only be uploaded for package build jobs." });
+
+        var relativePath = httpContext.Request.Headers["X-Fleet-Artifact-Path"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return Results.BadRequest(new { error = "X-Fleet-Artifact-Path header is required." });
+
+        try
+        {
+            var saved = await artifacts.SaveAsync(job, relativePath, httpContext.Request.Body, httpContext.RequestAborted);
+            return Results.Ok(saved);
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    private static async Task<IResult> GetArtifacts(
+        Guid id,
+        IFleetStorage storage,
+        PackageArtifactStore artifacts)
+    {
+        var job = await storage.GetJobAsync(id);
+        if (job is null) return Results.NotFound();
+
+        var result = await artifacts.ListAsync(job);
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> DownloadArtifact(
+        Guid id,
+        string relativePath,
+        IFleetStorage storage,
+        PackageArtifactStore artifacts)
+    {
+        var job = await storage.GetJobAsync(id);
+        if (job is null) return Results.NotFound();
+
+        try
+        {
+            var stream = artifacts.OpenRead(job, relativePath);
+            return Results.File(stream, "application/octet-stream", artifacts.GetFileName(relativePath));
+        }
+        catch (FileNotFoundException)
+        {
+            return Results.NotFound();
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return Results.NotFound();
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
     }
 
     private static async Task<IResult> CancelJob(

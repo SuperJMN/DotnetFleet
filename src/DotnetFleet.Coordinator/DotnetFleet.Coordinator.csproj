@@ -17,6 +17,7 @@
     <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Serilog.Settings.Configuration" />
     <PackageReference Include="Makaretu.Dns.Multicast.New" />
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DotnetFleet.Core\DotnetFleet.Core.csproj" />

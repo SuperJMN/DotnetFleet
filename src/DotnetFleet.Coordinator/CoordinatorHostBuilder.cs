@@ -79,6 +79,9 @@ public static class CoordinatorHostBuilder
 
         // ── Services ─────────────────────────────────────────────────────────
         builder.Services.AddSingleton<LogBroadcaster>();
+        builder.Services.AddSingleton(_ =>
+            new PackageArtifactStore(builder.Configuration["Artifacts:RootDir"] ?? "fleet-artifacts"));
+        builder.Services.AddSingleton<PackageProjectDiscovery>();
         builder.Services.AddSingleton<Endpoints.WorkerLivenessFilter>();
         builder.Services.AddSingleton<JobAssignmentSignal>();
         builder.Services.AddSingleton<IDurationEstimator, EwmaDurationEstimator>();
@@ -190,6 +193,8 @@ public static class CoordinatorHostBuilder
         // Smart-scheduler columns: AssignedAt + EstimatedDurationMs (issue: smart scheduling).
         await EnsureJobColumnAsync(db, "AssignedAt", "INTEGER NULL");
         await EnsureJobColumnAsync(db, "EstimatedDurationMs", "INTEGER NULL");
+        await EnsureJobColumnAsync(db, "Kind", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureJobColumnAsync(db, "PackageRequestJson", "TEXT NULL");
 
         // High-level phase tracking: desnormalized cache of the current phase
         // for cheap "fase actual" reads, plus a JobPhases timeline table.
@@ -313,7 +318,10 @@ public static class CoordinatorHostBuilder
             overrides["Seed:AdminPassword"] = options.AdminPassword;
 
         if (!string.IsNullOrEmpty(options.DataDir))
+        {
             overrides["ConnectionStrings:DefaultConnection"] = $"Data Source={Path.Combine(options.DataDir, "fleet.db")}";
+            overrides["Artifacts:RootDir"] = Path.Combine(options.DataDir, "artifacts");
+        }
 
         if (overrides.Count > 0)
             config.AddInMemoryCollection(overrides);

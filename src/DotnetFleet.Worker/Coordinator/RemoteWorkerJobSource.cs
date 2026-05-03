@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using DotnetFleet.Core.Domain;
 using DotnetFleet.Core.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -45,6 +46,17 @@ public class RemoteWorkerJobSource : IWorkerJobSource
         var resp = await http.PostAsJsonAsync($"/api/queue/jobs/{jobId}/logs", payload, ct);
         if (!resp.IsSuccessStatusCode)
             logger.LogWarning("POST /api/queue/jobs/{JobId}/logs failed with {Status}", jobId, (int)resp.StatusCode);
+    }
+
+    public async Task UploadArtifactAsync(Guid jobId, string relativePath, Stream content, CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/queue/jobs/{jobId}/artifacts");
+        request.Headers.Add("X-Fleet-Artifact-Path", relativePath.Replace('\\', '/'));
+        request.Content = new StreamContent(content);
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+        var resp = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        resp.EnsureSuccessStatusCode();
     }
 
     public async Task PostJobPhaseAsync(Guid jobId, PhaseEvent ev, CancellationToken ct = default)

@@ -17,6 +17,8 @@ public static class ProjectEndpoints
         group.MapPut("/{id:guid}", Update);
         group.MapDelete("/{id:guid}", Delete);
         group.MapPost("/{id:guid}/deploy", EnqueueDeploy);
+        group.MapPost("/{id:guid}/packages", EnqueuePackageBuild);
+        group.MapGet("/{id:guid}/package-projects", GetPackageProjects);
         group.MapGet("/{id:guid}/jobs", GetJobsForProject);
         group.MapDelete("/{id:guid}/jobs/finished", DeleteFinishedJobs);
     }
@@ -89,19 +91,93 @@ public static class ProjectEndpoints
         return Results.Created($"/api/jobs/{job.Id}", job);
     }
 
+    private static async Task<IResult> EnqueuePackageBuild(
+        Guid id,
+        [FromBody] PackageBuildRequest req,
+        IFleetStorage storage,
+        JobAssignmentSignal signal)
+    {
+        var project = await storage.GetProjectAsync(id);
+        if (project is null)
+            return Results.NotFound();
+
+        var targets = (req.Targets ?? [])
+            .Where(t => !string.IsNullOrWhiteSpace(t.Format) && !string.IsNullOrWhiteSpace(t.Architecture))
+            .Select(t => new PackageBuildTarget
+            {
+                Format = t.Format.Trim(),
+                Architecture = t.Architecture.Trim()
+            })
+            .ToList();
+
+        if (targets.Count == 0)
+            return Results.BadRequest(new { error = "At least one package target is required." });
+
+        var packageRequest = new PackageBuildRequest
+        {
+            PackageProject = string.IsNullOrWhiteSpace(req.PackageProject) ? null : req.PackageProject.Trim(),
+            Targets = targets
+        };
+
+        var job = new DeploymentJob
+        {
+            ProjectId = id,
+            Kind = JobKind.PackageBuild,
+            IsAutoTriggered = false,
+            PackageRequestJson = PackageBuildRequest.Serialize(packageRequest)
+        };
+
+        await storage.AddJobAsync(job);
+        signal.Notify();
+        return Results.Created($"/api/jobs/{job.Id}", job);
+    }
+
+    private static async Task<IResult> GetPackageProjects(
+        Guid id,
+        IFleetStorage storage,
+        PackageProjectDiscovery discovery,
+        HttpContext httpContext)
+    {
+        var project = await storage.GetProjectAsync(id);
+        if (project is null)
+            return Results.NotFound();
+
+        try
+        {
+            var projects = await discovery.DiscoverPackageProjectsAsync(project, httpContext.RequestAborted);
+            return Results.Ok(projects);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
     private static async Task<IResult> GetJobsForProject(Guid id, IFleetStorage storage)
     {
         var jobs = await storage.GetJobsByProjectAsync(id);
         return Results.Ok(jobs);
     }
 
-    private static async Task<IResult> DeleteFinishedJobs(Guid id, IFleetStorage storage)
+    private static async Task<IResult> DeleteFinishedJobs(
+        Guid id,
+        IFleetStorage storage,
+        PackageArtifactStore artifacts)
     {
         var project = await storage.GetProjectAsync(id);
         if (project is null)
             return Results.NotFound();
 
+        var terminal = new[] { JobStatus.Succeeded, JobStatus.Failed, JobStatus.Cancelled };
+        var artifactJobs = (await storage.GetJobsByProjectAsync(id))
+            .Where(job => job.Kind == JobKind.PackageBuild && terminal.Contains(job.Status))
+            .ToList();
+
         var deleted = await storage.DeleteFinishedJobsAsync(id);
+
+        foreach (var job in artifactJobs)
+            await artifacts.DeleteAsync(job);
+
         return Results.Ok(new { deleted });
     }
 

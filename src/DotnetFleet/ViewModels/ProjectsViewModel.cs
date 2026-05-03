@@ -16,6 +16,7 @@ namespace DotnetFleet.ViewModels;
 public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
 {
     private readonly FleetApiClient _client;
+    private readonly IFileSystemPicker _fileSystemPicker;
     internal readonly INavigator Navigator;
 
     [Reactive] private ProjectViewModel? _selectedProject;
@@ -23,9 +24,10 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
 
     public ObservableCollection<ProjectViewModel> Projects { get; } = [];
 
-    public ProjectsViewModel(FleetApiClient client, INavigator navigator)
+    public ProjectsViewModel(FleetApiClient client, INavigator navigator, IFileSystemPicker fileSystemPicker)
     {
         _client = client;
+        _fileSystemPicker = fileSystemPicker;
         Navigator = navigator;
 
         var refresh = ReactiveCommand.CreateFromTask(LoadProjectsAsync);
@@ -58,7 +60,7 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
             var list = await _client.GetProjectsAsync();
             Projects.Clear();
             foreach (var p in list)
-                Projects.Add(new ProjectViewModel(p, _client, Navigator, this));
+                Projects.Add(new ProjectViewModel(p, _client, Navigator, this, _fileSystemPicker));
         }
         finally
         {
@@ -77,15 +79,22 @@ public partial class ProjectViewModel : ReactiveObject
     private readonly FleetApiClient _client;
     private readonly INavigator _navigator;
     private readonly ProjectsViewModel _parent;
+    private readonly IFileSystemPicker _fileSystemPicker;
 
     public Project Project { get; }
 
-    public ProjectViewModel(Project project, FleetApiClient client, INavigator navigator, ProjectsViewModel parent)
+    public ProjectViewModel(
+        Project project,
+        FleetApiClient client,
+        INavigator navigator,
+        ProjectsViewModel parent,
+        IFileSystemPicker fileSystemPicker)
     {
         Project = project;
         _client = client;
         _navigator = navigator;
         _parent = parent;
+        _fileSystemPicker = fileSystemPicker;
 
         OpenCommand = ReactiveCommand.Create(Open);
         EditCommand = ReactiveCommand.Create(Edit);
@@ -98,7 +107,7 @@ public partial class ProjectViewModel : ReactiveObject
 
     private void Open()
     {
-        _navigator.Go(() => new ProjectDetailViewModel(Project, _client, _navigator));
+        _navigator.Go(() => new ProjectDetailViewModel(Project, _client, _navigator, _fileSystemPicker));
     }
 
     private void Edit()
