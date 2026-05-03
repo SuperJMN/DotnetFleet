@@ -41,6 +41,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     [Reactive] private string _searchResultText = string.Empty;
     [Reactive] private string? _currentPhase;
     [Reactive] private DateTimeOffset? _currentPhaseStartedAt;
+    [Reactive] private bool _isDetailedLogVisible;
 
     public ObservableCollection<JobPhaseRow> Phases { get; } = new();
     public ObservableCollection<PackageArtifactViewModel> Artifacts { get; } = new();
@@ -51,6 +52,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     public string CurrentPhaseDisplay => string.IsNullOrEmpty(_currentPhase)
         ? string.Empty
         : FormatPhaseName(_currentPhase!);
+    public string DetailedLogButtonText => IsDetailedLogVisible ? "Hide detailed log" : "Detailed log";
 
     public bool HasError => !string.IsNullOrWhiteSpace(_errorMessage);
 
@@ -86,6 +88,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         CopyLogsCommand = ReactiveCommand.CreateFromTask(CopyLogsToClipboard);
         RefreshArtifactsCommand = ReactiveCommand.CreateFromTask(() => RefreshArtifactsAsync(default));
         NextSearchResultCommand = ReactiveCommand.Create(NavigateNextSearchResult);
+        ToggleDetailedLogCommand = ReactiveCommand.Create(ToggleDetailedLog);
         CancelJobCommand = ReactiveCommand.CreateFromTask(CancelJobAsync,
             this.WhenAnyValue(x => x.CanCancel));
         RefreshArtifactsCommand.ThrownExceptions.Subscribe(ex => ErrorMessage = ex.Message);
@@ -197,6 +200,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> CopyLogsCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshArtifactsCommand { get; }
     public ReactiveCommand<Unit, Unit> NextSearchResultCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleDetailedLogCommand { get; }
     public ReactiveCommand<Unit, Unit> CancelJobCommand { get; }
 
     public void SetTerminalModel(TerminalControlModel model) => TerminalModel = model;
@@ -220,6 +224,12 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     private void NavigateNextSearchResult()
     {
         TerminalModel?.SelectNextSearchResult();
+    }
+
+    private void ToggleDetailedLog()
+    {
+        IsDetailedLogVisible = !IsDetailedLogVisible;
+        this.RaisePropertyChanged(nameof(DetailedLogButtonText));
     }
 
     private async Task CopyLogsToClipboard()

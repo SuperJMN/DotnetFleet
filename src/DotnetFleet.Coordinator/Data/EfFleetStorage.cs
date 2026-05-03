@@ -364,7 +364,11 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
                 var job = await db.DeploymentJobs.FindAsync([jobId], ct);
                 if (job is not null && job.CurrentPhase == ev.Name)
                 {
+                    // Persist the just-closed row before querying open phases again;
+                    // otherwise SQLite still reports that row as open.
+                    await db.SaveChangesAsync(ct);
                     var stillOpen = await db.JobPhases
+                        .AsNoTracking()
                         .Where(p => p.JobId == jobId && p.EndedAt == null)
                         .OrderByDescending(p => p.StartedAt)
                         .Select(p => new { p.Name, p.StartedAt })

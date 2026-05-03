@@ -64,8 +64,8 @@
                                     </TextBlock>
                                 </StackPanel>
 
-                                <EnhancedButton Content="View Logs"
-                                                Icon="{Icon mdi-text-box-outline}"
+                                <EnhancedButton Content="View Status"
+                                                Icon="{Icon mdi-format-list-checks}"
                                                 Classes="Primary"
                                                 Command="{Binding OpenCommand}" />
                             </FlexPanel>

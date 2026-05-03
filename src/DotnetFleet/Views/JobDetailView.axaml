@@ -25,8 +25,6 @@
             <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
                 <EnhancedButton Content="Cancel" Icon="{Icon mdi-stop-circle-outline}" Classes="Destructive" Command="{Binding CancelJobCommand}"
                                 IsVisible="{Binding CanCancel}" />
-                <ProgressBar Width="80" Height="8" IsIndeterminate="True"
-                             IsVisible="{Binding IsStreaming}" />
                 <TextBlock Text="Streaming…" FontSize="11" Opacity="0.6"
                            IsVisible="{Binding IsStreaming}" VerticalAlignment="Center" />
             </FlexPanel>
@@ -69,32 +67,20 @@
             </FlexPanel>
         </Border>
 
-        <!-- Phase timeline: collapsed expander to keep the log viewer the focus -->
-        <Expander DockPanel.Dock="Top"
-                  Header="Phase timeline"
-                  IsExpanded="False"
-                  Margin="0,0,0,8"
-                  HorizontalAlignment="Stretch"
-                  HorizontalContentAlignment="Stretch"
-                  IsVisible="{Binding HasPhases}">
-            <ScrollViewer MaxHeight="320"
-                          HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Auto">
-                <TreeView ItemsSource="{Binding Phases}">
-                    <TreeView.ItemTemplate>
-                        <TreeDataTemplate x:DataType="vm:JobPhaseRow" ItemsSource="{Binding Children}">
-                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
-                                <TextBlock Grid.Column="0" Text="{Binding Icon}" Margin="0,0,8,0" />
-                                <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
-                                           TextTrimming="CharacterEllipsis" />
-                                <TextBlock Grid.Column="2" Text="{Binding DurationText}"
-                                           Opacity="0.6" FontSize="11" Margin="8,0,0,0" />
-                            </Grid>
-                        </TreeDataTemplate>
-                    </TreeView.ItemTemplate>
-                </TreeView>
-            </ScrollViewer>
-        </Expander>
+        <FlexPanel DockPanel.Dock="Top"
+                   Wrap="Wrap"
+                   Gap="8"
+                   AlignItems="Center"
+                   Margin="0,0,0,8">
+            <TextBlock Text="Phase status"
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       FlexPanel.Grow="1" />
+            <EnhancedButton Content="{Binding DetailedLogButtonText}"
+                            Icon="{Icon mdi-text-box-search-outline}"
+                            Classes="Secondary"
+                            Command="{Binding ToggleDetailedLogCommand}" />
+        </FlexPanel>
 
         <Expander DockPanel.Dock="Top"
                   Header="Package artifacts"
@@ -128,34 +114,67 @@
             </ItemsControl>
         </Expander>
 
-        <!-- Toolbar: search + severity filter (wraps on narrow widths) -->
-        <Border DockPanel.Dock="Top"
-                Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
-                Padding="8" Margin="0,0,0,8" CornerRadius="4">
-            <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
-                <TextBox Name="SearchBox"
-                         PlaceholderText="Search…" MinWidth="180"
-                         FlexPanel.Grow="1"
-                         Text="{Binding SearchText}" />
-                <TextBlock VerticalAlignment="Center" FontSize="11" Opacity="0.7"
-                           Text="{Binding SearchResultText}" />
-                <EnhancedButton Icon="{Icon mdi-chevron-down}" Padding="6,4"
-                                Command="{Binding NextSearchResultCommand}"
-                                ToolTip.Tip="Next match" />
-                <ComboBox ItemsSource="{Binding AvailableSeverities}"
-                          SelectedItem="{Binding MinSeverity}"
-                          MinWidth="120"
-                          ToolTip.Tip="Minimum severity to show" />
-                <EnhancedButton Content="Copy All" Icon="{Icon mdi-content-copy}"
-                                Command="{Binding CopyLogsCommand}"
-                                ToolTip.Tip="Copy all log lines to clipboard" />
-            </FlexPanel>
-        </Border>
+        <Grid>
+            <ScrollViewer IsVisible="{Binding !IsDetailedLogVisible}"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto">
+                <Grid>
+                    <TreeView ItemsSource="{Binding Phases}"
+                              IsVisible="{Binding HasPhases}">
+                        <TreeView.Styles>
+                            <Style Selector="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="True" />
+                            </Style>
+                        </TreeView.Styles>
+                        <TreeView.ItemTemplate>
+                            <TreeDataTemplate x:DataType="vm:JobPhaseRow" ItemsSource="{Binding Children}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
+                                    <TextBlock Grid.Column="0" Text="{Binding Icon}" Margin="0,0,8,0" />
+                                    <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Text="{Binding DurationText}"
+                                               Opacity="0.6" FontSize="11" Margin="8,0,0,0" />
+                                </Grid>
+                            </TreeDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                    <TextBlock Text="No phase events yet."
+                               Opacity="0.6"
+                               IsVisible="{Binding !HasPhases}" />
+                </Grid>
+            </ScrollViewer>
 
-        <!-- Terminal log viewer (LAST child = fills remaining space) -->
-        <terminal:TerminalControl Name="LogTerminal"
-                                  FontFamily="Consolas,Courier New,monospace"
-                                  FontSize="12" />
+            <DockPanel IsVisible="{Binding IsDetailedLogVisible}">
+                <!-- Toolbar: search + severity filter (wraps on narrow widths) -->
+                <Border DockPanel.Dock="Top"
+                        Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                        Padding="8" Margin="0,0,0,8" CornerRadius="4">
+                    <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
+                        <TextBox Name="SearchBox"
+                                 PlaceholderText="Search…" MinWidth="180"
+                                 FlexPanel.Grow="1"
+                                 Text="{Binding SearchText}" />
+                        <TextBlock VerticalAlignment="Center" FontSize="11" Opacity="0.7"
+                                   Text="{Binding SearchResultText}" />
+                        <EnhancedButton Icon="{Icon mdi-chevron-down}" Padding="6,4"
+                                        Command="{Binding NextSearchResultCommand}"
+                                        ToolTip.Tip="Next match" />
+                        <ComboBox ItemsSource="{Binding AvailableSeverities}"
+                                  SelectedItem="{Binding MinSeverity}"
+                                  MinWidth="120"
+                                  ToolTip.Tip="Minimum severity to show" />
+                        <EnhancedButton Content="Copy All" Icon="{Icon mdi-content-copy}"
+                                        Command="{Binding CopyLogsCommand}"
+                                        ToolTip.Tip="Copy all log lines to clipboard" />
+                    </FlexPanel>
+                </Border>
+
+                <!-- Terminal log viewer (LAST child = fills remaining space) -->
+                <terminal:TerminalControl Name="LogTerminal"
+                                          FontFamily="Consolas,Courier New,monospace"
+                                          FontSize="12" />
+            </DockPanel>
+        </Grid>
 
     </DockPanel>
 
