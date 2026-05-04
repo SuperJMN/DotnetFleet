@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using DotnetFleet.Core.Domain;
+using ReactiveUI;
+using Zafiro.UI;
 
 namespace DotnetFleet.ViewModels;
 
@@ -10,16 +12,53 @@ namespace DotnetFleet.ViewModels;
 /// holds inner phases nested via interval containment, consumed by the TreeView's
 /// HierarchicalDataTemplate.
 /// </summary>
-public class JobPhaseRow
+public sealed class JobPhaseRow : ReactiveObject
 {
-    public string Icon { get; init; } = "";
-    public string DisplayName { get; init; } = "";
-    public string DurationText { get; init; } = "";
-    public ObservableCollection<JobPhaseRow> Children { get; } = new();
+    private readonly Func<string, string> formatName;
+    private string icon = "";
+    private string displayName = "";
+    private string durationText = "";
 
-    public static JobPhaseRow From(JobPhase phase, Func<string, string> formatName)
+    internal JobPhaseRow(
+        JobPhaseModel model,
+        ReadOnlyObservableCollection<JobPhaseRowContainer> children,
+        Func<string, string> formatName)
     {
-        var icon = phase.EndedAt is null
+        this.formatName = formatName;
+        Children = children;
+        Update(model);
+    }
+
+    public Guid Id { get; private set; }
+    public DateTimeOffset StartedAt { get; private set; }
+    public DateTimeOffset EndedSort { get; private set; }
+    public string Icon
+    {
+        get => icon;
+        private set => this.RaiseAndSetIfChanged(ref icon, value);
+    }
+
+    public string DisplayName
+    {
+        get => displayName;
+        private set => this.RaiseAndSetIfChanged(ref displayName, value);
+    }
+
+    public string DurationText
+    {
+        get => durationText;
+        private set => this.RaiseAndSetIfChanged(ref durationText, value);
+    }
+
+    public ReadOnlyObservableCollection<JobPhaseRowContainer> Children { get; }
+
+    internal void Update(JobPhaseModel model)
+    {
+        var phase = model.Phase;
+        Id = phase.Id;
+        StartedAt = phase.StartedAt;
+        EndedSort = phase.EndedAt ?? DateTimeOffset.MaxValue;
+        Icon = phase.EndedAt is null
             ? "⏳"
             : phase.Status switch
             {
@@ -28,61 +67,16 @@ public class JobPhaseRow
                 _ => "•"
             };
 
-        string duration;
-        if (phase.DurationMs is { } ms)
-            duration = ms < 1000 ? $"{ms} ms" : $"{ms / 1000.0:0.0}s";
-        else if (phase.EndedAt is null)
-            duration = "running…";
-        else
-            duration = "";
-
-        return new JobPhaseRow
+        DurationText = phase.DurationMs switch
         {
-            Icon = icon,
-            DisplayName = formatName(phase.Name),
-            DurationText = duration
+            { } ms when ms < 1000 => $"{ms} ms",
+            { } ms => $"{ms / 1000.0:0.0}s",
+            null when phase.EndedAt is null => "running…",
+            _ => ""
         };
-    }
 
-    /// <summary>
-    /// Builds a forest of rows in chronological order, nesting each phase under
-    /// the most recent still-open parent (timestamp containment). Mirrors the
-    /// LIFO stack semantics already used by the coordinator.
-    /// </summary>
-    public static IReadOnlyList<JobPhaseRow> BuildHierarchy(
-        IReadOnlyList<JobPhase> phases,
-        Func<string, string> formatName)
-    {
-        var ordered = phases
-            .OrderBy(p => p.StartedAt)
-            .ThenBy(p => p.EndedAt ?? DateTimeOffset.MaxValue)
-            .ToList();
-
-        var roots = new List<JobPhaseRow>();
-        var stack = new Stack<(JobPhase Phase, JobPhaseRow Row)>();
-
-        foreach (var phase in ordered)
-        {
-            while (stack.Count > 0 && !Contains(stack.Peek().Phase, phase))
-                stack.Pop();
-
-            var row = From(phase, formatName);
-            if (stack.Count == 0)
-                roots.Add(row);
-            else
-                stack.Peek().Row.Children.Add(row);
-
-            stack.Push((phase, row));
-        }
-
-        return roots;
-    }
-
-    private static bool Contains(JobPhase outer, JobPhase inner)
-    {
-        if (inner.StartedAt < outer.StartedAt) return false;
-        if (outer.EndedAt is null) return true;
-        var innerEnd = inner.EndedAt ?? inner.StartedAt;
-        return innerEnd <= outer.EndedAt.Value;
+        DisplayName = formatName(phase.Name);
     }
 }
+
+public sealed class JobPhaseRowContainer : IdentityContainer<JobPhaseRow>;

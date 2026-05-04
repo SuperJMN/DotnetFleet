@@ -28,6 +28,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     private readonly IFileSystemPicker? _fileSystemPicker;
     private readonly ProjectDetailViewModel? _parentProject;
     private readonly SourceList<LogLine> _logs = new();
+    private readonly JobPhaseTree _phaseTree = new(FormatPhaseName);
     private readonly IDisposable _filterSubscription;
 
     public DeploymentJob Job { get; }
@@ -43,7 +44,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     [Reactive] private DateTimeOffset? _currentPhaseStartedAt;
     [Reactive] private bool _isDetailedLogVisible;
 
-    public ObservableCollection<JobPhaseRow> Phases { get; } = new();
+    public ReadOnlyObservableCollection<JobPhaseRowContainer> Phases => _phaseTree.Phases;
     public ObservableCollection<PackageArtifactViewModel> Artifacts { get; } = new();
 
     public bool HasPhases => Phases.Count > 0;
@@ -156,9 +157,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             var job = await _client.GetJobAsync(Job.Id);
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                Phases.Clear();
-                foreach (var row in JobPhaseRow.BuildHierarchy(phases, FormatPhaseName))
-                    Phases.Add(row);
+                _phaseTree.Refresh(phases);
                 CurrentPhase = job?.CurrentPhase;
                 CurrentPhaseStartedAt = job?.CurrentPhaseStartedAt;
                 this.RaisePropertyChanged(nameof(HasCurrentPhase));
@@ -413,6 +412,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         _cts?.Cancel();
         _cts?.Dispose();
         _filterSubscription.Dispose();
+        _phaseTree.Dispose();
         _logs.Dispose();
     }
 

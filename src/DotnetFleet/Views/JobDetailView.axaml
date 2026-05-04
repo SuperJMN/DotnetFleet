@@ -127,12 +127,12 @@
                             </Style>
                         </TreeView.Styles>
                         <TreeView.ItemTemplate>
-                            <TreeDataTemplate x:DataType="vm:JobPhaseRow" ItemsSource="{Binding Children}">
+                            <TreeDataTemplate x:DataType="vm:JobPhaseRowContainer" ItemsSource="{Binding Content.Children}">
                                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
-                                    <TextBlock Grid.Column="0" Text="{Binding Icon}" Margin="0,0,8,0" />
-                                    <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                    <TextBlock Grid.Column="0" Text="{Binding Content.Icon}" Margin="0,0,8,0" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Content.DisplayName}"
                                                TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="2" Text="{Binding DurationText}"
+                                    <TextBlock Grid.Column="2" Text="{Binding Content.DurationText}"
                                                Opacity="0.6" FontSize="11" Margin="8,0,0,0" />
                                 </Grid>
                             </TreeDataTemplate>
