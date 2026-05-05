@@ -4,35 +4,37 @@
              x:Class="DotnetFleet.Views.AddProjectView"
              x:DataType="vm:AddProjectViewModel">
 
-    <Grid RowDefinitions="*,Auto,*" HorizontalAlignment="Center" VerticalAlignment="Center" Width="480">
-        <StackPanel Grid.Row="1" Spacing="16">
-
-            <TextBlock Text="Add Project" FontSize="22" FontWeight="Bold" />
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto"
+                  MaxHeight="360">
+        <StackPanel Spacing="16"
+                    MaxWidth="480"
+                    HorizontalAlignment="Stretch">
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Name" Opacity="0.7" FontSize="12" />
+                <TextBlock Text="Name" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
                 <TextBox Text="{Binding Name}" PlaceholderText="My App" IsEnabled="{Binding !IsBusy}" />
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Git URL" Opacity="0.7" FontSize="12" />
+                <TextBlock Text="Git URL" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
                 <TextBox Text="{Binding GitUrl}"
                          PlaceholderText="https://github.com/org/repo.git"
                          IsEnabled="{Binding !IsBusy}" />
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Branch" Opacity="0.7" FontSize="12" />
+                <TextBlock Text="Branch" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
                 <TextBox Text="{Binding Branch}" PlaceholderText="main" IsEnabled="{Binding !IsBusy}" />
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Polling interval (minutes, 0 = manual only)" Opacity="0.7" FontSize="12" />
+                <TextBlock Text="Polling interval (minutes, 0 = manual only)" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
                 <TextBox Text="{Binding PollingInterval}" PlaceholderText="0" IsEnabled="{Binding !IsBusy}" />
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Access token (optional, for private HTTPS repos)" Opacity="0.7" FontSize="12" />
+                <TextBlock Text="Access token (optional, for private HTTPS repos)" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
                 <TextBox Text="{Binding GitToken}"
                          PasswordChar="●"
                          PlaceholderText="Personal access token"
@@ -44,16 +46,7 @@
                        IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
                        TextWrapping="Wrap" />
 
-            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <EnhancedButton Content="Cancel" Icon="{Icon mdi-close}"
-                                Classes="Cancel"
-                                Command="{Binding CancelCommand}" IsEnabled="{Binding !IsBusy}" />
-                <EnhancedButton Content="Save" Icon="{Icon mdi-content-save}"
-                                Classes="Primary"
-                                Command="{Binding SaveCommand}" IsEnabled="{Binding !IsBusy}" />
-            </StackPanel>
-
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 
 </UserControl>

@@ -57,6 +57,52 @@ public class ProjectDetailViewLayoutTests
             .Contain("Project Secrets");
     }
 
+    [Theory]
+    [InlineData("AddProjectView.axaml")]
+    [InlineData("EditProjectView.axaml")]
+    public void ProjectFormViews_ShouldFitNarrowScreens(string viewFile)
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", viewFile));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        document.Descendants(axaml + "ScrollViewer")
+            .Select(scrollViewer => scrollViewer.Attribute("HorizontalScrollBarVisibility")?.Value)
+            .Should()
+            .Contain("Disabled");
+
+        document.Descendants()
+            .Where(element => element.Attribute("Width")?.Value == "480")
+            .Should()
+            .BeEmpty();
+
+        document.Descendants(axaml + "StackPanel")
+            .Select(stackPanel => stackPanel.Attribute("Orientation")?.Value)
+            .Should()
+            .NotContain("Horizontal");
+    }
+
+    [Fact]
+    public void AddProjectView_ShouldLeaveDialogChromeToDialogService()
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", "AddProjectView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        document.Descendants(axaml + "EnhancedButton").Should().BeEmpty();
+        document.Descendants(axaml + "TextBlock")
+            .Select(textBlock => textBlock.Attribute("Text")?.Value)
+            .Should()
+            .NotContain("Add Project");
+    }
+
+    [Fact]
+    public void ProjectsViewModel_ShouldOpenAddProjectInDialog()
+    {
+        var source = File.ReadAllText(ProjectFilePath("ViewModels", "ProjectsViewModel.cs"));
+
+        source.Should().Contain("_dialog.Show(vm, \"Add Project\"");
+        source.Should().NotContain("Navigator.Go(() => new AddProjectViewModel");
+    }
+
     private static string ProjectFilePath(params string[] parts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

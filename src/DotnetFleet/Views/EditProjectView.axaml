@@ -4,47 +4,53 @@
              x:Class="DotnetFleet.Views.EditProjectView"
              x:DataType="vm:EditProjectViewModel">
 
-    <Grid RowDefinitions="*,Auto,*" HorizontalAlignment="Center" VerticalAlignment="Center" Width="480">
-        <StackPanel Grid.Row="1" Spacing="16">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto"
+                  Margin="16">
+        <StackPanel Spacing="16"
+                    MaxWidth="480"
+                    HorizontalAlignment="Center">
 
             <TextBlock Text="Edit Project" FontSize="22" FontWeight="Bold" />
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Name" Opacity="0.7" FontSize="12" />
+                <TextBlock Text="Name" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
                 <TextBox Text="{Binding Name}" PlaceholderText="My App" IsEnabled="{Binding !IsBusy}" />
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Git URL" Opacity="0.7" FontSize="12" />
+                <TextBlock Text="Git URL" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
                 <TextBox Text="{Binding GitUrl}"
                          PlaceholderText="https://github.com/org/repo.git"
                          IsEnabled="{Binding !IsBusy}" />
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Branch" Opacity="0.7" FontSize="12" />
+                <TextBlock Text="Branch" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
                 <TextBox Text="{Binding Branch}" PlaceholderText="main" IsEnabled="{Binding !IsBusy}" />
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Polling interval (minutes, 0 = manual only)" Opacity="0.7" FontSize="12" />
+                <TextBlock Text="Polling interval (minutes, 0 = manual only)" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
                 <TextBox Text="{Binding PollingInterval}" PlaceholderText="0" IsEnabled="{Binding !IsBusy}" />
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Access token (optional, for private HTTPS repos)" Opacity="0.7" FontSize="12" />
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBox Grid.Column="0" Text="{Binding GitToken}"
+                <TextBlock Text="Access token (optional, for private HTTPS repos)" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
+                    <TextBox Text="{Binding GitToken}"
                              PasswordChar="●"
                              PlaceholderText="Personal access token"
-                             IsEnabled="{Binding !IsBusy}" />
-                    <EnhancedButton Grid.Column="1" Content="Clear"
+                             IsEnabled="{Binding !IsBusy}"
+                             MinWidth="180"
+                             FlexPanel.Grow="1" />
+                    <EnhancedButton Content="Clear"
                                     Icon="{Icon mdi-close}"
                                     Classes="Destructive"
                                     Command="{Binding ClearTokenCommand}"
                                     IsEnabled="{Binding !IsBusy}"
-                                    Margin="4,0,0,0" />
-                </Grid>
+                                    FlexPanel.Shrink="0" />
+                </FlexPanel>
                 <TextBlock Text="Leave the field unchanged to keep the existing token. Clear it to remove."
                            Opacity="0.5" FontSize="11" TextWrapping="Wrap" />
             </StackPanel>
@@ -54,16 +60,18 @@
                        IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
                        TextWrapping="Wrap" />
 
-            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <FlexPanel Wrap="Wrap" Gap="8" JustifyContent="End">
                 <EnhancedButton Content="Cancel" Icon="{Icon mdi-close}"
                                 Classes="Cancel"
-                                Command="{Binding CancelCommand}" IsEnabled="{Binding !IsBusy}" />
+                                Command="{Binding CancelCommand}" IsEnabled="{Binding !IsBusy}"
+                                FlexPanel.Shrink="0" />
                 <EnhancedButton Content="Save" Icon="{Icon mdi-content-save}"
                                 Classes="Primary"
-                                Command="{Binding SaveCommand}" IsEnabled="{Binding !IsBusy}" />
-            </StackPanel>
+                                Command="{Binding SaveCommand}" IsEnabled="{Binding !IsBusy}"
+                                FlexPanel.Shrink="0" />
+            </FlexPanel>
 
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 
 </UserControl>

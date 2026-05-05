@@ -10,6 +10,7 @@ using Zafiro.UI;
 using Zafiro.UI.Commands;
 using Zafiro.UI.Navigation;
 using Zafiro.UI.Shell.Utils;
+using DialogOption = Zafiro.Avalonia.Dialogs.Option;
 
 namespace DotnetFleet.ViewModels;
 
@@ -37,7 +38,9 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
         refresh.ThrownExceptions.Subscribe(_ => { });
         RefreshCommand = refresh.Enhance("Refresh");
 
-        AddProjectCommand = ReactiveCommand.Create(OpenAddProject).Enhance("Add Project");
+        var addProject = ReactiveCommand.CreateFromTask(OpenAddProjectAsync);
+        addProject.ThrownExceptions.Subscribe(_ => { });
+        AddProjectCommand = addProject.Enhance("Add Project");
 
         Header = Observable.Return<object>(new SectionHeader("Projects",
             new HeaderAction("Add Project", "mdi-plus", AddProjectCommand, isPrimary: true),
@@ -71,9 +74,35 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
         }
     }
 
-    private void OpenAddProject()
+    private async Task OpenAddProjectAsync()
     {
-        Navigator.Go(() => new AddProjectViewModel(_client, Navigator, this));
+        var vm = new AddProjectViewModel(_client);
+
+        var created = await _dialog.Show(vm, "Add Project", (_, closeable) =>
+        {
+            var saveCommand = ReactiveCommand.CreateFromTask(async () =>
+            {
+                if (await vm.TrySaveAsync())
+                {
+                    closeable.Close();
+                }
+            }, vm.CanSave).Enhance();
+
+            return new IOption[]
+            {
+                new DialogOption("Cancel",
+                    ReactiveCommand.Create(closeable.Dismiss).Enhance(),
+                    new Settings { IsCancel = true, Role = OptionRole.Cancel }),
+                new DialogOption("Save",
+                    saveCommand,
+                    new Settings { IsDefault = true, Role = OptionRole.Primary }),
+            };
+        });
+
+        if (created)
+        {
+            await LoadProjectsAsync();
+        }
     }
 }
 
