@@ -22,13 +22,13 @@
     <PackageVersion Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.0" />
-    <PackageVersion Include="Zafiro.Avalonia.Mcp.AppHost" Version="0.0.45" />
+    <PackageVersion Include="Zafiro.Avalonia.Mcp.AppHost" Version="0.0.57" />
     <!-- Zafiro -->
-    <PackageVersion Include="Zafiro.Avalonia" Version="52.0.3" />
-    <PackageVersion Include="Zafiro.Avalonia.Generators" Version="52.0.3" />
-    <PackageVersion Include="Zafiro.Avalonia.Dialogs" Version="52.0.3" />
-    <PackageVersion Include="Zafiro.Avalonia.Icons.Optris" Version="52.0.3" />
-    <PackageVersion Include="Zafiro.UI" Version="47.0.6" />
+    <PackageVersion Include="Zafiro.Avalonia" Version="52.0.4" />
+    <PackageVersion Include="Zafiro.Avalonia.Generators" Version="52.0.4" />
+    <PackageVersion Include="Zafiro.Avalonia.Dialogs" Version="52.0.4" />
+    <PackageVersion Include="Zafiro.Avalonia.Icons.Optris" Version="52.0.4" />
+    <PackageVersion Include="Zafiro.UI" Version="47.0.7" />
     <!-- ReactiveUI -->
     <PackageVersion Include="ReactiveUI" Version="23.1.8" />
     <PackageVersion Include="ReactiveUI.Avalonia" Version="11.4.12" />
