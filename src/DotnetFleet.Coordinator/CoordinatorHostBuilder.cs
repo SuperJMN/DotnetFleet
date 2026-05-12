@@ -34,11 +34,25 @@ public static class CoordinatorHostBuilder
         options ??= new CoordinatorStartupOptions();
 
         var builder = WebApplication.CreateBuilder(args);
-        builder.Host.UseSerilog((ctx, services, lc) => lc
-            .ReadFrom.Configuration(ctx.Configuration)
-            .ReadFrom.Services(services)
-            .Enrich.FromLogContext()
-            .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"));
+
+        builder.Services.AddWindowsService(serviceOptions =>
+        {
+            serviceOptions.ServiceName = "DotnetFleet Coordinator";
+        });
+
+        var logPath = ResolveLogPath(options.DataDir);
+        var logDir = Path.GetDirectoryName(logPath);
+        if (!string.IsNullOrEmpty(logDir))
+            Directory.CreateDirectory(logDir);
+
+        builder.Host.UseSerilog((ctx, services, lc) =>
+        {
+            lc.ReadFrom.Configuration(ctx.Configuration)
+                .ReadFrom.Services(services)
+                .Enrich.FromLogContext()
+                .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+                .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14);
+        });
 
         // Apply CLI overrides to configuration
         ApplyOverrides(builder.Configuration, options);
@@ -325,5 +339,12 @@ public static class CoordinatorHostBuilder
 
         if (overrides.Count > 0)
             config.AddInMemoryCollection(overrides);
+    }
+
+    internal static string ResolveLogPath(string? dataDir)
+    {
+        return string.IsNullOrEmpty(dataDir)
+            ? Path.Combine("logs", "coordinator-.log")
+            : Path.Combine(dataDir, "logs", "coordinator-.log");
     }
 }

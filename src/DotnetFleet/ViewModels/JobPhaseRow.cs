@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using Zafiro.UI;
@@ -70,7 +71,7 @@ public sealed class JobPhaseRow : ReactiveObject
         DurationText = phase.DurationMs switch
         {
             { } ms when ms < 1000 => $"{ms} ms",
-            { } ms => $"{ms / 1000.0:0.0}s",
+            { } ms => $"{(ms / 1000.0).ToString("0.0", CultureInfo.InvariantCulture)}s",
             null when phase.EndedAt is null => "running…",
             _ => ""
         };

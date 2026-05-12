@@ -100,7 +100,7 @@ coordinatorCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 
 // ── fleet coordinator install ────────────────────────────────────────────
-var coordInstallCommand = new Command("install", "Install coordinator as a systemd service");
+var coordInstallCommand = new Command("install", "Install coordinator as an OS service");
 coordInstallCommand.Options.Add(portOption);
 coordInstallCommand.Options.Add(coordDataDirOption);
 coordInstallCommand.Options.Add(tokenOption);
@@ -111,29 +111,45 @@ coordInstallCommand.Options.Add(noMdnsOption);
 
 coordInstallCommand.SetAction(async (parseResult, _) =>
 {
-    var elevated = SudoElevation.ReExecAsRootIfNeeded();
-    if (elevated.HasValue) Environment.Exit(elevated.Value);
+    try
+    {
+        var elevated = SudoElevation.ReExecAsRootIfNeeded();
+        if (elevated.HasValue) return elevated.Value;
 
-    var port = parseResult.GetValue(portOption);
-    var dataDir = parseResult.GetValue(coordDataDirOption) ?? FleetConfig.GetDefaultDataDir("coordinator");
-    await ServiceInstaller.InstallCoordinatorAsync(new ServiceInstaller.CoordinatorInstallOptions(
-        Port: port,
-        DataDir: dataDir,
-        Token: parseResult.GetValue(tokenOption),
-        JwtSecret: parseResult.GetValue(jwtSecretOption),
-        AdminPassword: parseResult.GetValue(adminPasswordOption),
-        Urls: parseResult.GetValue(urlsOption),
-        NoMdns: parseResult.GetValue(noMdnsOption)));
+        var port = parseResult.GetValue(portOption);
+        var dataDir = parseResult.GetValue(coordDataDirOption) ?? ServiceInstaller.GetDefaultInstallDataDir("coordinator");
+        await ServiceInstaller.InstallCoordinatorAsync(new ServiceInstaller.CoordinatorInstallOptions(
+            Port: port,
+            DataDir: dataDir,
+            Token: parseResult.GetValue(tokenOption),
+            JwtSecret: parseResult.GetValue(jwtSecretOption),
+            AdminPassword: parseResult.GetValue(adminPasswordOption),
+            Urls: parseResult.GetValue(urlsOption),
+            NoMdns: parseResult.GetValue(noMdnsOption)));
+        return 0;
+    }
+    catch (UnauthorizedAccessException)
+    {
+        return 1;
+    }
 });
 
 // ── fleet coordinator uninstall ──────────────────────────────────────────
-var coordUninstallCommand = new Command("uninstall", "Remove the coordinator systemd service");
+var coordUninstallCommand = new Command("uninstall", "Remove the coordinator OS service");
 coordUninstallCommand.SetAction(async (_, _) =>
 {
-    var elevated = SudoElevation.ReExecAsRootIfNeeded();
-    if (elevated.HasValue) Environment.Exit(elevated.Value);
+    try
+    {
+        var elevated = SudoElevation.ReExecAsRootIfNeeded();
+        if (elevated.HasValue) return elevated.Value;
 
-    await ServiceInstaller.UninstallCoordinatorAsync();
+        await ServiceInstaller.UninstallCoordinatorAsync();
+        return 0;
+    }
+    catch (UnauthorizedAccessException)
+    {
+        return 1;
+    }
 });
 
 // ── fleet coordinator status ─────────────────────────────────────────────
@@ -243,7 +259,7 @@ workerCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 
 // ── fleet worker install ─────────────────────────────────────────────────
-var workerInstallCommand = new Command("install", "Install worker as a systemd service");
+var workerInstallCommand = new Command("install", "Install worker as an OS service");
 workerInstallCommand.Options.Add(coordinatorUrlOption);
 workerInstallCommand.Options.Add(workerTokenOption);
 workerInstallCommand.Options.Add(nameOption);
@@ -254,31 +270,38 @@ workerInstallCommand.Options.Add(noDiscoverOption);
 
 workerInstallCommand.SetAction(async (parseResult, _) =>
 {
-    var elevated = SudoElevation.ReExecAsRootIfNeeded();
-    if (elevated.HasValue) return elevated.Value;
+    try
+    {
+        var elevated = SudoElevation.ReExecAsRootIfNeeded();
+        if (elevated.HasValue) return elevated.Value;
 
-    var workerName = parseResult.GetValue(nameOption) ?? Environment.MachineName;
-    var dataDir = parseResult.GetValue(workerDataDirOption)
-                  ?? FleetConfig.GetDefaultDataDir($"worker-{workerName}");
-    var explicitUrl = parseResult.GetValue(coordinatorUrlOption);
-    var explicitToken = parseResult.GetValue(workerTokenOption);
-    var noDiscover = parseResult.GetValue(noDiscoverOption);
+        var workerName = parseResult.GetValue(nameOption) ?? Environment.MachineName;
+        var dataDir = parseResult.GetValue(workerDataDirOption)
+                      ?? ServiceInstaller.GetDefaultInstallDataDir($"worker-{workerName}");
+        var explicitUrl = parseResult.GetValue(coordinatorUrlOption);
+        var explicitToken = parseResult.GetValue(workerTokenOption);
+        var noDiscover = parseResult.GetValue(noDiscoverOption);
 
-    var resolved = await CoordinatorResolver.ResolveAsync(explicitUrl, explicitToken, noDiscover);
-    if (resolved == null) return 1;
+        var resolved = await CoordinatorResolver.ResolveAsync(explicitUrl, explicitToken, noDiscover);
+        if (resolved == null) return 1;
 
-    await ServiceInstaller.InstallWorkerAsync(new ServiceInstaller.WorkerInstallOptions(
-        CoordinatorUrl: resolved.Url,
-        Token: resolved.Token,
-        Name: workerName,
-        DataDir: dataDir,
-        PollInterval: parseResult.GetValue(pollIntervalOption),
-        MaxDisk: parseResult.GetValue(maxDiskOption)));
-    return 0;
+        await ServiceInstaller.InstallWorkerAsync(new ServiceInstaller.WorkerInstallOptions(
+            CoordinatorUrl: resolved.Url,
+            Token: resolved.Token,
+            Name: workerName,
+            DataDir: dataDir,
+            PollInterval: parseResult.GetValue(pollIntervalOption),
+            MaxDisk: parseResult.GetValue(maxDiskOption)));
+        return 0;
+    }
+    catch (UnauthorizedAccessException)
+    {
+        return 1;
+    }
 });
 
 // ── fleet worker uninstall ───────────────────────────────────────────────
-var workerUninstallCommand = new Command("uninstall", "Remove a worker systemd service");
+var workerUninstallCommand = new Command("uninstall", "Remove a worker OS service");
 var uninstallNameOption = new Option<string?>("--name", "-n")
 {
     Description = "Worker name to uninstall (default: hostname)"
@@ -286,11 +309,19 @@ var uninstallNameOption = new Option<string?>("--name", "-n")
 workerUninstallCommand.Options.Add(uninstallNameOption);
 workerUninstallCommand.SetAction(async (parseResult, _) =>
 {
-    var elevated = SudoElevation.ReExecAsRootIfNeeded();
-    if (elevated.HasValue) Environment.Exit(elevated.Value);
+    try
+    {
+        var elevated = SudoElevation.ReExecAsRootIfNeeded();
+        if (elevated.HasValue) return elevated.Value;
 
-    var workerName = parseResult.GetValue(uninstallNameOption) ?? Environment.MachineName;
-    await ServiceInstaller.UninstallWorkerAsync(workerName);
+        var workerName = parseResult.GetValue(uninstallNameOption) ?? Environment.MachineName;
+        await ServiceInstaller.UninstallWorkerAsync(workerName);
+        return 0;
+    }
+    catch (UnauthorizedAccessException)
+    {
+        return 1;
+    }
 });
 
 // ── fleet worker status ──────────────────────────────────────────────────

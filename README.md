@@ -54,7 +54,7 @@ You now have a working CI/CD pipeline. Add projects from the [Desktop App](#desk
   - [Step 2 — Connect Workers](#step-2--connect-workers)
   - [Step 3 — Add Projects and Deploy](#step-3--add-projects-and-deploy)
 - [Production Setup](#production-setup)
-  - [Install as systemd Services](#install-as-systemd-services)
+  - [Install as OS Services](#install-as-os-services)
   - [Custom Storage Paths](#custom-storage-paths)
   - [Security](#security)
 - [CLI Reference](#cli-reference)
@@ -205,7 +205,7 @@ DotnetFleet has two layers of auto-discovery so you rarely need to type the coor
 fleet worker
 ```
 
-The worker reads `~/.fleet/coordinator/config.json` (or the systemd unit) and connects to `http://localhost:<port>` with the token already present on disk.
+The worker reads `~/.fleet/coordinator/config.json` (or the installed coordinator service) and connects to `http://localhost:<port>` with the token already present on disk.
 
 **Other machine on the LAN (token only):**
 
@@ -248,21 +248,25 @@ To auto-deploy on new commits, set a **polling interval** (in minutes) on the pr
 
 ## Production Setup
 
-### Install as systemd Services
+### Install as OS Services
 
-For production, install the coordinator and workers as **systemd services** so they start on boot and restart on failure.
+For production, install the coordinator and workers as OS services so they start on boot and restart on failure. Linux uses **systemd**; Windows uses native **Windows Services**.
 
 You have two equivalent ways to install. Pick whichever you prefer.
 
 #### Option A — Zero-install (recommended for first-time setup)
 
-If you just installed .NET and don't yet have anything else, you can do the whole thing in one command using `dnx` (.NET 10's tool runner). **You don't need `sudo` — the tool re-executes itself under `sudo` automatically**, preserving `PATH`, `DOTNET_ROOT` and `HOME` so root can still find your per-user .NET install:
+If you just installed .NET and don't yet have anything else, you can do the whole thing in one command using `dnx` (.NET 10's tool runner).
+
+On Linux, you don't need `sudo` — the tool re-executes itself under `sudo` automatically, preserving `PATH`, `DOTNET_ROOT` and `HOME` so root can still find your per-user .NET install. On Windows, run the command from an elevated Administrator PowerShell or terminal:
 
 ```bash
 dnx dotnetfleet.tool coordinator install --port 5000
 ```
 
-You'll be prompted once for your sudo password. The first time you do this, the installer also detects it's running from `dnx`'s ephemeral cache and **automatically performs `dotnet tool install -g DotnetFleet.Tool`** for the calling user, so the systemd unit's `ExecStart=` points at the stable global-tool path (`~/.dotnet/tools/fleet`) instead of a cache location that may disappear later.
+On Linux, you'll be prompted once for your sudo password. The first time you do this, the installer also detects it's running from `dnx`'s ephemeral cache and **automatically performs `dotnet tool install -g DotnetFleet.Tool`** for the calling user, so the systemd unit's `ExecStart=` points at the stable global-tool path (`~/.dotnet/tools/fleet`) instead of a cache location that may disappear later.
+
+On Windows, the installer uses a service-local tool path under `%ProgramData%\DotnetFleet\tools`, so services do not depend on a user's profile or `dnx` cache.
 
 A worker on the same machine looks the same — and thanks to local auto-discovery you don't need `--coordinator` or `--token`:
 
@@ -282,7 +286,7 @@ dnx dotnetfleet.tool worker install --token <token> --name build-01
 # One-time:
 dotnet tool install -g DotnetFleet.Tool
 
-# Then (no sudo needed — fleet re-execs itself with sudo when required):
+# Then (Linux: no sudo needed because fleet re-execs itself; Windows: run elevated):
 fleet coordinator install --port 5000
 
 # Worker on the same machine — auto-discovered:
@@ -302,11 +306,11 @@ fleet worker install --token <token> --name build-01
 #### Managing the services
 
 ```bash
-# Status
+# Linux status
 sudo systemctl status fleet-coordinator
 sudo systemctl status fleet-worker-build-01
 
-# Logs
+# Linux logs
 journalctl -u fleet-coordinator -f
 journalctl -u fleet-worker-build-01 -f
 
@@ -318,18 +322,37 @@ fleet coordinator uninstall
 fleet worker uninstall --name build-01
 ```
 
-The services run as the calling user (via `SUDO_USER`), write unit files to `/etc/systemd/system/`, and use these service names:
+```powershell
+# Windows status
+Get-Service fleet-coordinator
+Get-Service fleet-worker-build-01
+
+# Windows stop/start
+Stop-Service fleet-coordinator
+Start-Service fleet-coordinator
+
+# Update tool + restart all local fleet services (run elevated)
+fleet update
+
+# Uninstall (run elevated)
+fleet coordinator uninstall
+fleet worker uninstall --name build-01
+```
+
+On Linux, services run as the calling user (via `SUDO_USER`) and write unit files to `/etc/systemd/system/`. On Windows, services run under LocalSystem and store the service-local tool under `%ProgramData%\DotnetFleet\tools`.
+
+Both platforms use these service names:
 
 | Component | Service name |
 |---|---|
 | Coordinator | `fleet-coordinator` |
 | Worker | `fleet-worker-{name}` |
 
-> **Note:** Service installation requires Linux with systemd. On other platforms, use the foreground commands with a process manager of your choice (e.g., `launchd`, `sc.exe`, or Docker).
+> **Note:** Native service installation is supported on Linux with systemd and Windows Services. On other platforms, use the foreground commands with a process manager of your choice (e.g., `launchd` or Docker).
 
 ### Custom Storage Paths
 
-By default, each component stores data under `~/.fleet/`:
+Foreground commands store data under `~/.fleet/` by default. Installed Linux services use the same user-home layout; installed Windows services default to `%ProgramData%\DotnetFleet\...`.
 
 | Component | Default path |
 |---|---|
@@ -341,7 +364,7 @@ You can redirect **everything** to a different location with `--data-dir`:
 
 ```bash
 # Store repos on an external drive
-sudo fleet worker install \
+fleet worker install \
   --coordinator http://myserver:5000 \
   --token <token> \
   --name build-01 \
@@ -383,13 +406,13 @@ Upgrading DotnetFleet replaces only the tool binary — **all data is preserved*
 
 #### One-shot update
 
-If the coordinator and/or workers run as systemd services on this machine, a single command updates the global tool and restarts every local fleet service:
+If the coordinator and/or workers run as installed services on this machine, a single command updates the service tool and restarts every local fleet service:
 
 ```bash
 fleet update
 ```
 
-`fleet update` (with no `sudo`) re-executes itself with `sudo` automatically, preserving `PATH`, `DOTNET_ROOT` and `HOME`. You'll be prompted for your password once.
+On Linux, `fleet update` (with no `sudo`) re-executes itself with `sudo` automatically, preserving `PATH`, `DOTNET_ROOT` and `HOME`. You'll be prompted for your password once. On Windows, run it from an elevated Administrator terminal.
 
 Options:
 
@@ -410,21 +433,32 @@ sudo systemctl restart fleet-coordinator
 sudo systemctl restart fleet-worker-<name>
 ```
 
-> The systemd unit files point at the **global tool** (`~/.dotnet/tools/fleet`) — there's no need to re-run `install` after a tool update.
+On Windows:
+
+```powershell
+Stop-Service fleet-coordinator
+Stop-Service fleet-worker-<name>
+dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetFleet.Tool
+fleet version   # verify the new version
+Start-Service fleet-coordinator
+Start-Service fleet-worker-<name>
+```
+
+> Linux systemd unit files point at the **global tool** (`~/.dotnet/tools/fleet`), and Windows services point at the service-local tool under `%ProgramData%\DotnetFleet\tools`. There's no need to re-run `install` after a tool update.
 
 #### What is preserved across upgrades
 
 | Component | Persisted data | Location |
 |---|---|---|
-| Coordinator | SQLite database (projects, jobs, history), `config.json` (JWT secret, registration token) | `~/.fleet/coordinator/` |
-| Worker | `worker.json` (id + secret), cached git repos | `~/.fleet/worker-{name}/` |
+| Coordinator | SQLite database (projects, jobs, history), `config.json` (JWT secret, registration token) | `~/.fleet/coordinator/` or `%ProgramData%\DotnetFleet\coordinator\` for Windows services |
+| Worker | `worker.json` (id + secret), cached git repos | `~/.fleet/worker-{name}/` or `%ProgramData%\DotnetFleet\worker-{name}\` for Windows services |
 
 #### Rollback
 
 If something goes wrong, downgrade to a specific version:
 
 ```bash
-sudo fleet update --version <previous-version>
+fleet update --version <previous-version>
 ```
 
 ---
@@ -433,8 +467,8 @@ sudo fleet update --version <previous-version>
 
 ```
 fleet coordinator [options]            Run coordinator in foreground
-fleet coordinator install [options]    Install as systemd service (sudo)
-fleet coordinator uninstall            Remove systemd service (sudo)
+fleet coordinator install [options]    Install as OS service
+fleet coordinator uninstall            Remove OS service
 fleet coordinator status               Show service status
 
   --port, -p <port>             HTTP port (default: 5000)
@@ -446,8 +480,8 @@ fleet coordinator status               Show service status
   --no-mdns                     Disable mDNS advertising on the LAN
 
 fleet worker [options]                 Run worker in foreground
-fleet worker install [options]         Install as systemd service (sudo)
-fleet worker uninstall [--name <n>]    Remove systemd service (sudo)
+fleet worker install [options]         Install as OS service
+fleet worker uninstall [--name <n>]    Remove OS service
 fleet worker status [--name <n>]       Show service status
 
   --coordinator, -c <url>       Coordinator URL (auto-discovered if omitted)
@@ -460,7 +494,7 @@ fleet worker status [--name <n>]       Show service status
 
 fleet version                          Show version
 
-fleet update [options]                 Update tool + restart local services (sudo)
+fleet update [options]                 Update tool + restart local services
   --skip-tool-update            Only restart services
   --version <version>           Pin a specific DotnetFleet.Tool version
   --prerelease                  Allow prerelease versions
