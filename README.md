@@ -57,6 +57,7 @@ You now have a working CI/CD pipeline. Add projects from the [Desktop App](#desk
   - [Install as OS Services](#install-as-os-services)
   - [Custom Storage Paths](#custom-storage-paths)
   - [Security](#security)
+- [Windows Guide](docs/WINDOWS.md)
 - [CLI Reference](#cli-reference)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
@@ -258,7 +259,7 @@ You have two equivalent ways to install. Pick whichever you prefer.
 
 If you just installed .NET and don't yet have anything else, you can do the whole thing in one command using `dnx` (.NET 10's tool runner).
 
-On Linux, you don't need `sudo` — the tool re-executes itself under `sudo` automatically, preserving `PATH`, `DOTNET_ROOT` and `HOME` so root can still find your per-user .NET install. On Windows, run the command from an elevated Administrator PowerShell or terminal:
+On Linux, you don't need `sudo` — the tool re-executes itself under `sudo` automatically, preserving `PATH`, `DOTNET_ROOT` and `HOME` so root can still find your per-user .NET install. On Windows, the command requests UAC elevation automatically; for unattended scripts, start PowerShell as Administrator first:
 
 ```bash
 dnx dotnetfleet.tool coordinator install --port 5000
@@ -286,7 +287,7 @@ dnx dotnetfleet.tool worker install --token <token> --name build-01
 # One-time:
 dotnet tool install -g DotnetFleet.Tool
 
-# Then (Linux: no sudo needed because fleet re-execs itself; Windows: run elevated):
+# Then (Linux: no sudo needed because fleet re-execs itself; Windows: UAC elevation is requested when needed):
 fleet coordinator install --port 5000
 
 # Worker on the same machine — auto-discovered:
@@ -331,15 +332,17 @@ Get-Service fleet-worker-build-01
 Stop-Service fleet-coordinator
 Start-Service fleet-coordinator
 
-# Update tool + restart all local fleet services (run elevated)
+# Update tool + restart all local fleet services (requests UAC elevation when needed)
 fleet update
 
-# Uninstall (run elevated)
+# Uninstall (requests UAC elevation when needed)
 fleet coordinator uninstall
 fleet worker uninstall --name build-01
 ```
 
 On Linux, services run as the calling user (via `SUDO_USER`) and write unit files to `/etc/systemd/system/`. On Windows, services run under LocalSystem and store the service-local tool under `%ProgramData%\DotnetFleet\tools`.
+
+For Windows-specific details, including Task Manager names, log paths, updates, UAC behavior and firewall rules, see [DotnetFleet on Windows](docs/WINDOWS.md).
 
 Both platforms use these service names:
 
@@ -412,7 +415,7 @@ If the coordinator and/or workers run as installed services on this machine, a s
 fleet update
 ```
 
-On Linux, `fleet update` (with no `sudo`) re-executes itself with `sudo` automatically, preserving `PATH`, `DOTNET_ROOT` and `HOME`. You'll be prompted for your password once. On Windows, run it from an elevated Administrator terminal.
+On Linux, `fleet update` (with no `sudo`) re-executes itself with `sudo` automatically, preserving `PATH`, `DOTNET_ROOT` and `HOME`. You'll be prompted for your password once. On Windows, it requests UAC elevation automatically; for unattended scripts, run it from an Administrator terminal.
 
 Options:
 

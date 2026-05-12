@@ -13,6 +13,7 @@ revisa el [README](../README.md) o abre una issue.
 - [Tokens, secretos y credenciales](#tokens-secretos-y-credenciales)
 - [Workers y descubrimiento](#workers-y-descubrimiento)
 - [Servicios: instalación, gestión y actualización](#servicios-instalación-gestión-y-actualización)
+- [Windows](#windows)
 - [Datos, almacenamiento y caché](#datos-almacenamiento-y-caché)
 - [Actualizaciones y rollback](#actualizaciones-y-rollback)
 - [Seguridad y red](#seguridad-y-red)
@@ -65,8 +66,9 @@ Salta a [Servicios](#servicios-instalación-gestión-y-actualización).
 
 .NET 10 SDK (para `dnx`) o tener instalada la herramienta global
 `DotnetFleet.Tool`. En Linux necesitas `systemd` si quieres registrar
-coordinador/worker como servicios; en Windows necesitas una terminal elevada
-para crear Windows Services. Los repos que despliegues solo necesitan
+coordinador/worker como servicios. En Windows los comandos de servicio piden
+elevación UAC automáticamente; en scripts no interactivos usa una terminal
+elevada. Los repos que despliegues solo necesitan
 `deployer.yaml` en la raíz (el worker invoca `dnx dotnetdeployer.tool -y`, que
 se descarga sola).
 
@@ -221,7 +223,7 @@ bajo LocalSystem y apuntan a `%ProgramData%\DotnetFleet\tools\fleet.exe`.
 ```bash
 fleet coordinator install --port 5000
 #  → Linux: te pide la contraseña de sudo una vez
-#  → Windows: ejecútalo en una terminal elevada
+#  → Windows: pide elevación UAC si hace falta
 #  → arranca y habilita el servicio
 ```
 
@@ -320,7 +322,7 @@ Get-Service fleet-worker-build-01
 Restart-Service fleet-coordinator
 Restart-Service fleet-worker-build-01
 
-# Desinstalación (terminal elevada)
+# Desinstalación (pide elevación UAC si hace falta)
 fleet coordinator uninstall
 fleet worker uninstall --name build-01
 ```
@@ -333,7 +335,7 @@ locales en una sola orden:
 ```bash
 fleet update
 #  → Linux: se autoeleva con sudo y reinicia con systemctl
-#  → Windows: ejecútalo en una terminal elevada y reinicia Windows Services
+#  → Windows: pide elevación UAC y reinicia Windows Services
 ```
 
 No hace falta reinstalar los servicios después: apuntan a una ruta estable, así
@@ -384,6 +386,121 @@ Los `install` nativos funcionan en Linux con systemd y Windows Services. En
 macOS o Linux sin systemd, ejecuta el coordinador y los workers en primer
 plano (`fleet coordinator`, `fleet worker`) bajo el gestor que prefieras:
 `launchd`, Docker, etc.
+
+---
+
+## Windows
+
+### ¿Hay una guía específica para Windows?
+
+Sí: [DotnetFleet on Windows](WINDOWS.md). Cubre instalación como Windows
+Service, UAC, nombres en el Administrador de tareas, rutas en ProgramData,
+logs, firewall, actualización y troubleshooting.
+
+### ¿Tengo que abrir PowerShell como Administrador?
+
+No necesariamente. `fleet coordinator install`, `fleet worker install`,
+`fleet update` y los comandos de `uninstall` piden elevación UAC si detectan
+que no estás en una sesión administradora. Para scripts, SSH no interactivo o
+tareas programadas, abre PowerShell como Administrador porque UAC puede no
+mostrarse.
+
+### ¿Dónde veo el worker en el Administrador de tareas?
+
+En la pestaña **Services**, busca el nombre de servicio:
+
+```powershell
+fleet-worker-{nombre}
+```
+
+Por ejemplo:
+
+```powershell
+fleet-worker-DESKTOP-NMC4AGI
+```
+
+El nombre visible es `DotnetFleet Worker ({nombre})`. En **Details/Procesos**
+lo normal es ver el proceso como `fleet.exe`.
+
+Verificación por consola:
+
+```powershell
+Get-Service fleet-worker-*
+Get-CimInstance Win32_Service -Filter "Name LIKE 'fleet-worker-%'" |
+  Select-Object Name,DisplayName,State,StartMode,ProcessId,PathName
+```
+
+### ¿Dónde se instala y dónde guarda datos en Windows?
+
+Los servicios Windows usan `%ProgramData%\DotnetFleet`:
+
+| Elemento | Ruta |
+|----------|------|
+| Tool usada por servicios | `%ProgramData%\DotnetFleet\tools\fleet.exe` |
+| Datos del coordinador | `%ProgramData%\DotnetFleet\coordinator\` |
+| Datos del worker | `%ProgramData%\DotnetFleet\worker-{nombre}\` |
+| Logs del coordinador | `%ProgramData%\DotnetFleet\coordinator\logs\` |
+| Logs del worker | `%ProgramData%\DotnetFleet\worker-{nombre}\logs\` |
+| Credenciales del worker | `%ProgramData%\DotnetFleet\worker-{nombre}\worker.json` |
+| Caché de repos | `%ProgramData%\DotnetFleet\worker-{nombre}\fleet-repos\` |
+
+### ¿Cómo instalo un worker Windows contra un coordinador remoto?
+
+```powershell
+fleet worker install `
+  --coordinator http://192.168.1.29:5000 `
+  --token <registration-token> `
+  --name $env:COMPUTERNAME
+```
+
+La URL debe incluir `http://` o `https://`. Tras el primer registro, el worker
+guarda `worker.json` y ya no necesita el token en reinicios normales.
+
+### El coordinador está en otra máquina y solo tengo `admin/admin`
+
+La CLI necesita el `registrationToken` para el primer registro. Si solo tienes
+credenciales admin, entra al host del coordinador y lee su `config.json`, o
+registra el worker vía API admin y guarda la respuesta en el `worker.json` del
+data-dir del worker. La guía Windows incluye el contexto operativo:
+[DotnetFleet on Windows](WINDOWS.md).
+
+### ¿Cómo veo logs del worker Windows?
+
+```powershell
+Get-ChildItem "$env:ProgramData\DotnetFleet\worker-$env:COMPUTERNAME\logs"
+Get-Content "$env:ProgramData\DotnetFleet\worker-$env:COMPUTERNAME\logs\worker-*.log" -Tail 100
+```
+
+También puedes revisar el Visor de eventos si el Service Control Manager
+reporta fallos de arranque.
+
+### ¿Cómo actualizo servicios Windows?
+
+```powershell
+fleet update
+```
+
+Actualiza `%ProgramData%\DotnetFleet\tools\fleet.exe` y reinicia los servicios
+locales `fleet-coordinator` / `fleet-worker-*`. Si solo quieres reiniciar:
+
+```powershell
+fleet update --skip-tool-update
+```
+
+### ¿Necesito abrir firewall en Windows?
+
+Solo si el coordinador corre en Windows y otros equipos deben entrar a su
+puerto. Un worker Windows que conecta a una RPi, Linux o servidor remoto solo
+necesita salida TCP hacia el coordinador.
+
+```powershell
+New-NetFirewallRule `
+  -DisplayName "DotnetFleet Coordinator" `
+  -Direction Inbound `
+  -Protocol TCP `
+  -LocalPort 5000 `
+  -Action Allow
+```
 
 ---
 
@@ -442,8 +559,7 @@ fleet update
 ```
 
 En Linux se reejecuta con `sudo` automáticamente y preserva
-`PATH`/`DOTNET_ROOT`/`HOME`. En Windows hay que lanzarlo desde una terminal
-elevada.
+`PATH`/`DOTNET_ROOT`/`HOME`. En Windows pide elevación UAC si hace falta.
 
 ### ¿Tengo que reinstalar los servicios después de actualizar?
 
@@ -619,7 +735,7 @@ Comprueba:
 5. **El coordinador debe ser alcanzable desde el worker.** Pruébalo antes de
    instalar:
    ```bash
-   curl -i http://192.168.1.29:5000/healthz
+   curl -i http://192.168.1.29:5000/health
    ```
    Si da `Connection refused`, el coordinador está bindeado a `localhost` y no
    a `0.0.0.0`. Reinstálalo con `--urls http://0.0.0.0:5000` o pásale
