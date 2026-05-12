@@ -55,16 +55,21 @@ public static class LocalCoordinatorDiscovery
     public static Result? TryFromUserHome()
     {
         var homes = new List<string>();
-        var sudoUser = Environment.GetEnvironmentVariable("SUDO_USER");
-        if (!string.IsNullOrEmpty(sudoUser))
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+        void AddHome(string? home)
         {
-            var home = ResolveUserHome(sudoUser);
-            if (home != null) homes.Add(home);
+            if (!string.IsNullOrWhiteSpace(home) && !homes.Any(existing => comparer.Equals(existing, home)))
+                homes.Add(home);
         }
 
-        var currentHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (!string.IsNullOrEmpty(currentHome) && !homes.Contains(currentHome))
-            homes.Add(currentHome);
+        var sudoUser = Environment.GetEnvironmentVariable("SUDO_USER");
+        if (!string.IsNullOrEmpty(sudoUser))
+            AddHome(ResolveUserHome(sudoUser));
+
+        AddHome(Environment.GetEnvironmentVariable("HOME"));
+        AddHome(Environment.GetEnvironmentVariable("USERPROFILE"));
+        AddHome(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
         foreach (var home in homes)
         {

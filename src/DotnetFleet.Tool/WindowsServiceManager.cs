@@ -454,22 +454,7 @@ internal static class WindowsServiceManager
         if (code != 0)
             return [];
 
-        var services = new List<string>();
-        foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var trimmed = line.Trim();
-            const string prefix = "SERVICE_NAME:";
-            if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var serviceName = trimmed[prefix.Length..].Trim();
-            if (string.Equals(serviceName, CoordinatorServiceName, StringComparison.OrdinalIgnoreCase) ||
-                serviceName.StartsWith("fleet-worker-", StringComparison.OrdinalIgnoreCase))
-                services.Add(serviceName);
-        }
-
-        services.Sort(StringComparer.OrdinalIgnoreCase);
-        return services;
+        return FindFleetServiceNames(stdout).ToList();
     }
 
     private static string? ReadServiceImagePath(string serviceName)
@@ -482,17 +467,7 @@ internal static class WindowsServiceManager
             if (code != 0)
                 return null;
 
-            foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var trimmed = line.Trim();
-                const string prefix = "BINARY_PATH_NAME";
-                if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var colon = trimmed.IndexOf(':');
-                if (colon >= 0 && colon + 1 < trimmed.Length)
-                    return trimmed[(colon + 1)..].Trim();
-            }
+            return FindServiceImagePath(stdout);
         }
         catch
         {
@@ -500,6 +475,46 @@ internal static class WindowsServiceManager
         }
 
         return null;
+    }
+
+    internal static IReadOnlyList<string> FindFleetServiceNames(string scQueryOutput)
+    {
+        var services = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var line in scQueryOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var value = ReadScLineValue(line);
+            if (value is null)
+                continue;
+
+            if (string.Equals(value, CoordinatorServiceName, StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("fleet-worker-", StringComparison.OrdinalIgnoreCase))
+                services.Add(value);
+        }
+
+        return services.Order(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    internal static string? FindServiceImagePath(string scQueryConfigOutput)
+    {
+        foreach (var line in scQueryConfigOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var value = ReadScLineValue(line);
+            if (value?.Contains(".exe", StringComparison.OrdinalIgnoreCase) == true)
+                return value;
+        }
+
+        return null;
+    }
+
+    private static string? ReadScLineValue(string line)
+    {
+        var colon = line.IndexOf(':');
+        if (colon < 0 || colon + 1 >= line.Length)
+            return null;
+
+        var value = line[(colon + 1)..].Trim();
+        return string.IsNullOrEmpty(value) ? null : value;
     }
 
     private static async Task<(string stdout, string stderr, int exitCode)> RunScAsync(

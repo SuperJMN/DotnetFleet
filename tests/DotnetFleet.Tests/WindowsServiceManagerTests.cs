@@ -76,6 +76,41 @@ public class WindowsServiceManagerTests : IDisposable
         dataDir.Should().Be(@"C:\ProgramData\DotnetFleet\worker-build-01");
     }
 
+    [Fact]
+    public void FindFleetServiceNames_ParsesLocalizedScQueryOutput()
+    {
+        const string output = """
+            NOMBRE_DE_SERVICIO: Appinfo
+            NOMBRE_PARA_MOSTRAR: Información de la aplicación
+
+            NOMBRE_SERVICIO: fleet-coordinator
+            NOMBRE_MOSTRAR : DotnetFleet Coordinator
+
+            NOMBRE_DE_SERVICIO: fleet-worker-smoke-worker
+            NOMBRE_PARA_MOSTRAR: DotnetFleet Worker (smoke-worker)
+            """;
+
+        var services = WindowsServiceManager.FindFleetServiceNames(output);
+
+        services.Should().Equal("fleet-coordinator", "fleet-worker-smoke-worker");
+    }
+
+    [Fact]
+    public void FindServiceImagePath_ParsesLocalizedScQueryConfigOutput()
+    {
+        const string output = """
+            NOMBRE_SERVICIO: fleet-coordinator
+                    TIPO               : 10  WIN32_OWN_PROCESS
+                    TIPO_INICIO        : 2   AUTO_START
+                    NOMBRE_RUTA_BINARIO: "C:\ProgramData\DotnetFleet\tools\fleet.exe" coordinator --port 57130 --data-dir "C:\ProgramData\DotnetFleet\coordinator"
+                    NOMBRE_INICIO_SERVICIO: LocalSystem
+            """;
+
+        var imagePath = WindowsServiceManager.FindServiceImagePath(output);
+
+        imagePath.Should().Be("\"C:\\ProgramData\\DotnetFleet\\tools\\fleet.exe\" coordinator --port 57130 --data-dir \"C:\\ProgramData\\DotnetFleet\\coordinator\"");
+    }
+
     private static void WriteConfig(string path, string token, int port)
     {
         var obj = new

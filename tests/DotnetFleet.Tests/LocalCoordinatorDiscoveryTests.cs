@@ -30,6 +30,7 @@ public class LocalCoordinatorDiscoveryTests : IDisposable
 
         var prevHome = Environment.GetEnvironmentVariable("HOME");
         var prevUserProfile = Environment.GetEnvironmentVariable("USERPROFILE");
+        var prevSudoUser = Environment.GetEnvironmentVariable("SUDO_USER");
         Environment.SetEnvironmentVariable("HOME", fakeHome);
         Environment.SetEnvironmentVariable("USERPROFILE", fakeHome);
         Environment.SetEnvironmentVariable("SUDO_USER", null);
@@ -47,6 +48,7 @@ public class LocalCoordinatorDiscoveryTests : IDisposable
         {
             Environment.SetEnvironmentVariable("HOME", prevHome);
             Environment.SetEnvironmentVariable("USERPROFILE", prevUserProfile);
+            Environment.SetEnvironmentVariable("SUDO_USER", prevSudoUser);
         }
     }
 
@@ -57,6 +59,8 @@ public class LocalCoordinatorDiscoveryTests : IDisposable
         Directory.CreateDirectory(fakeHome);
 
         var prevHome = Environment.GetEnvironmentVariable("HOME");
+        var prevUserProfile = Environment.GetEnvironmentVariable("USERPROFILE");
+        var prevSudoUser = Environment.GetEnvironmentVariable("SUDO_USER");
         Environment.SetEnvironmentVariable("HOME", fakeHome);
         Environment.SetEnvironmentVariable("USERPROFILE", fakeHome);
         Environment.SetEnvironmentVariable("SUDO_USER", null);
@@ -69,6 +73,8 @@ public class LocalCoordinatorDiscoveryTests : IDisposable
         finally
         {
             Environment.SetEnvironmentVariable("HOME", prevHome);
+            Environment.SetEnvironmentVariable("USERPROFILE", prevUserProfile);
+            Environment.SetEnvironmentVariable("SUDO_USER", prevSudoUser);
         }
     }
 
@@ -82,6 +88,8 @@ public class LocalCoordinatorDiscoveryTests : IDisposable
             "{ \"jwtSecret\": \"x\", \"port\": 5000 }");
 
         var prevHome = Environment.GetEnvironmentVariable("HOME");
+        var prevUserProfile = Environment.GetEnvironmentVariable("USERPROFILE");
+        var prevSudoUser = Environment.GetEnvironmentVariable("SUDO_USER");
         Environment.SetEnvironmentVariable("HOME", fakeHome);
         Environment.SetEnvironmentVariable("USERPROFILE", fakeHome);
         Environment.SetEnvironmentVariable("SUDO_USER", null);
@@ -94,6 +102,8 @@ public class LocalCoordinatorDiscoveryTests : IDisposable
         finally
         {
             Environment.SetEnvironmentVariable("HOME", prevHome);
+            Environment.SetEnvironmentVariable("USERPROFILE", prevUserProfile);
+            Environment.SetEnvironmentVariable("SUDO_USER", prevSudoUser);
         }
     }
 
@@ -106,6 +116,8 @@ public class LocalCoordinatorDiscoveryTests : IDisposable
         File.WriteAllText(Path.Combine(coordDir, "config.json"), "not-json{");
 
         var prevHome = Environment.GetEnvironmentVariable("HOME");
+        var prevUserProfile = Environment.GetEnvironmentVariable("USERPROFILE");
+        var prevSudoUser = Environment.GetEnvironmentVariable("SUDO_USER");
         Environment.SetEnvironmentVariable("HOME", fakeHome);
         Environment.SetEnvironmentVariable("USERPROFILE", fakeHome);
         Environment.SetEnvironmentVariable("SUDO_USER", null);
@@ -118,6 +130,8 @@ public class LocalCoordinatorDiscoveryTests : IDisposable
         finally
         {
             Environment.SetEnvironmentVariable("HOME", prevHome);
+            Environment.SetEnvironmentVariable("USERPROFILE", prevUserProfile);
+            Environment.SetEnvironmentVariable("SUDO_USER", prevSudoUser);
         }
     }
 

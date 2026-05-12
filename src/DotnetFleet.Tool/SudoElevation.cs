@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Text;
 
 namespace DotnetFleet.Tool;
 
@@ -15,6 +17,11 @@ public static class SudoElevation
 
     public static bool IsRoot()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            return IsWindowsAdministrator();
+        }
+
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
         {
             return true;
@@ -42,17 +49,22 @@ public static class SudoElevation
             return null;
         }
 
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
-        {
-            return null;
-        }
-
         var procPath = Environment.ProcessPath;
         var cmdArgs = Environment.GetCommandLineArgs();
         if (string.IsNullOrEmpty(procPath) || cmdArgs.Length == 0)
         {
-            Console.Error.WriteLine("✗ Could not determine current executable path; please re-run with sudo manually.");
+            Console.Error.WriteLine("✗ Could not determine current executable path; please re-run elevated manually.");
             return 1;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return ReExecAsWindowsAdministrator(procPath, cmdArgs);
+        }
+
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return null;
         }
 
         Console.Error.WriteLine("This command requires root. Re-running with sudo (you may be prompted for your password)…");
@@ -122,5 +134,117 @@ public static class SudoElevation
             Console.Error.WriteLine("  Re-run the command manually with sudo.");
             return 1;
         }
+    }
+
+    internal static ProcessStartInfo BuildWindowsElevatedProcess(
+        string processPath,
+        IReadOnlyList<string> commandLineArgs,
+        string workingDirectory)
+    {
+        return new ProcessStartInfo
+        {
+            FileName = processPath,
+            Arguments = string.Join(" ", BuildReExecArguments(processPath, commandLineArgs).Select(QuoteWindowsArgument)),
+            UseShellExecute = true,
+            Verb = "runas",
+            WorkingDirectory = workingDirectory
+        };
+    }
+
+    private static int ReExecAsWindowsAdministrator(string processPath, IReadOnlyList<string> commandLineArgs)
+    {
+        Console.Error.WriteLine("This command requires Administrator privileges. Requesting elevation...");
+        Console.Error.WriteLine();
+
+        try
+        {
+            using var proc = Process.Start(BuildWindowsElevatedProcess(
+                processPath,
+                commandLineArgs,
+                Environment.CurrentDirectory));
+
+            if (proc is null)
+            {
+                Console.Error.WriteLine("✗ Failed to launch elevated process.");
+                return 1;
+            }
+
+            proc.WaitForExit();
+            return proc.ExitCode;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"✗ Could not request elevation: {ex.Message}");
+            Console.Error.WriteLine("  Re-run the command from an Administrator terminal.");
+            return 1;
+        }
+    }
+
+    private static IReadOnlyList<string> BuildReExecArguments(
+        string processPath,
+        IReadOnlyList<string> commandLineArgs)
+    {
+        var procName = Path.GetFileNameWithoutExtension(processPath);
+        var isDotnetHost = string.Equals(procName, "dotnet", StringComparison.OrdinalIgnoreCase);
+        var args = new List<string>();
+
+        if (isDotnetHost && commandLineArgs.Count > 0)
+        {
+            args.Add(commandLineArgs[0]);
+        }
+
+        for (var i = 1; i < commandLineArgs.Count; i++)
+        {
+            args.Add(commandLineArgs[i]);
+        }
+
+        return args;
+    }
+
+    private static string QuoteWindowsArgument(string argument)
+    {
+        if (argument.Length == 0)
+            return "\"\"";
+
+        if (!argument.Any(c => char.IsWhiteSpace(c) || c == '"'))
+            return argument;
+
+        var builder = new StringBuilder();
+        builder.Append('"');
+        var backslashes = 0;
+
+        foreach (var c in argument)
+        {
+            if (c == '\\')
+            {
+                backslashes++;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                builder.Append('\\', backslashes * 2 + 1);
+                builder.Append('"');
+                backslashes = 0;
+                continue;
+            }
+
+            builder.Append('\\', backslashes);
+            backslashes = 0;
+            builder.Append(c);
+        }
+
+        builder.Append('\\', backslashes * 2);
+        builder.Append('"');
+        return builder.ToString();
+    }
+
+    private static bool IsWindowsAdministrator()
+    {
+#pragma warning disable CA1416
+        using var identity = WindowsIdentity.GetCurrent();
+        var principal = new WindowsPrincipal(identity);
+        return principal.IsInRole(WindowsBuiltInRole.Administrator);
+#pragma warning restore CA1416
     }
 }
