@@ -8,9 +8,10 @@ namespace DotnetFleet.Tool;
 /// secrets between commands.
 ///
 /// Discovery order:
-///   1. systemd unit at /etc/systemd/system/fleet-coordinator.service
-///        → parse WorkingDirectory= → load &lt;dir&gt;/config.json
-///   2. ~/.fleet/coordinator/config.json for the effective user (SUDO_USER or current)
+///   1. Installed OS service
+///        → systemd WorkingDirectory= or Windows ImagePath --data-dir → load &lt;dir&gt;/config.json
+///   2. Platform service data dir
+///   3. ~/.fleet/coordinator/config.json for the effective user (SUDO_USER or current)
 /// </summary>
 public static class LocalCoordinatorDiscovery
 {
@@ -20,7 +21,23 @@ public static class LocalCoordinatorDiscovery
 
     public static Result? TryDiscover()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            return WindowsServiceManager.TryDiscoverCoordinatorFromInstalledService()
+                   ?? TryFromWindowsProgramData()
+                   ?? TryFromUserHome();
+        }
+
         return TryFromSystemdUnit() ?? TryFromUserHome();
+    }
+
+    public static Result? TryFromWindowsProgramData()
+    {
+        if (!OperatingSystem.IsWindows())
+            return null;
+
+        var dataDir = WindowsServiceManager.GetDefaultWindowsDataDir("coordinator");
+        return TryLoadFromDataDir(dataDir, source: $"{Path.Combine(dataDir, "config.json")}");
     }
 
     public static Result? TryFromSystemdUnit()
@@ -59,7 +76,7 @@ public static class LocalCoordinatorDiscovery
         return null;
     }
 
-    private static Result? TryLoadFromDataDir(string dataDir, string source)
+    internal static Result? TryLoadFromDataDir(string dataDir, string source)
     {
         var configPath = Path.Combine(dataDir, "config.json");
         if (!File.Exists(configPath))

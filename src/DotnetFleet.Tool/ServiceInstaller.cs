@@ -4,8 +4,8 @@ using System.Runtime.InteropServices;
 namespace DotnetFleet.Tool;
 
 /// <summary>
-/// Installs, uninstalls and queries DotnetFleet services as system-level systemd services.
-/// Requires root (sudo) for install/uninstall. Services start automatically at boot.
+/// Installs, uninstalls and queries DotnetFleet services as OS services.
+/// Linux uses systemd; Windows uses the Service Control Manager.
 /// </summary>
 public static class ServiceInstaller
 {
@@ -17,6 +17,14 @@ public static class ServiceInstaller
     // ── Platform check ───────────────────────────────────────────────────────
 
     public static bool IsLinux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+    public static bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+
+    public static string GetDefaultInstallDataDir(string component)
+    {
+        return IsWindows
+            ? WindowsServiceManager.GetDefaultWindowsDataDir(component)
+            : FleetConfig.GetDefaultDataDir(component);
+    }
 
     [DllImport("libc")]
     private static extern uint geteuid();
@@ -25,7 +33,7 @@ public static class ServiceInstaller
     {
         if (!IsLinux)
             throw new PlatformNotSupportedException(
-                "Service installation is currently supported only on Linux (systemd). " +
+                "Service installation is supported on Linux (systemd) and Windows Services. " +
                 "On other platforms, run 'fleet coordinator' / 'fleet worker' in the foreground or use a process manager.");
     }
 
@@ -52,6 +60,12 @@ public static class ServiceInstaller
 
     public static async Task InstallCoordinatorAsync(CoordinatorInstallOptions opts)
     {
+        if (IsWindows)
+        {
+            await WindowsServiceManager.InstallCoordinatorAsync(opts);
+            return;
+        }
+
         EnsureLinux();
         EnsureRoot();
 
@@ -84,7 +98,7 @@ public static class ServiceInstaller
         Console.WriteLine($"    Data directory: {opts.DataDir}");
         Console.WriteLine();
         Console.WriteLine($"  Connect workers with:");
-        Console.WriteLine($"    sudo fleet worker install --coordinator http://<host>:{opts.Port} --token {config.RegistrationToken}");
+        Console.WriteLine($"    fleet worker install --coordinator http://<host>:{opts.Port} --token {config.RegistrationToken}");
         Console.WriteLine();
         Console.WriteLine($"  Manage with:");
         Console.WriteLine($"    sudo systemctl status {CoordinatorServiceName}");
@@ -95,6 +109,12 @@ public static class ServiceInstaller
 
     public static async Task UninstallCoordinatorAsync()
     {
+        if (IsWindows)
+        {
+            await WindowsServiceManager.UninstallCoordinatorAsync();
+            return;
+        }
+
         EnsureLinux();
         EnsureRoot();
         await UninstallUnitAsync(CoordinatorServiceName);
@@ -103,6 +123,12 @@ public static class ServiceInstaller
 
     public static async Task CoordinatorStatusAsync()
     {
+        if (IsWindows)
+        {
+            await WindowsServiceManager.CoordinatorStatusAsync();
+            return;
+        }
+
         EnsureLinux();
         await ShowStatusAsync(CoordinatorServiceName);
 
@@ -151,6 +177,12 @@ public static class ServiceInstaller
 
     public static async Task InstallWorkerAsync(WorkerInstallOptions opts)
     {
+        if (IsWindows)
+        {
+            await WindowsServiceManager.InstallWorkerAsync(opts);
+            return;
+        }
+
         EnsureLinux();
         EnsureRoot();
 
@@ -188,6 +220,12 @@ public static class ServiceInstaller
 
     public static async Task UninstallWorkerAsync(string workerName)
     {
+        if (IsWindows)
+        {
+            await WindowsServiceManager.UninstallWorkerAsync(workerName);
+            return;
+        }
+
         EnsureLinux();
         EnsureRoot();
         var serviceName = WorkerServiceName(workerName);
@@ -197,6 +235,12 @@ public static class ServiceInstaller
 
     public static async Task WorkerStatusAsync(string workerName)
     {
+        if (IsWindows)
+        {
+            await WindowsServiceManager.WorkerStatusAsync(workerName);
+            return;
+        }
+
         EnsureLinux();
         await ShowStatusAsync(WorkerServiceName(workerName));
     }
@@ -211,6 +255,12 @@ public static class ServiceInstaller
     /// </summary>
     public static async Task UpdateLocalServicesAsync(UpdateOptions opts)
     {
+        if (IsWindows)
+        {
+            await WindowsServiceManager.UpdateLocalServicesAsync(opts);
+            return;
+        }
+
         EnsureLinux();
         EnsureRoot();
 
@@ -672,31 +722,12 @@ public static class ServiceInstaller
 
     private static string BuildCoordinatorArgs(CoordinatorInstallOptions opts)
     {
-        var parts = new List<string>
-        {
-            $"--port {opts.Port}",
-            $"--data-dir \"{opts.DataDir}\""
-        };
-        if (opts.Token != null) parts.Add($"--token \"{opts.Token}\"");
-        if (opts.JwtSecret != null) parts.Add($"--jwt-secret \"{opts.JwtSecret}\"");
-        if (opts.AdminPassword != null) parts.Add($"--admin-password \"{opts.AdminPassword}\"");
-        if (opts.Urls != null) parts.Add($"--urls \"{opts.Urls}\"");
-        if (opts.NoMdns) parts.Add("--no-mdns");
-        return string.Join(" ", parts);
+        return ServiceCommandLine.BuildCoordinatorArgs(opts);
     }
 
     private static string BuildWorkerArgs(WorkerInstallOptions opts)
     {
-        var parts = new List<string>
-        {
-            $"--coordinator \"{opts.CoordinatorUrl}\"",
-            $"--name \"{opts.Name}\"",
-            $"--data-dir \"{opts.DataDir}\""
-        };
-        if (opts.Token != null) parts.Add($"--token \"{opts.Token}\"");
-        if (opts.PollInterval.HasValue) parts.Add($"--poll-interval {opts.PollInterval}");
-        if (opts.MaxDisk.HasValue) parts.Add($"--max-disk {opts.MaxDisk}");
-        return string.Join(" ", parts);
+        return ServiceCommandLine.BuildWorkerArgs(opts);
     }
 
     // ── Process helpers ──────────────────────────────────────────────────────

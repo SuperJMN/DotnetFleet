@@ -100,7 +100,7 @@ coordinatorCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 
 // ── fleet coordinator install ────────────────────────────────────────────
-var coordInstallCommand = new Command("install", "Install coordinator as a systemd service");
+var coordInstallCommand = new Command("install", "Install coordinator as an OS service");
 coordInstallCommand.Options.Add(portOption);
 coordInstallCommand.Options.Add(coordDataDirOption);
 coordInstallCommand.Options.Add(tokenOption);
@@ -115,7 +115,7 @@ coordInstallCommand.SetAction(async (parseResult, _) =>
     if (elevated.HasValue) Environment.Exit(elevated.Value);
 
     var port = parseResult.GetValue(portOption);
-    var dataDir = parseResult.GetValue(coordDataDirOption) ?? FleetConfig.GetDefaultDataDir("coordinator");
+    var dataDir = parseResult.GetValue(coordDataDirOption) ?? ServiceInstaller.GetDefaultInstallDataDir("coordinator");
     await ServiceInstaller.InstallCoordinatorAsync(new ServiceInstaller.CoordinatorInstallOptions(
         Port: port,
         DataDir: dataDir,
@@ -127,7 +127,7 @@ coordInstallCommand.SetAction(async (parseResult, _) =>
 });
 
 // ── fleet coordinator uninstall ──────────────────────────────────────────
-var coordUninstallCommand = new Command("uninstall", "Remove the coordinator systemd service");
+var coordUninstallCommand = new Command("uninstall", "Remove the coordinator OS service");
 coordUninstallCommand.SetAction(async (_, _) =>
 {
     var elevated = SudoElevation.ReExecAsRootIfNeeded();
@@ -243,7 +243,7 @@ workerCommand.SetAction(async (parseResult, cancellationToken) =>
 });
 
 // ── fleet worker install ─────────────────────────────────────────────────
-var workerInstallCommand = new Command("install", "Install worker as a systemd service");
+var workerInstallCommand = new Command("install", "Install worker as an OS service");
 workerInstallCommand.Options.Add(coordinatorUrlOption);
 workerInstallCommand.Options.Add(workerTokenOption);
 workerInstallCommand.Options.Add(nameOption);
@@ -259,7 +259,7 @@ workerInstallCommand.SetAction(async (parseResult, _) =>
 
     var workerName = parseResult.GetValue(nameOption) ?? Environment.MachineName;
     var dataDir = parseResult.GetValue(workerDataDirOption)
-                  ?? FleetConfig.GetDefaultDataDir($"worker-{workerName}");
+                  ?? ServiceInstaller.GetDefaultInstallDataDir($"worker-{workerName}");
     var explicitUrl = parseResult.GetValue(coordinatorUrlOption);
     var explicitToken = parseResult.GetValue(workerTokenOption);
     var noDiscover = parseResult.GetValue(noDiscoverOption);
@@ -278,7 +278,7 @@ workerInstallCommand.SetAction(async (parseResult, _) =>
 });
 
 // ── fleet worker uninstall ───────────────────────────────────────────────
-var workerUninstallCommand = new Command("uninstall", "Remove a worker systemd service");
+var workerUninstallCommand = new Command("uninstall", "Remove a worker OS service");
 var uninstallNameOption = new Option<string?>("--name", "-n")
 {
     Description = "Worker name to uninstall (default: hostname)"

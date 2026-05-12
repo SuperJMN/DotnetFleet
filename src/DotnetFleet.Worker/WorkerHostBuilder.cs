@@ -30,16 +30,26 @@ public static class WorkerHostBuilder
 
         var builder = Host.CreateApplicationBuilder(args);
 
+        builder.Services.AddWindowsService(serviceOptions =>
+        {
+            serviceOptions.ServiceName = "DotnetFleet Worker";
+        });
+
         builder.Configuration.AddEnvironmentVariables(prefix: "FLEET_");
 
         // Apply CLI overrides
         ApplyOverrides(builder.Configuration, options);
 
+        var logPath = ResolveLogPath(options.DataDir);
+        var logDir = Path.GetDirectoryName(logPath);
+        if (!string.IsNullOrEmpty(logDir))
+            Directory.CreateDirectory(logDir);
+
         Log.Logger = new LoggerConfiguration()
             .ReadFrom.Configuration(builder.Configuration)
             .Enrich.FromLogContext()
             .WriteTo.Console()
-            .WriteTo.File("logs/worker-.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14)
+            .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14)
             .CreateLogger();
 
         builder.Logging.ClearProviders();
@@ -144,5 +154,12 @@ public static class WorkerHostBuilder
 
         if (overrides.Count > 0)
             config.AddInMemoryCollection(overrides);
+    }
+
+    internal static string ResolveLogPath(string? dataDir)
+    {
+        return string.IsNullOrEmpty(dataDir)
+            ? Path.Combine("logs", "worker-.log")
+            : Path.Combine(dataDir, "logs", "worker-.log");
     }
 }

@@ -12,7 +12,7 @@ revisa el [README](../README.md) o abre una issue.
 - [Instalación y arranque](#instalación-y-arranque)
 - [Tokens, secretos y credenciales](#tokens-secretos-y-credenciales)
 - [Workers y descubrimiento](#workers-y-descubrimiento)
-- [Servicios systemd: instalación, gestión y actualización](#servicios-systemd-instalación-gestión-y-actualización)
+- [Servicios: instalación, gestión y actualización](#servicios-instalación-gestión-y-actualización)
 - [Datos, almacenamiento y caché](#datos-almacenamiento-y-caché)
 - [Actualizaciones y rollback](#actualizaciones-y-rollback)
 - [Seguridad y red](#seguridad-y-red)
@@ -54,8 +54,8 @@ raíz y pulsa **Deploy Now**.
 
 ### Y para producción
 
-Para que arranquen en boot y se reinicien al fallar, instala como servicios
-systemd. Salta a [Servicios systemd](#servicios-systemd-instalación-gestión-y-actualización).
+Para que arranquen en boot y se reinicien al fallar, instala como servicios.
+Salta a [Servicios](#servicios-instalación-gestión-y-actualización).
 
 ---
 
@@ -64,26 +64,27 @@ systemd. Salta a [Servicios systemd](#servicios-systemd-instalación-gestión-y-
 ### ¿Qué necesito instalado para usar DotnetFleet?
 
 .NET 10 SDK (para `dnx`) o tener instalada la herramienta global
-`DotnetFleet.Tool`. En Linux, además, `systemd` si quieres registrar
-coordinador/worker como servicios. Los repos que despliegues solo necesitan
+`DotnetFleet.Tool`. En Linux necesitas `systemd` si quieres registrar
+coordinador/worker como servicios; en Windows necesitas una terminal elevada
+para crear Windows Services. Los repos que despliegues solo necesitan
 `deployer.yaml` en la raíz (el worker invoca `dnx dotnetdeployer.tool -y`, que
 se descarga sola).
 
 ### ¿Tengo que instalar la tool globalmente o puedo usar `dnx` siempre?
 
-Para uso puntual basta `dnx dotnetfleet.tool ...`. Para servicios de systemd
-**sí** se requiere la global tool (`~/.dotnet/tools/fleet`), porque la unidad
-necesita un `ExecStart=` con ruta estable. Si llamas a `coordinator install` o
-`worker install` desde `dnx`, la propia herramienta detecta esa situación e
-instala la global tool por ti.
+Para uso puntual basta `dnx dotnetfleet.tool ...`. Para servicios instalados
+sí se requiere una ruta estable. En Linux la herramienta usa la global tool
+(`~/.dotnet/tools/fleet`); en Windows instala una copia de herramienta bajo
+`%ProgramData%\DotnetFleet\tools`. Si llamas a `coordinator install` o
+`worker install` desde `dnx`, la propia herramienta prepara esa ruta estable.
 
 ### ¿Funciona en Windows o macOS?
 
 El comando en primer plano (`fleet coordinator` / `fleet worker`) es
 multiplataforma. La instalación como servicio (`install` / `uninstall` /
-`status`) es por ahora **solo Linux + systemd**. En otros sistemas usa el
-gestor que prefieras (NSSM, launchd, Docker, etc.) apuntando a `fleet
-coordinator`.
+`status`) funciona en Linux + systemd y en Windows Services. En macOS o en
+Linux sin systemd, usa el gestor que prefieras (`launchd`, Docker, etc.)
+apuntando a `fleet coordinator`.
 
 ---
 
@@ -100,16 +101,18 @@ cat ~/.fleet/coordinator/config.json
 
 Busca el campo `registrationToken`. Si arrancaste con un `--data-dir` distinto,
 el archivo está en `<data-dir>/config.json`. Si el coordinador corre como
-servicio systemd lanzado con `sudo`, la herramienta resuelve el home del
-usuario original vía `SUDO_USER`, así que sigue estando bajo
-`~/.fleet/coordinator/`.
+servicio Linux, la herramienta resuelve el home del usuario original vía
+`SUDO_USER`, así que sigue estando bajo `~/.fleet/coordinator/`. En Windows
+Services, por defecto vive bajo `%ProgramData%\DotnetFleet\coordinator\`.
 
 También aparece en el banner que imprime `fleet coordinator` al arrancar; si se
-ejecuta como servicio, puedes verlo con:
+ejecuta como servicio Linux, puedes verlo con:
 
 ```bash
 journalctl -u fleet-coordinator --no-pager | grep -i token
 ```
+
+En Windows Services, lee el `config.json` del `data-dir` del coordinador.
 
 ### ¿Puedo fijar yo el token en lugar de uno aleatorio?
 
@@ -136,7 +139,7 @@ secreto persistente al siguiente latido.
 ```bash
 fleet coordinator --admin-password <nueva-contraseña>
 # o, si está como servicio:
-sudo fleet coordinator install --admin-password <nueva-contraseña>
+fleet coordinator install --admin-password <nueva-contraseña>
 ```
 
 ### ¿Dónde se guardan las credenciales del worker?
@@ -152,8 +155,8 @@ worker.
 
 ### Tengo el coordinador y el worker en la **misma máquina**. ¿Necesito pasar URL y token?
 
-No. `fleet worker` lee `~/.fleet/coordinator/config.json` (o la unidad systemd
-del coordinador) y se conecta a `http://localhost:<puerto>` con el token ya
+No. `fleet worker` lee `~/.fleet/coordinator/config.json` (o el servicio
+instalado del coordinador) y se conecta a `http://localhost:<puerto>` con el token ya
 encontrado en disco.
 
 ### Y en la **misma LAN** pero distintas máquinas?
@@ -195,7 +198,7 @@ Cada 10 s por defecto. Ajustable con `--poll-interval <segundos>`.
 
 ---
 
-## Servicios systemd: instalación, gestión y actualización
+## Servicios: instalación, gestión y actualización
 
 ### ¿Cómo se llaman los servicios?
 
@@ -204,9 +207,12 @@ Cada 10 s por defecto. Ajustable con `--poll-interval <segundos>`.
 | Coordinador | `fleet-coordinator`       |
 | Worker      | `fleet-worker-{nombre}`   |
 
-Las unidades viven en `/etc/systemd/system/` y corren bajo el usuario que
-invocó el `install` (resuelto vía `SUDO_USER`). Apuntan al binario estable
+En Linux, las unidades viven en `/etc/systemd/system/` y corren bajo el usuario
+que invocó el `install` (resuelto vía `SUDO_USER`). Apuntan al binario estable
 `~/.dotnet/tools/fleet`, no a rutas efímeras de `dnx`.
+
+En Windows, los servicios se registran en el Service Control Manager, corren
+bajo LocalSystem y apuntan a `%ProgramData%\DotnetFleet\tools\fleet.exe`.
 
 ### Instalación recomendada
 
@@ -214,8 +220,8 @@ invocó el `install` (resuelto vía `SUDO_USER`). Apuntan al binario estable
 
 ```bash
 fleet coordinator install --port 5000
-#  → te pide la contraseña de sudo una vez
-#  → instala /etc/systemd/system/fleet-coordinator.service
+#  → Linux: te pide la contraseña de sudo una vez
+#  → Windows: ejecútalo en una terminal elevada
 #  → arranca y habilita el servicio
 ```
 
@@ -245,6 +251,8 @@ fleet worker install \
 > sirve.
 
 ### ¿Por qué no debo poner `sudo` delante de `fleet`?
+
+Esto solo aplica a Linux.
 
 `sudo` resetea `PATH` al `secure_path` de `/etc/sudoers`, que **no incluye
 `~/.dotnet/tools`**. Resultado: `sudo: fleet: orden no encontrada`. La
@@ -283,6 +291,8 @@ home y verás:
 
 ### Gestión diaria de los servicios
 
+Linux:
+
 ```bash
 # Estado y logs
 sudo systemctl status fleet-coordinator
@@ -299,21 +309,35 @@ fleet coordinator uninstall
 fleet worker uninstall --name build-01
 ```
 
+Windows:
+
+```powershell
+# Estado
+Get-Service fleet-coordinator
+Get-Service fleet-worker-build-01
+
+# Reinicio
+Restart-Service fleet-coordinator
+Restart-Service fleet-worker-build-01
+
+# Desinstalación (terminal elevada)
+fleet coordinator uninstall
+fleet worker uninstall --name build-01
+```
+
 ### Actualización en sitio (one-shot)
 
-Para actualizar la global tool **y** reiniciar todos los servicios fleet
+Para actualizar la herramienta de servicio **y** reiniciar todos los servicios fleet
 locales en una sola orden:
 
 ```bash
 fleet update
-#  → se autoeleva con sudo (te pide contraseña una vez)
-#  → dotnet tool update -g DotnetFleet.Tool
-#  → systemctl restart fleet-coordinator + cada fleet-worker-*
-#  → preserva PATH, DOTNET_ROOT y HOME
+#  → Linux: se autoeleva con sudo y reinicia con systemctl
+#  → Windows: ejecútalo en una terminal elevada y reinicia Windows Services
 ```
 
-No hace falta reinstalar las unidades systemd después: apuntan a la ruta
-estable `~/.dotnet/tools/fleet`, así que basta con reiniciar.
+No hace falta reinstalar los servicios después: apuntan a una ruta estable, así
+que basta con reiniciar.
 
 ### Actualización manual (si prefieres control fino)
 
@@ -321,6 +345,16 @@ estable `~/.dotnet/tools/fleet`, así que basta con reiniciar.
 dotnet tool update -g DotnetFleet.Tool
 sudo systemctl restart fleet-coordinator
 sudo systemctl restart fleet-worker-<nombre>
+```
+
+En Windows:
+
+```powershell
+Stop-Service fleet-coordinator
+Stop-Service fleet-worker-<nombre>
+dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetFleet.Tool
+Start-Service fleet-coordinator
+Start-Service fleet-worker-<nombre>
 ```
 
 ### Rollback a una versión anterior
@@ -331,15 +365,25 @@ sudo systemctl restart fleet-coordinator
 sudo systemctl restart fleet-worker-<nombre>
 ```
 
+En Windows:
+
+```powershell
+Stop-Service fleet-coordinator
+Stop-Service fleet-worker-<nombre>
+dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetFleet.Tool --version <versión-anterior>
+Start-Service fleet-coordinator
+Start-Service fleet-worker-<nombre>
+```
+
 Todos los datos (`~/.fleet/`) se preservan: proyectos, jobs, historial,
 `config.json`, credenciales de worker y caché de repos.
 
-### ¿Y si no estoy en Linux con systemd?
+### ¿Y si no estoy en Linux con systemd ni Windows?
 
-Los `install` solo funcionan en Linux con systemd. En Windows / macOS / sin
-systemd, ejecuta el coordinador y los workers en primer plano (`fleet
-coordinator`, `fleet worker`) bajo el gestor que prefieras: `launchd`, NSSM,
-`sc.exe`, Docker, etc.
+Los `install` nativos funcionan en Linux con systemd y Windows Services. En
+macOS o Linux sin systemd, ejecuta el coordinador y los workers en primer
+plano (`fleet coordinator`, `fleet worker`) bajo el gestor que prefieras:
+`launchd`, Docker, etc.
 
 ---
 
@@ -349,8 +393,8 @@ coordinator`, `fleet worker`) bajo el gestor que prefieras: `launchd`, NSSM,
 
 | Componente  | Contenido                                                     | Ruta por defecto                |
 |-------------|---------------------------------------------------------------|---------------------------------|
-| Coordinador | SQLite (proyectos, jobs, historial), `config.json`            | `~/.fleet/coordinator/`         |
-| Worker      | `worker.json` (id + secreto), repos clonados, caché LRU       | `~/.fleet/worker-{nombre}/`     |
+| Coordinador | SQLite (proyectos, jobs, historial), `config.json`            | `~/.fleet/coordinator/` o `%ProgramData%\DotnetFleet\coordinator\` en Windows Services |
+| Worker      | `worker.json` (id + secreto), repos clonados, caché LRU       | `~/.fleet/worker-{nombre}/` o `%ProgramData%\DotnetFleet\worker-{nombre}\` en Windows Services |
 
 Cambia la ubicación con `--data-dir`. Útil, por ejemplo, para mover la caché
 de repos a un disco externo:
@@ -374,8 +418,8 @@ para otras bases de datos hoy.
 
 Copiar dos directorios basta:
 
-- **Coordinador:** todo `~/.fleet/coordinator/` (DB + `config.json`).
-- **Workers:** `~/.fleet/worker-{nombre}/worker.json` (las credenciales). El
+- **Coordinador:** todo el `data-dir` del coordinador (DB + `config.json`).
+- **Workers:** el `worker.json` dentro del `data-dir` del worker. El
   caché de repos no es crítico — se reconstruye solo.
 
 ### ¿Las migraciones de esquema son automáticas?
@@ -390,20 +434,23 @@ migraciones manuales con `ALTER TABLE` protegidas por checks sobre
 
 ### ¿Cómo actualizo a una versión nueva?
 
-Una sola orden actualiza la global tool **y** reinicia todos los servicios
+Una sola orden actualiza la herramienta de servicio **y** reinicia todos los servicios
 fleet locales:
 
 ```bash
 fleet update
 ```
 
-Reejecuta con `sudo` automáticamente y preserva `PATH`/`DOTNET_ROOT`/`HOME`.
+En Linux se reejecuta con `sudo` automáticamente y preserva
+`PATH`/`DOTNET_ROOT`/`HOME`. En Windows hay que lanzarlo desde una terminal
+elevada.
 
 ### ¿Tengo que reinstalar los servicios después de actualizar?
 
-No. Las unidades systemd apuntan a `~/.dotnet/tools/fleet` (la global tool), que
-queda en la misma ruta tras actualizar. Basta con `systemctl restart`, que es
-lo que `fleet update` ya hace.
+No. Las unidades systemd apuntan a `~/.dotnet/tools/fleet` y los Windows
+Services apuntan a `%ProgramData%\DotnetFleet\tools\fleet.exe`. Esas rutas no
+cambian al actualizar; basta con reiniciar los servicios, que es lo que
+`fleet update` ya hace.
 
 ### ¿Pierdo proyectos, jobs o historial al actualizar?
 
@@ -417,6 +464,16 @@ worker, caché de repos) se conserva.
 dotnet tool update -g DotnetFleet.Tool --version <versión-anterior>
 sudo systemctl restart fleet-coordinator
 sudo systemctl restart fleet-worker-<nombre>
+```
+
+En Windows:
+
+```powershell
+Stop-Service fleet-coordinator
+Stop-Service fleet-worker-<nombre>
+dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetFleet.Tool --version <versión-anterior>
+Start-Service fleet-coordinator
+Start-Service fleet-worker-<nombre>
 ```
 
 ---
@@ -494,11 +551,13 @@ auto-recuperación, no un error.
 
 ### Cambié el puerto del coordinador y los workers ya no se conectan
 
-Si los workers usaron auto-descubrimiento local, releen el `config.json` /
-unidad systemd y se actualizan solos. Si tenían `--coordinator` fijo, hay que
+Si los workers usaron auto-descubrimiento local, releen el `config.json` o el
+servicio instalado y se actualizan solos. Si tenían `--coordinator` fijo, hay que
 actualizarlo (o reinstalar el servicio del worker con la nueva URL).
 
 ### `sudo fleet ...` me dice `sudo: fleet: orden no encontrada`
+
+Esto solo aplica a Linux.
 
 `sudo` resetea el `PATH` al `secure_path` de `/etc/sudoers`, donde
 `~/.dotnet/tools` no está incluido. Tres formas de arreglarlo:
@@ -546,7 +605,7 @@ Comprueba:
    y preserva `PATH`/`DOTNET_ROOT`/`HOME`. `sudo fleet ...` falla porque
    `~/.dotnet/tools` no está en `secure_path` (ver pregunta anterior). Si la
    autoelevación no funciona en tu entorno, usa el workaround de la
-   [sección systemd](#y-si-la-autoelevación-no-funciona).
+   [sección de servicios](#y-si-la-autoelevación-no-funciona).
 3. **Versión < 0.0.36 con `install`.** Hubo un bug en `SudoElevation` que al
    reejecutarse con `sudo` añadía el path de la DLL como argumento, dando
    `Comando o argumento no reconocido '/home/.../DotnetFleet.Tool.dll'`.
