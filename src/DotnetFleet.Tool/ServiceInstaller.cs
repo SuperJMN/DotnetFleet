@@ -173,7 +173,8 @@ public static class ServiceInstaller
         string Name,
         string DataDir,
         int? PollInterval,
-        double? MaxDisk);
+        double? MaxDisk,
+        bool NoDiscover = false);
 
     public static async Task InstallWorkerAsync(WorkerInstallOptions opts)
     {
@@ -745,14 +746,9 @@ public static class ServiceInstaller
         var currentExe = Environment.ProcessPath;
         var ephemeral = currentExe != null && IsEphemeralPath(currentExe);
 
-        if (!ephemeral && currentExe != null && File.Exists(currentExe))
-        {
-            // Already running from a stable path (likely the global tool itself).
-            return currentExe;
-        }
-
-        if (File.Exists(globalToolPath) && !ephemeral)
-            return globalToolPath;
+        var existingPath = ResolveExistingFleetPathForService(globalToolPath, currentExe);
+        if (existingPath != null)
+            return existingPath;
 
         // Need to install (or reinstall to refresh, when running ephemerally).
         var pinnedVersion = ephemeral ? ExtractToolVersionFromPath(currentExe!) : null;
@@ -784,6 +780,20 @@ public static class ServiceInstaller
         Console.WriteLine($"  ✓ Global tool installed at {globalToolPath}");
         Console.WriteLine();
         return globalToolPath;
+    }
+
+    internal static string? ResolveExistingFleetPathForService(string globalToolPath, string? currentExe)
+    {
+        if (currentExe != null && IsEphemeralPath(currentExe))
+            return null;
+
+        if (File.Exists(globalToolPath))
+            return globalToolPath;
+
+        if (currentExe != null && File.Exists(currentExe))
+            return currentExe;
+
+        return null;
     }
 
     private static bool IsEphemeralPath(string path)

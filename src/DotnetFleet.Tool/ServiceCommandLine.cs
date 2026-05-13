@@ -31,6 +31,7 @@ internal static class ServiceCommandLine
         if (opts.Token != null) parts.Add($"--token {QuoteArgument(opts.Token)}");
         if (opts.PollInterval.HasValue) parts.Add($"--poll-interval {opts.PollInterval}");
         if (opts.MaxDisk.HasValue) parts.Add($"--max-disk {opts.MaxDisk}");
+        if (opts.NoDiscover) parts.Add("--no-discover");
 
         return string.Join(" ", parts);
     }

@@ -57,6 +57,41 @@ public class WindowsServiceManagerTests : IDisposable
     }
 
     [Fact]
+    public void BuildWorkerImagePath_WhenNoDiscoverRequested_PersistsNoDiscover()
+    {
+        var opts = new ServiceInstaller.WorkerInstallOptions(
+            CoordinatorUrl: "http://192.168.1.29:5000",
+            Token: null,
+            Name: "build-01",
+            DataDir: @"C:\ProgramData\DotnetFleet\worker-build-01",
+            PollInterval: null,
+            MaxDisk: null,
+            NoDiscover: true);
+
+        var imagePath = WindowsServiceManager.BuildWorkerImagePath(
+            @"C:\ProgramData\DotnetFleet\tools\fleet.exe",
+            opts);
+
+        imagePath.Should().Be(
+            "\"C:\\ProgramData\\DotnetFleet\\tools\\fleet.exe\" worker --coordinator \"http://192.168.1.29:5000\" --name \"build-01\" --data-dir \"C:\\ProgramData\\DotnetFleet\\worker-build-01\" --no-discover");
+    }
+
+    [Fact]
+    public void ResolveExistingFleetPathForService_WhenGlobalToolExists_PrefersGlobalTool()
+    {
+        var globalTool = Path.Combine(tempRoot, "home", ".dotnet", "tools", "fleet");
+        var currentTool = Path.Combine(tempRoot, "mnt", "dotnet-cache", "dotnet", "tools", "fleet");
+        Directory.CreateDirectory(Path.GetDirectoryName(globalTool)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(currentTool)!);
+        File.WriteAllText(globalTool, "");
+        File.WriteAllText(currentTool, "");
+
+        var resolved = ServiceInstaller.ResolveExistingFleetPathForService(globalTool, currentTool);
+
+        resolved.Should().Be(globalTool);
+    }
+
+    [Fact]
     public void Split_PreservesBackslashesInQuotedWindowsPaths()
     {
         var args = ServiceCommandLine.Split(

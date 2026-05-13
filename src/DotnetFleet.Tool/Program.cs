@@ -291,7 +291,8 @@ workerInstallCommand.SetAction(async (parseResult, _) =>
             Name: workerName,
             DataDir: dataDir,
             PollInterval: parseResult.GetValue(pollIntervalOption),
-            MaxDisk: parseResult.GetValue(maxDiskOption)));
+            MaxDisk: parseResult.GetValue(maxDiskOption),
+            NoDiscover: noDiscover));
         return 0;
     }
     catch (UnauthorizedAccessException)
