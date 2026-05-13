@@ -104,7 +104,7 @@ public static class SudoElevation
         //     System.CommandLine sees the dll path as an unknown command.
         psi.ArgumentList.Add(procPath);
 
-        var procName = Path.GetFileNameWithoutExtension(procPath);
+        var procName = GetExecutableNameWithoutExtension(procPath);
         var isDotnetHost = string.Equals(procName, "dotnet", StringComparison.OrdinalIgnoreCase);
         if (isDotnetHost && cmdArgs.Length > 0)
         {
@@ -184,7 +184,7 @@ public static class SudoElevation
         string processPath,
         IReadOnlyList<string> commandLineArgs)
     {
-        var procName = Path.GetFileNameWithoutExtension(processPath);
+        var procName = GetExecutableNameWithoutExtension(processPath);
         var isDotnetHost = string.Equals(procName, "dotnet", StringComparison.OrdinalIgnoreCase);
         var args = new List<string>();
 
@@ -199,6 +199,13 @@ public static class SudoElevation
         }
 
         return args;
+    }
+
+    private static string GetExecutableNameWithoutExtension(string processPath)
+    {
+        var separatorIndex = processPath.LastIndexOfAny(['\\', '/']);
+        var fileName = separatorIndex >= 0 ? processPath[(separatorIndex + 1)..] : processPath;
+        return Path.GetFileNameWithoutExtension(fileName);
     }
 
     private static string QuoteWindowsArgument(string argument)

@@ -21,6 +21,39 @@ public class ProjectDetailViewLayoutTests
     }
 
     [Fact]
+    public void BuildsView_ShouldShowAllBuildsWithProjectContext()
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", "BuildsView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        document.Descendants(axaml + "ItemsControl")
+            .Select(control => control.Attribute("ItemsSource")?.Value)
+            .Should()
+            .Contain("{Binding Builds}");
+
+        document.Descendants(axaml + "Run")
+            .Select(run => run.Attribute("Text")?.Value)
+            .Should()
+            .Contain("{Binding ProjectName}");
+
+        document.Descendants(axaml + "EnhancedButton")
+            .Select(button => button.Attribute("Content")?.Value)
+            .Should()
+            .Contain("View Status");
+    }
+
+    [Fact]
+    public void BuildsViewModel_ShouldBeAStandaloneSectionOverAllJobs()
+    {
+        var source = File.ReadAllText(ProjectFilePath("ViewModels", "BuildsViewModel.cs"));
+
+        source.Should().Contain("[Section(name: \"Builds\", icon: \"mdi-history\", sortIndex: 1)]");
+        source.Should().Contain("client.GetAllJobsAsync()");
+        source.Should().Contain("OrderBy(job => job.EnqueuedAt)");
+        source.Should().NotContain("GetProjectJobsAsync");
+    }
+
+    [Fact]
     public void PackageBuildOptionsDialog_ShouldExposeBuildTargetOptions()
     {
         var document = XDocument.Load(ProjectFilePath("Views", "PackageBuildOptionsView.axaml"));

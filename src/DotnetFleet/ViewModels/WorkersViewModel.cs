@@ -10,7 +10,7 @@ using Zafiro.UI.Shell.Utils;
 
 namespace DotnetFleet.ViewModels;
 
-[Section(name: "Workers", icon: "mdi-server", sortIndex: 1)]
+[Section(name: "Workers", icon: "mdi-server", sortIndex: 2)]
 public partial class WorkersViewModel : ReactiveObject, IHaveHeader
 {
     private readonly FleetApiClient _client;

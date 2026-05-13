@@ -355,10 +355,12 @@ public partial class JobViewModel : ReactiveObject
 {
     private readonly FleetApiClient _client;
     private readonly INavigator _navigator;
-    private readonly ProjectDetailViewModel _projectDetail;
+    private readonly ProjectDetailViewModel? _projectDetail;
     private readonly IFileSystemPicker? _fileSystemPicker;
 
     public DeploymentJob Job { get; }
+    public string? ProjectName { get; }
+    public bool HasProjectName => !string.IsNullOrWhiteSpace(ProjectName);
 
     private string? _version;
     private string _displayName = string.Empty;
@@ -367,14 +369,16 @@ public partial class JobViewModel : ReactiveObject
         DeploymentJob job,
         FleetApiClient client,
         INavigator navigator,
-        ProjectDetailViewModel projectDetail,
-        IFileSystemPicker? fileSystemPicker = null)
+        ProjectDetailViewModel? projectDetail = null,
+        IFileSystemPicker? fileSystemPicker = null,
+        string? projectName = null)
     {
         Job = job;
         _client = client;
         _navigator = navigator;
         _projectDetail = projectDetail;
         _fileSystemPicker = fileSystemPicker;
+        ProjectName = projectName;
         _version = job.Version;
         _displayName = ComputeDisplayName(job.Version);
 
