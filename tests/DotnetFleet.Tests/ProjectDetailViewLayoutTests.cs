@@ -49,7 +49,7 @@ public class ProjectDetailViewLayoutTests
 
         source.Should().Contain("[Section(name: \"Builds\", icon: \"mdi-history\", sortIndex: 1)]");
         source.Should().Contain("client.GetAllJobsAsync()");
-        source.Should().Contain("OrderBy(job => job.EnqueuedAt)");
+        source.Should().Contain("OrderByDescending(job => job.EnqueuedAt)");
         source.Should().NotContain("GetProjectJobsAsync");
     }
 

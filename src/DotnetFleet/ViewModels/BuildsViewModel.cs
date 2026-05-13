@@ -34,7 +34,7 @@ public partial class BuildsViewModel : ReactiveObject, IHaveHeader, IDisposable
         disposables.Add(RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
 
         Header = Observable.Return<object>(new SectionHeader("Builds",
-            "All projects, oldest first",
+            "All projects, newest first",
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
     }
 
@@ -59,7 +59,7 @@ public partial class BuildsViewModel : ReactiveObject, IHaveHeader, IDisposable
 
             ObservableCollectionSync.Sync(
                 Builds,
-                jobs.OrderBy(job => job.EnqueuedAt),
+                jobs.OrderByDescending(job => job.EnqueuedAt),
                 job => job.Id,
                 viewModel => viewModel.Job.Id,
                 job => new JobViewModel(
