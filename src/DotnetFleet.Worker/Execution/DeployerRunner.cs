@@ -46,7 +46,7 @@ public static class DeployerRunner
                 psi.ArgumentList.Add(arg);
         }
 
-        EnsureDotnetEnvironment(psi);
+        ApplyBuildEnvironment(psi);
 
         if (envVars is not null)
         {
@@ -157,8 +157,11 @@ public static class DeployerRunner
     /// <c>/usr/bin/sh: ...exec.cmd: dotnet: not found</c> (exit 127) when MSBuild
     /// post-build steps invoke <c>dotnet</c>.
     /// </summary>
-    private static void EnsureDotnetEnvironment(ProcessStartInfo psi)
+    internal static void ApplyBuildEnvironment(ProcessStartInfo psi)
     {
+        psi.Environment["UseSharedCompilation"] = "false";
+        psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+
         var separator = OperatingSystem.IsWindows() ? ';' : ':';
 
         var home = psi.Environment.TryGetValue("HOME", out var existingHome) && !string.IsNullOrEmpty(existingHome)

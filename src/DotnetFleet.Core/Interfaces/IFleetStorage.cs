@@ -127,6 +127,7 @@ public interface IFleetStorage
     Task<Worker?> GetWorkerAsync(Guid id, CancellationToken ct = default);
     Task AddWorkerAsync(Worker worker, CancellationToken ct = default);
     Task UpdateWorkerAsync(Worker worker, CancellationToken ct = default);
+    Task<bool> DeleteWorkerAsync(Guid workerId, CancellationToken ct = default);
 
     /// <summary>
     /// Cheap liveness ping: updates <c>LastSeenAt = UtcNow</c> for the worker

@@ -126,6 +126,7 @@ DotnetFleet commands:
 fleet coordinator status
 fleet worker status --name build-01
 fleet worker uninstall --name build-01
+fleet worker unregister --name DESKTOP-NMC4AGI --admin-password <password>
 fleet coordinator uninstall
 ```
 

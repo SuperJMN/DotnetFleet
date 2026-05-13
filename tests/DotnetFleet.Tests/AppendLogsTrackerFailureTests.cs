@@ -79,6 +79,7 @@ public class AppendLogsTrackerFailureTests : IDisposable
         public Task<Worker?> GetWorkerAsync(Guid id, CancellationToken ct = default) => inner.GetWorkerAsync(id, ct);
         public Task AddWorkerAsync(Worker worker, CancellationToken ct = default) => inner.AddWorkerAsync(worker, ct);
         public Task UpdateWorkerAsync(Worker worker, CancellationToken ct = default) => inner.UpdateWorkerAsync(worker, ct);
+        public Task<bool> DeleteWorkerAsync(Guid workerId, CancellationToken ct = default) => inner.DeleteWorkerAsync(workerId, ct);
         public Task<bool> TouchWorkerAsync(Guid workerId, CancellationToken ct = default) => inner.TouchWorkerAsync(workerId, ct);
         public Task<IReadOnlyList<RepoCache>> GetRepoCachesAsync(Guid workerId, CancellationToken ct = default) => inner.GetRepoCachesAsync(workerId, ct);
         public Task<RepoCache?> GetRepoCacheAsync(Guid workerId, Guid projectId, CancellationToken ct = default) => inner.GetRepoCacheAsync(workerId, projectId, ct);
