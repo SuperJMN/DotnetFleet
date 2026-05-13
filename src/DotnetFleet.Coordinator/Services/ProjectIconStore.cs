@@ -56,18 +56,20 @@ public sealed class ProjectIconStore
 
     internal async Task<ProjectIcon?> ResolveFromCheckout(Project project, string checkoutRoot, CancellationToken ct)
     {
-        var deployerYaml = FindDeployerYaml(checkoutRoot);
-        if (deployerYaml is null)
-            return null;
+        var configuredProjectFiles = await ProjectIconDiscovery.ConfiguredPackageProjectFiles(checkoutRoot, ct);
+        var icon = await ResolveFirstProjectIcon(project, checkoutRoot, configuredProjectFiles, ct);
+        if (icon is not null)
+            return icon;
 
-        var yaml = await File.ReadAllTextAsync(deployerYaml, ct);
-        var packageProjects = PackageProjectDiscovery.ReadProjectsFromYaml(yaml);
-        foreach (var packageProject in packageProjects)
+        var configured = new HashSet<string>(configuredProjectFiles, StringComparer.OrdinalIgnoreCase);
+        var discoveredProjectFiles = ProjectIconDiscovery.DiscoverProjectFiles(checkoutRoot).Where(projectFile => !configured.Contains(projectFile));
+        return await ResolveFirstProjectIcon(project, checkoutRoot, discoveredProjectFiles, ct);
+    }
+
+    private async Task<ProjectIcon?> ResolveFirstProjectIcon(Project project, string checkoutRoot, IEnumerable<string> projectFiles, CancellationToken ct)
+    {
+        foreach (var projectFile in projectFiles)
         {
-            var projectFile = ResolveCheckoutPath(checkoutRoot, packageProject);
-            if (projectFile is null || !File.Exists(projectFile))
-                continue;
-
             var icon = await ResolveProjectIcon(checkoutRoot, projectFile, ct);
             if (icon is not null)
             {
@@ -81,47 +83,66 @@ public sealed class ProjectIconStore
 
     internal async Task<ProjectIcon?> TryReadCached(Guid projectId, CancellationToken ct = default)
     {
-        var directory = ProjectDirectory(projectId);
-        if (!Directory.Exists(directory))
-            return null;
-
-        var file = Directory.EnumerateFiles(directory, "icon.*")
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
-        if (file is null)
-            return null;
-
-        var extension = Path.GetExtension(file);
-        var contentType = ContentTypeFor(extension);
-        if (contentType is null)
-            return null;
-
-        var info = new FileInfo(file);
-        if (info.Length > MaxIconBytes)
-            return null;
-
-        return new ProjectIcon(await File.ReadAllBytesAsync(file, ct), contentType, extension);
+        return await TryReadIcon(ManualDirectory(projectId), ct)
+               ?? await TryReadIcon(AutoDirectory(projectId), ct)
+               ?? await TryReadIcon(ProjectDirectory(projectId), ct);
     }
 
     internal async Task Cache(Guid projectId, ProjectIcon icon, CancellationToken ct = default)
     {
-        var directory = ProjectDirectory(projectId);
-        Directory.CreateDirectory(directory);
+        await WriteIcon(AutoDirectory(projectId), icon, ct);
 
-        foreach (var file in Directory.EnumerateFiles(directory, "icon.*"))
-            File.Delete(file);
+        var legacyDirectory = ProjectDirectory(projectId);
+        if (Directory.Exists(legacyDirectory))
+        {
+            foreach (var file in Directory.EnumerateFiles(legacyDirectory, "icon.*"))
+                File.Delete(file);
+        }
+    }
 
-        await File.WriteAllBytesAsync(Path.Combine(directory, "icon" + icon.Extension), icon.Bytes, ct);
+    internal Task SetManual(Guid projectId, ProjectIcon icon, CancellationToken ct = default)
+    {
+        return WriteIcon(ManualDirectory(projectId), icon, ct);
+    }
+
+    internal Task ClearManual(Guid projectId, CancellationToken ct = default)
+    {
+        _ = ct;
+        DeleteDirectory(ManualDirectory(projectId));
+        return Task.CompletedTask;
+    }
+
+    public Task InvalidateAuto(Guid projectId, CancellationToken ct = default)
+    {
+        _ = ct;
+        DeleteDirectory(AutoDirectory(projectId));
+
+        var legacyDirectory = ProjectDirectory(projectId);
+        if (Directory.Exists(legacyDirectory))
+        {
+            foreach (var file in Directory.EnumerateFiles(legacyDirectory, "icon.*"))
+                File.Delete(file);
+        }
+
+        return Task.CompletedTask;
     }
 
     public Task Invalidate(Guid projectId, CancellationToken ct = default)
     {
         _ = ct;
-        var directory = ProjectDirectory(projectId);
-        if (Directory.Exists(directory))
-            Directory.Delete(directory, recursive: true);
+        DeleteDirectory(ProjectDirectory(projectId));
 
         return Task.CompletedTask;
+    }
+
+    internal static ProjectIcon? FromBytes(byte[] bytes, string fileName)
+    {
+        if (bytes.Length == 0 || bytes.Length > MaxIconBytes)
+            return null;
+
+        var extension = Path.GetExtension(fileName);
+        var contentType = ContentTypeFor(extension);
+        return contentType is null ? null : new ProjectIcon(bytes, contentType, extension.ToLowerInvariant());
     }
 
     private async Task<ProjectIcon?> ResolveProjectIcon(string checkoutRoot, string projectPath, CancellationToken ct)
@@ -153,20 +174,42 @@ public sealed class ProjectIconStore
         return new ProjectIcon(await File.ReadAllBytesAsync(info.FullName, ct), contentType, extension.ToLowerInvariant());
     }
 
-    private static string? FindDeployerYaml(string root)
+    private static async Task<ProjectIcon?> TryReadIcon(string directory, CancellationToken ct)
     {
-        var yaml = Path.Combine(root, "deployer.yaml");
-        if (File.Exists(yaml))
-            return yaml;
+        if (!Directory.Exists(directory))
+            return null;
 
-        var yml = Path.Combine(root, "deployer.yml");
-        return File.Exists(yml) ? yml : null;
+        var file = Directory.EnumerateFiles(directory, "icon.*")
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (file is null)
+            return null;
+
+        var info = new FileInfo(file);
+        if (info.Length > MaxIconBytes)
+            return null;
+
+        var extension = Path.GetExtension(file);
+        var contentType = ContentTypeFor(extension);
+        return contentType is null
+            ? null
+            : new ProjectIcon(await File.ReadAllBytesAsync(file, ct), contentType, extension.ToLowerInvariant());
     }
 
-    private static string? ResolveCheckoutPath(string checkoutRoot, string relativePath)
+    private static async Task WriteIcon(string directory, ProjectIcon icon, CancellationToken ct)
     {
-        var fullPath = Path.GetFullPath(Path.Combine(checkoutRoot, relativePath.Replace('\\', Path.DirectorySeparatorChar)));
-        return IsInside(checkoutRoot, fullPath) ? fullPath : null;
+        Directory.CreateDirectory(directory);
+
+        foreach (var file in Directory.EnumerateFiles(directory, "icon.*"))
+            File.Delete(file);
+
+        await File.WriteAllBytesAsync(Path.Combine(directory, "icon" + icon.Extension), icon.Bytes, ct);
+    }
+
+    private static void DeleteDirectory(string directory)
+    {
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
     }
 
     private static bool IsInside(string root, string path)
@@ -206,4 +249,10 @@ public sealed class ProjectIconStore
 
     private string ProjectDirectory(Guid projectId) =>
         Path.Combine(rootDir, projectId.ToString("N"));
+
+    private string ManualDirectory(Guid projectId) =>
+        Path.Combine(ProjectDirectory(projectId), "manual");
+
+    private string AutoDirectory(Guid projectId) =>
+        Path.Combine(ProjectDirectory(projectId), "auto");
 }

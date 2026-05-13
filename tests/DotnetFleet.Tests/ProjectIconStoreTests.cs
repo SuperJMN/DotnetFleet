@@ -80,6 +80,120 @@ public sealed class ProjectIconStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task GetOrResolve_UsesManualIconBeforeAutomaticCache()
+    {
+        var projectId = Guid.NewGuid();
+        var store = CreateStore();
+        await store.Cache(projectId, new ProjectIcon([1, 2, 3], "image/png", ".png"), CancellationToken.None);
+        await store.SetManual(projectId, new ProjectIcon([9, 8, 7], "image/png", ".png"), CancellationToken.None);
+
+        var icon = await store.GetOrResolve(new Project { Id = projectId }, CancellationToken.None);
+
+        icon.Should().NotBeNull();
+        icon!.Bytes.Should().Equal(9, 8, 7);
+    }
+
+    [Fact]
+    public async Task InvalidateAuto_PreservesManualIcon()
+    {
+        var projectId = Guid.NewGuid();
+        var store = CreateStore();
+        await store.Cache(projectId, new ProjectIcon([1, 2, 3], "image/png", ".png"), CancellationToken.None);
+        await store.SetManual(projectId, new ProjectIcon([9, 8, 7], "image/png", ".png"), CancellationToken.None);
+
+        await store.InvalidateAuto(projectId, CancellationToken.None);
+
+        var icon = await store.TryReadCached(projectId, CancellationToken.None);
+        icon.Should().NotBeNull();
+        icon!.Bytes.Should().Equal(9, 8, 7);
+    }
+
+    [Fact]
+    public async Task ClearManual_FallsBackToAutomaticIcon()
+    {
+        var projectId = Guid.NewGuid();
+        var store = CreateStore();
+        await store.Cache(projectId, new ProjectIcon([1, 2, 3], "image/png", ".png"), CancellationToken.None);
+        await store.SetManual(projectId, new ProjectIcon([9, 8, 7], "image/png", ".png"), CancellationToken.None);
+
+        await store.ClearManual(projectId, CancellationToken.None);
+
+        var icon = await store.TryReadCached(projectId, CancellationToken.None);
+        icon.Should().NotBeNull();
+        icon!.Bytes.Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void FromBytes_RejectsUnsupportedIcons()
+    {
+        var icon = ProjectIconStore.FromBytes([1, 2, 3], "icon.gif");
+
+        icon.Should().BeNull();
+    }
+
+    [Fact]
+    public void FromBytes_RejectsOversizedIcons()
+    {
+        var icon = ProjectIconStore.FromBytes(new byte[ProjectIconStore.MaxIconBytes + 1], "icon.png");
+
+        icon.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveFromCheckout_FallsBackToProjectFilesWhenGithubPackagesAreMissing()
+    {
+        var checkout = CreateCheckout();
+        var icon = new byte[] { 4, 5, 6 };
+        await File.WriteAllBytesAsync(Path.Combine(checkout, "icon.png"), icon);
+        var projectDir = Directory.CreateDirectory(Path.Combine(checkout, "src", "App")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(projectDir, "App.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <PackageIcon>icon.png</PackageIcon>
+              </PropertyGroup>
+            </Project>
+            """);
+        await File.WriteAllTextAsync(Path.Combine(checkout, "deployer.yaml"), """
+            version: 1
+            nuget:
+              enabled: true
+            """);
+        var store = CreateStore();
+
+        var resolved = await store.ResolveFromCheckout(new Project(), checkout, CancellationToken.None);
+
+        resolved.Should().NotBeNull();
+        resolved!.Bytes.Should().Equal(icon);
+        resolved.ContentType.Should().Be("image/png");
+    }
+
+    [Fact]
+    public async Task ResolveFromCheckout_PrefersLowercaseAssetsLogoPngOverApplicationIconIco()
+    {
+        var checkout = CreateCheckout();
+        var png = new byte[] { 7, 8, 9 };
+        var assetDir = Directory.CreateDirectory(Path.Combine(checkout, "assets")).FullName;
+        await File.WriteAllBytesAsync(Path.Combine(assetDir, "logo.png"), png);
+        await File.WriteAllBytesAsync(Path.Combine(assetDir, "logo.ico"), [1, 2, 3]);
+        var projectDir = Directory.CreateDirectory(Path.Combine(checkout, "src", "App.Desktop")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(projectDir, "App.Desktop.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <ApplicationIcon>..\..\assets\logo.ico</ApplicationIcon>
+              </PropertyGroup>
+            </Project>
+            """);
+        WriteDeployerYaml(checkout, "src/App.Desktop/App.Desktop.csproj");
+        var store = CreateStore();
+
+        var icon = await store.ResolveFromCheckout(new Project(), checkout, CancellationToken.None);
+
+        icon.Should().NotBeNull();
+        icon!.Bytes.Should().Equal(png);
+        icon.ContentType.Should().Be("image/png");
+    }
+
+    [Fact]
     public async Task Invalidate_RemovesCachedIcon()
     {
         var projectId = Guid.NewGuid();

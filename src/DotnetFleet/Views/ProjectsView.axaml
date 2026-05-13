@@ -73,6 +73,12 @@
                             </StackPanel>
                             <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
                                 <EnhancedButton Content="Open" Icon="{Icon mdi-folder-open-outline}" Classes="Primary" Command="{Binding OpenCommand}" />
+                                <EnhancedButton ToolTip.Tip="Change icon" Command="{Binding ChangeIconCommand}">
+                                    <icons:Icon Value="mdi-image-outline" />
+                                </EnhancedButton>
+                                <EnhancedButton ToolTip.Tip="Reset icon" Command="{Binding ResetIconCommand}">
+                                    <icons:Icon Value="mdi-refresh" />
+                                </EnhancedButton>
                                 <EnhancedButton ToolTip.Tip="Edit" Command="{Binding EditCommand}">
                                     <icons:Icon Value="mdi-pencil" />
                                 </EnhancedButton>

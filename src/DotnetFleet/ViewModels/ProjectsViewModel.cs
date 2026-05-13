@@ -7,6 +7,7 @@ using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 using Zafiro.Avalonia.Dialogs;
+using Zafiro.DivineBytes;
 using Zafiro.UI;
 using Zafiro.UI.Commands;
 using Zafiro.UI.Navigation;
@@ -141,11 +142,15 @@ public partial class ProjectViewModel : ReactiveObject
 
         OpenCommand = ReactiveCommand.Create(Open);
         EditCommand = ReactiveCommand.Create(Edit);
+        ChangeIconCommand = ReactiveCommand.CreateFromTask(ChangeProjectIcon);
+        ResetIconCommand = ReactiveCommand.CreateFromTask(ResetProjectIcon);
         DeleteCommand = ReactiveCommand.CreateFromTask(DeleteAsync);
     }
 
     public ReactiveCommand<Unit, Unit> OpenCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
+    public ReactiveCommand<Unit, Unit> ChangeIconCommand { get; }
+    public ReactiveCommand<Unit, Unit> ResetIconCommand { get; }
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
 
     public void ApplyProjectUpdate(Project updated)
@@ -194,6 +199,34 @@ public partial class ProjectViewModel : ReactiveObject
             if (Project.Id == projectId)
                 IsIconLoading = false;
         }
+    }
+
+    public async Task ChangeProjectIcon()
+    {
+        var pickResult = await _fileSystemPicker.PickForOpen(
+            new FileTypeFilter("Image files", ["*.png", "*.jpg", "*.jpeg", "*.ico"]),
+            new FileTypeFilter("All files", ["*"]));
+
+        if (pickResult.IsFailure || pickResult.Value.HasNoValue)
+            return;
+
+        var file = pickResult.Value.Value;
+        await using var stream = file.ToStream();
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        var bytes = buffer.ToArray();
+
+        await _client.SetProjectIcon(Project.Id, bytes, file.Name);
+        loadedIconProjectId = Project.Id;
+        SetProjectIcon(bytes);
+    }
+
+    public async Task ResetProjectIcon()
+    {
+        await _client.ResetProjectIcon(Project.Id);
+        loadedIconProjectId = null;
+        SetProjectIcon(null);
+        await LoadProjectIcon();
     }
 
     private void Open()

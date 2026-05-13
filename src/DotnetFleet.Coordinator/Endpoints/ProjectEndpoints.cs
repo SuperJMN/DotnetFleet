@@ -14,6 +14,8 @@ public static class ProjectEndpoints
         group.MapGet("/", GetAll);
         group.MapGet("/{id:guid}", GetById);
         group.MapGet("/{id:guid}/icon", GetIcon);
+        group.MapPut("/{id:guid}/icon", SetIcon);
+        group.MapDelete("/{id:guid}/icon", ResetIcon);
         group.MapPost("/", Create);
         group.MapPut("/{id:guid}", Update);
         group.MapDelete("/{id:guid}", Delete);
@@ -86,10 +88,47 @@ public static class ProjectEndpoints
             || !string.Equals(oldBranch, project.Branch, StringComparison.Ordinal)
             || !string.Equals(oldGitToken, project.GitToken, StringComparison.Ordinal))
         {
-            await icons.Invalidate(project.Id);
+            await icons.InvalidateAuto(project.Id);
         }
 
         return Results.Ok(project);
+    }
+
+    private static async Task<IResult> SetIcon(Guid id, IFleetStorage storage, ProjectIconStore icons, HttpContext httpContext)
+    {
+        var project = await storage.GetProjectAsync(id, httpContext.RequestAborted);
+        if (project is null)
+            return Results.NotFound();
+
+        if (!httpContext.Request.HasFormContentType)
+            return Results.BadRequest(new { error = "Expected multipart/form-data with an icon field." });
+
+        var form = await httpContext.Request.ReadFormAsync(httpContext.RequestAborted);
+        var file = form.Files.GetFile("icon");
+        if (file is null)
+            return Results.BadRequest(new { error = "Missing icon file." });
+        if (file.Length <= 0 || file.Length > ProjectIconStore.MaxIconBytes)
+            return Results.BadRequest(new { error = $"Icon must be between 1 byte and {ProjectIconStore.MaxIconBytes} bytes." });
+
+        await using var stream = file.OpenReadStream();
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, httpContext.RequestAborted);
+        var icon = ProjectIconStore.FromBytes(buffer.ToArray(), file.FileName);
+        if (icon is null)
+            return Results.BadRequest(new { error = "Unsupported icon format. Use PNG, JPEG or ICO." });
+
+        await icons.SetManual(id, icon, httpContext.RequestAborted);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> ResetIcon(Guid id, IFleetStorage storage, ProjectIconStore icons, HttpContext httpContext)
+    {
+        var project = await storage.GetProjectAsync(id, httpContext.RequestAborted);
+        if (project is null)
+            return Results.NotFound();
+
+        await icons.ClearManual(id, httpContext.RequestAborted);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> Delete(Guid id, IFleetStorage storage, ProjectIconStore icons)

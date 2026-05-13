@@ -1,8 +1,11 @@
 using System.Net;
+using CSharpFunctionalExtensions;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using DotnetFleet.ViewModels;
 using ReactiveUI.Builder;
+using Zafiro.DivineBytes;
+using Zafiro.UI;
 
 namespace DotnetFleet.Tests;
 
@@ -59,6 +62,38 @@ public sealed class ProjectViewModelIconTests
         vm.HasProjectIcon.Should().BeFalse();
         vm.HasNoProjectIcon.Should().BeTrue();
         vm.ProjectIconBytes.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ChangeProjectIcon_UploadsPickedImageAndUpdatesPreview()
+    {
+        var project = new Project { Id = Guid.NewGuid(), Name = "App" };
+        HttpRequestMessage? captured = null;
+        var handler = new StubHandler(request =>
+        {
+            captured = request;
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        var client = new FleetApiClient(handler, handler);
+        client.SetBaseAddress("http://localhost:5000");
+        var picker = Substitute.For<IFileSystemPicker>();
+        var file = new NamedByteSource("icon.png", ByteSource.FromBytes(Png));
+        picker.PickForOpen(Arg.Any<FileTypeFilter[]>())
+            .Returns(Task.FromResult(Result.Success(Maybe.From<INamedByteSource>(file))));
+        var vm = new ProjectViewModel(
+            project,
+            client,
+            Substitute.For<Zafiro.UI.Navigation.INavigator>(),
+            null!,
+            picker,
+            Substitute.For<Zafiro.Avalonia.Dialogs.IDialog>());
+
+        await vm.ChangeProjectIcon();
+
+        captured.Should().NotBeNull();
+        captured!.Method.Should().Be(HttpMethod.Put);
+        vm.HasProjectIcon.Should().BeTrue();
+        vm.ProjectIconBytes.Should().Equal(Png);
     }
 
     private static FleetApiClient CreateClient(Guid projectId, HttpResponseMessage iconResponse)

@@ -142,6 +142,20 @@ public class FleetApiClient
         return await response.Content.ReadAsByteArrayAsync(ct);
     }
 
+    public async Task SetProjectIcon(Guid id, byte[] bytes, string fileName, CancellationToken ct = default)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(bytes), "icon", fileName);
+        using var response = await http.PutAsync($"/api/projects/{id}/icon", content, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task ResetProjectIcon(Guid id, CancellationToken ct = default)
+    {
+        using var response = await http.DeleteAsync($"/api/projects/{id}/icon", ct);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task<Project> CreateProjectAsync(string name, string gitUrl, string branch, int pollingIntervalMinutes = 0, string? gitToken = null)
     {
         var response = await http.PostAsJsonAsync("/api/projects",
