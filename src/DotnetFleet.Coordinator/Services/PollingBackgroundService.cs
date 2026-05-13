@@ -16,13 +16,19 @@ public class PollingBackgroundService : BackgroundService
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ILogger<PollingBackgroundService> logger;
     private readonly JobAssignmentSignal signal;
+    private readonly ProjectIconStore icons;
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(60);
 
-    public PollingBackgroundService(IServiceScopeFactory scopeFactory, ILogger<PollingBackgroundService> logger, JobAssignmentSignal signal)
+    public PollingBackgroundService(
+        IServiceScopeFactory scopeFactory,
+        ILogger<PollingBackgroundService> logger,
+        JobAssignmentSignal signal,
+        ProjectIconStore icons)
     {
         this.scopeFactory = scopeFactory;
         this.logger = logger;
         this.signal = signal;
+        this.icons = icons;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -101,6 +107,7 @@ public class PollingBackgroundService : BackgroundService
         };
 
         project.LastPolledCommitSha = latestSha;
+        await icons.Invalidate(project.Id, ct);
 
         await storage.AddJobAsync(job, ct);
         await storage.UpdateProjectAsync(project, ct);

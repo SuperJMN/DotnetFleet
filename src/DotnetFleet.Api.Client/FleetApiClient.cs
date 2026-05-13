@@ -132,6 +132,16 @@ public class FleetApiClient
         return await response.Content.ReadFromJsonAsync<Project>(JsonOptions);
     }
 
+    public async Task<byte[]?> GetProjectIcon(Guid id, CancellationToken ct = default)
+    {
+        using var response = await http.GetAsync($"/api/projects/{id}/icon", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return null;
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync(ct);
+    }
+
     public async Task<Project> CreateProjectAsync(string name, string gitUrl, string branch, int pollingIntervalMinutes = 0, string? gitToken = null)
     {
         var response = await http.PostAsJsonAsync("/api/projects",

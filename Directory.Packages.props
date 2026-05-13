@@ -36,6 +36,7 @@
     <!-- Functional / Reactive -->
     <PackageVersion Include="CSharpFunctionalExtensions" Version="3.6.0" />
     <PackageVersion Include="DynamicData" Version="9.4.1" />
+    <PackageVersion Include="DotnetProjectKit" Version="0.0.2" />
     <!-- DI -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />

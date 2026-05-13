@@ -20,6 +20,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <PackageReference Include="Makaretu.Dns.Multicast.New" />
     <PackageReference Include="YamlDotNet" />
+    <PackageReference Include="DotnetProjectKit" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DotnetFleet.Core\DotnetFleet.Core.csproj" />

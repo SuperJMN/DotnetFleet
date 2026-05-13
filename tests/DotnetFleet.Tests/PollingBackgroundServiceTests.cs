@@ -18,7 +18,11 @@ public class PollingBackgroundServiceTests
     private sealed class TestablePoller : PollingBackgroundService
     {
         public TestablePoller(IServiceScopeFactory scopeFactory)
-            : base(scopeFactory, NullLogger<PollingBackgroundService>.Instance, new JobAssignmentSignal()) { }
+            : base(
+                scopeFactory,
+                NullLogger<PollingBackgroundService>.Instance,
+                new JobAssignmentSignal(),
+                new ProjectIconStore(Path.Combine(Path.GetTempPath(), $"fleet-icons-{Guid.NewGuid():N}"), NullLogger<ProjectIconStore>.Instance)) { }
 
         public Task PollAllAsync(CancellationToken ct) => PollAllProjectsAsync(ct);
     }

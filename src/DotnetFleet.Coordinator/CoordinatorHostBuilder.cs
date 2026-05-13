@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
@@ -95,6 +96,10 @@ public static class CoordinatorHostBuilder
         builder.Services.AddSingleton<LogBroadcaster>();
         builder.Services.AddSingleton(_ =>
             new PackageArtifactStore(builder.Configuration["Artifacts:RootDir"] ?? "fleet-artifacts"));
+        builder.Services.AddSingleton(sp =>
+            new ProjectIconStore(
+                builder.Configuration["ProjectIcons:RootDir"] ?? "project-icons",
+                sp.GetRequiredService<ILogger<ProjectIconStore>>()));
         builder.Services.AddSingleton<PackageProjectDiscovery>();
         builder.Services.AddSingleton<Endpoints.WorkerLivenessFilter>();
         builder.Services.AddSingleton<JobAssignmentSignal>();
@@ -335,6 +340,7 @@ public static class CoordinatorHostBuilder
         {
             overrides["ConnectionStrings:DefaultConnection"] = $"Data Source={Path.Combine(options.DataDir, "fleet.db")}";
             overrides["Artifacts:RootDir"] = Path.Combine(options.DataDir, "artifacts");
+            overrides["ProjectIcons:RootDir"] = Path.Combine(options.DataDir, "project-icons");
         }
 
         if (overrides.Count > 0)

@@ -13,6 +13,7 @@ public static class ProjectEndpoints
 
         group.MapGet("/", GetAll);
         group.MapGet("/{id:guid}", GetById);
+        group.MapGet("/{id:guid}/icon", GetIcon);
         group.MapPost("/", Create);
         group.MapPut("/{id:guid}", Update);
         group.MapDelete("/{id:guid}", Delete);
@@ -35,6 +36,18 @@ public static class ProjectEndpoints
         return project is null ? Results.NotFound() : Results.Ok(project);
     }
 
+    private static async Task<IResult> GetIcon(Guid id, IFleetStorage storage, ProjectIconStore icons, HttpContext httpContext)
+    {
+        var project = await storage.GetProjectAsync(id);
+        if (project is null)
+            return Results.NotFound();
+
+        var icon = await icons.GetOrResolve(project, httpContext.RequestAborted);
+        return icon is null
+            ? Results.NotFound()
+            : Results.File(icon.Bytes, icon.ContentType);
+    }
+
     private static async Task<IResult> Create([FromBody] CreateProjectRequest req, IFleetStorage storage)
     {
         var project = new Project
@@ -50,11 +63,15 @@ public static class ProjectEndpoints
         return Results.Created($"/api/projects/{project.Id}", project);
     }
 
-    private static async Task<IResult> Update(Guid id, [FromBody] UpdateProjectRequest req, IFleetStorage storage)
+    private static async Task<IResult> Update(Guid id, [FromBody] UpdateProjectRequest req, IFleetStorage storage, ProjectIconStore icons)
     {
         var project = await storage.GetProjectAsync(id);
         if (project is null)
             return Results.NotFound();
+
+        var oldGitUrl = project.GitUrl;
+        var oldBranch = project.Branch;
+        var oldGitToken = project.GitToken;
 
         project.Name = req.Name ?? project.Name;
         project.GitUrl = req.GitUrl ?? project.GitUrl;
@@ -65,12 +82,20 @@ public static class ProjectEndpoints
             project.GitToken = string.IsNullOrWhiteSpace(req.GitToken) ? null : req.GitToken;
 
         await storage.UpdateProjectAsync(project);
+        if (!string.Equals(oldGitUrl, project.GitUrl, StringComparison.Ordinal)
+            || !string.Equals(oldBranch, project.Branch, StringComparison.Ordinal)
+            || !string.Equals(oldGitToken, project.GitToken, StringComparison.Ordinal))
+        {
+            await icons.Invalidate(project.Id);
+        }
+
         return Results.Ok(project);
     }
 
-    private static async Task<IResult> Delete(Guid id, IFleetStorage storage)
+    private static async Task<IResult> Delete(Guid id, IFleetStorage storage, ProjectIconStore icons)
     {
         await storage.DeleteProjectAsync(id);
+        await icons.Invalidate(id);
         return Results.NoContent();
     }
 

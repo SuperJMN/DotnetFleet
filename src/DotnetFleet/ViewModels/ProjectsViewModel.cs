@@ -69,6 +69,9 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader, IDisposabl
                 viewModel => viewModel.Project.Id,
                 project => new ProjectViewModel(project, _client, Navigator, this, _fileSystemPicker, _dialog),
                 (viewModel, project) => viewModel.ApplyProjectUpdate(project));
+
+            foreach (var project in Projects)
+                _ = project.LoadProjectIcon();
         }
         finally
         {
@@ -115,8 +118,13 @@ public partial class ProjectViewModel : ReactiveObject
     private readonly ProjectsViewModel _parent;
     private readonly IFileSystemPicker _fileSystemPicker;
     private readonly IDialog _dialog;
+    private Guid? loadedIconProjectId;
 
     public Project Project { get; private set; }
+    [Reactive] private byte[]? _projectIconBytes;
+    [Reactive] private bool _hasProjectIcon;
+    [Reactive] private bool _hasNoProjectIcon = true;
+    [Reactive] private bool _isIconLoading;
 
     public ProjectViewModel(
         Project project,
@@ -146,8 +154,48 @@ public partial class ProjectViewModel : ReactiveObject
     {
         if (updated.Id != Project.Id) return;
 
+        var iconInvalidated =
+            !string.Equals(Project.GitUrl, updated.GitUrl, StringComparison.Ordinal)
+            || !string.Equals(Project.Branch, updated.Branch, StringComparison.Ordinal)
+            || !string.Equals(Project.GitToken, updated.GitToken, StringComparison.Ordinal);
+
         Project = updated;
         this.RaisePropertyChanged(nameof(Project));
+
+        if (iconInvalidated)
+        {
+            loadedIconProjectId = null;
+            SetProjectIcon(null);
+        }
+    }
+
+    public async Task LoadProjectIcon()
+    {
+        if (IsIconLoading || loadedIconProjectId == Project.Id)
+            return;
+
+        var projectId = Project.Id;
+        IsIconLoading = true;
+
+        try
+        {
+            var bytes = await _client.GetProjectIcon(projectId);
+            if (Project.Id != projectId)
+                return;
+
+            SetProjectIcon(bytes);
+            loadedIconProjectId = projectId;
+        }
+        catch
+        {
+            if (Project.Id == projectId)
+                SetProjectIcon(null);
+        }
+        finally
+        {
+            if (Project.Id == projectId)
+                IsIconLoading = false;
+        }
     }
 
     private void Open()
@@ -164,5 +212,12 @@ public partial class ProjectViewModel : ReactiveObject
     {
         await _client.DeleteProjectAsync(Project.Id);
         _parent.RefreshCommand.Execute(Unit.Default).Subscribe();
+    }
+
+    private void SetProjectIcon(byte[]? bytes)
+    {
+        ProjectIconBytes = bytes is { Length: > 0 } ? bytes : null;
+        HasProjectIcon = ProjectIconBytes is not null;
+        HasNoProjectIcon = ProjectIconBytes is null;
     }
 }
