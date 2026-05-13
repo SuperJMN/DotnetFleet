@@ -337,9 +337,12 @@ workerStatusCommand.SetAction(async (parseResult, _) =>
     await ServiceInstaller.WorkerStatusAsync(workerName);
 });
 
+var workerUnregisterCommand = WorkerUnregisterCli.Create(coordinatorUrlOption, noDiscoverOption);
+
 workerCommand.Subcommands.Add(workerInstallCommand);
 workerCommand.Subcommands.Add(workerUninstallCommand);
 workerCommand.Subcommands.Add(workerStatusCommand);
+workerCommand.Subcommands.Add(workerUnregisterCommand);
 
 // ── fleet update ─────────────────────────────────────────────────────────────
 

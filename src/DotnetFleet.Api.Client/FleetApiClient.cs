@@ -353,6 +353,12 @@ public class FleetApiClient
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task DeleteWorkerAsync(Guid workerId)
+    {
+        var response = await http.DeleteAsync($"/api/workers/{workerId}");
+        response.EnsureSuccessStatusCode();
+    }
+
     public record LoginResponse(string Token, string Username, string Role);
 
     public record WorkerInfo(

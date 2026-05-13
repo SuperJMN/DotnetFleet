@@ -17,6 +17,7 @@ public static class WorkerEndpoints
         // Admin-only management
         group.MapGet("/", GetAll).RequireAuthorization("Admin");
         group.MapPut("/{id:guid}/config", UpdateConfig).RequireAuthorization("Admin");
+        group.MapDelete("/{id:guid}", Delete).RequireAuthorization("Admin");
 
         // Bootstrap: anonymous if a valid X-Registration-Token header is supplied,
         // otherwise requires Admin. This lets new workers self-register without
@@ -149,6 +150,19 @@ public static class WorkerEndpoints
 
         await storage.UpdateWorkerAsync(worker);
         return Results.Ok(worker);
+    }
+
+    private static async Task<IResult> Delete(Guid id, IFleetStorage storage, LogBroadcaster broadcaster)
+    {
+        var worker = await storage.GetWorkerAsync(id);
+        if (worker is null) return Results.NotFound();
+
+        var failedJobs = await storage.FailJobsForWorkerAsync(id, "Worker unregistered by administrator.");
+        foreach (var jobId in failedJobs)
+            broadcaster.Complete(jobId);
+
+        await storage.DeleteWorkerAsync(id);
+        return Results.Ok(new { worker.Id, worker.Name, failedJobs = failedJobs.Count });
     }
 
     private static async Task<IResult> UpdateStatus(

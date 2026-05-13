@@ -486,6 +486,7 @@ fleet worker [options]                 Run worker in foreground
 fleet worker install [options]         Install as OS service
 fleet worker uninstall [--name <n>]    Remove OS service
 fleet worker status [--name <n>]       Show service status
+fleet worker unregister --name <n>     Unregister worker from coordinator
 
   --coordinator, -c <url>       Coordinator URL (auto-discovered if omitted)
   --token, -t <token>           Registration token (auto-discovered for local coordinators)
@@ -494,6 +495,8 @@ fleet worker status [--name <n>]       Show service status
   --poll-interval <secs>        Polling interval in seconds (default: 10)
   --max-disk <gb>               Max disk usage in GB (default: 10)
   --no-discover                 Disable local + mDNS auto-discovery
+  --admin-user <user>           Admin username for unregister (default: admin)
+  --admin-password <pass>       Admin password for unregister (default: admin)
 
 fleet version                          Show version
 
@@ -615,6 +618,7 @@ All worker traffic flows over plain HTTP/JSON. There is no direct DB or queue ac
 | `GET` | `/api/jobs/{id}/logs` | User | Live log stream (SSE) |
 | `GET` | `/api/workers` | Admin | List workers |
 | `PUT` | `/api/workers/{id}/config` | Admin | Update worker config |
+| `DELETE` | `/api/workers/{id}` | Admin | Unregister worker |
 | `POST` | `/api/workers/register` | RegistrationToken / Admin | Worker self-registration |
 | `POST` | `/api/workers/login` | anonymous | Worker login |
 | `POST` | `/api/workers/{id}/heartbeat` | Worker | Liveness ping |

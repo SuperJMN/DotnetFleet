@@ -436,6 +436,22 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<bool> DeleteWorkerAsync(Guid workerId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+
+        var worker = await db.Workers.FindAsync([workerId], ct);
+        if (worker is null)
+            return false;
+
+        await db.RepoCaches.Where(r => r.WorkerId == workerId).ExecuteDeleteAsync(ct);
+        await db.JobDurationStats.Where(s => s.WorkerId == workerId).ExecuteDeleteAsync(ct);
+
+        db.Workers.Remove(worker);
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<bool> TouchWorkerAsync(Guid workerId, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);

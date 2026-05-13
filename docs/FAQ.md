@@ -608,7 +608,7 @@ Start-Service fleet-worker-<nombre>
 
 Cualquiera que lo tenga puede registrar workers. Mitigación: rota el token
 arrancando el coordinador con `--token <nuevo>` y revoca los workers que no
-reconozcas desde el panel.
+reconozcas desde el panel o con `fleet worker unregister --name <nombre>`.
 
 ### ¿Conviene exponer el coordinador a Internet?
 

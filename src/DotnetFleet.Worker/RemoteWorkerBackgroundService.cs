@@ -204,7 +204,7 @@ public class RemoteWorkerBackgroundService : BackgroundService
 
             await ManageDiskSpaceAsync(ct);
 
-            var localPath = Path.Combine(repoStoragePath, SanitizeName(project.Name));
+            var localPath = Path.Combine(repoStoragePath, RepoDirectoryName.Create(project.Name));
             var branch = string.IsNullOrWhiteSpace(project.Branch) ? "main" : project.Branch;
 
             using var cancelCts = new CancellationTokenSource();
@@ -510,10 +510,6 @@ public class RemoteWorkerBackgroundService : BackgroundService
             logger.LogWarning(ex, "Failed to update worker status to {Busy}", busy);
         }
     }
-
-    private static string SanitizeName(string name) =>
-        string.Concat(name.Select(c => Path.GetInvalidPathChars().Contains(c) ? '_' : c))
-              .Replace(' ', '-');
 
     private string PreparePackageOutputDirectory(Guid jobId)
     {
