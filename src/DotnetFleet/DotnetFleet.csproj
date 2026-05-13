@@ -31,6 +31,7 @@
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="CSharpFunctionalExtensions" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Xaml.Behaviors.Avalonia" />
   </ItemGroup>
 
   <ItemGroup>

@@ -4,6 +4,12 @@
              x:Class="DotnetFleet.Views.WorkersView"
              x:DataType="vm:WorkersViewModel">
 
+    <Interaction.Behaviors>
+        <DataContextChangedTrigger>
+            <InvokeCommandAction Command="{Binding RefreshCommand}" />
+        </DataContextChangedTrigger>
+    </Interaction.Behaviors>
+
     <DockPanel Margin="16">
 
         <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True"

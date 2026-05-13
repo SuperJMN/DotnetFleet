@@ -4,6 +4,12 @@
              x:Class="DotnetFleet.Views.ProjectDetailView"
              x:DataType="vm:ProjectDetailViewModel">
 
+    <Interaction.Behaviors>
+        <DataContextChangedTrigger>
+            <InvokeCommandAction Command="{Binding RefreshCommand}" />
+        </DataContextChangedTrigger>
+    </Interaction.Behaviors>
+
     <DockPanel Margin="16">
 
         <TextBlock DockPanel.Dock="Top"

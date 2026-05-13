@@ -60,7 +60,6 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
         _disposables.Add(ClearFinishedJobsCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
         _header = new BehaviorSubject<object>(CreateHeader());
         Header = _header.AsObservable();
-        _disposables.Add(AutoRefresh.Start(_client.AuthenticatedChanges, RefreshCommand, AutoRefreshIntervals.Section));
     }
 
     private SectionHeader CreateHeader() =>

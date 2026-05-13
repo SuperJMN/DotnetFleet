@@ -29,8 +29,6 @@ public partial class WorkersViewModel : ReactiveObject, IHaveHeader, IDisposable
 
         Header = Observable.Return<object>(new SectionHeader("Workers",
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
-
-        _disposables.Add(AutoRefresh.Start(_client.AuthenticatedChanges, RefreshCommand, AutoRefreshIntervals.Section));
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }

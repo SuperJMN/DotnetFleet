@@ -6,6 +6,12 @@
              x:Class="DotnetFleet.Views.ProjectsView"
              x:DataType="vm:ProjectsViewModel">
 
+    <Interaction.Behaviors>
+        <DataContextChangedTrigger>
+            <InvokeCommandAction Command="{Binding RefreshCommand}" />
+        </DataContextChangedTrigger>
+    </Interaction.Behaviors>
+
     <DockPanel Margin="16">
 
         <!-- Loading indicator -->

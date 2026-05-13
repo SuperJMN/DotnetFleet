@@ -35,8 +35,6 @@ public partial class ProjectSecretsViewModel : ReactiveObject, IDisposable
 
         _disposables.Add(RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
         _disposables.Add(AddCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
-
-        _disposables.Add(AutoRefresh.Start(_client.AuthenticatedChanges, RefreshCommand, AutoRefreshIntervals.Section));
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }

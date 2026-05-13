@@ -5,6 +5,12 @@
              x:Class="DotnetFleet.Views.JobDetailView"
              x:DataType="vm:JobDetailViewModel">
 
+    <Interaction.Behaviors>
+        <DataContextChangedTrigger>
+            <InvokeCommandAction Command="{Binding RefreshCommand}" />
+        </DataContextChangedTrigger>
+    </Interaction.Behaviors>
+
     <DockPanel Margin="16">
 
         <!-- Header: wraps on narrow widths -->

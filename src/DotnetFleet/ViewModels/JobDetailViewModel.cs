@@ -30,7 +30,6 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     private readonly SourceList<LogLine> _logs = new();
     private readonly JobPhaseTree _phaseTree = new(FormatPhaseName);
     private readonly IDisposable _filterSubscription;
-    private readonly IDisposable _refreshSubscription;
 
     public DeploymentJob Job { get; private set; }
 
@@ -94,9 +93,8 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         CancelJobCommand = ReactiveCommand.CreateFromTask(CancelJobAsync,
             this.WhenAnyValue(x => x.CanCancel));
         RefreshArtifactsCommand.ThrownExceptions.Subscribe(ex => ErrorMessage = ex.Message);
-        var refreshSnapshot = ReactiveCommand.CreateFromTask(() => RefreshSnapshotAsync(default));
-        refreshSnapshot.ThrownExceptions.Subscribe(_ => { });
-        _refreshSubscription = AutoRefresh.Start(Observable.Return(true), refreshSnapshot, AutoRefreshIntervals.Detail);
+        RefreshCommand = ReactiveCommand.CreateFromTask(() => RefreshSnapshotAsync(default));
+        RefreshCommand.ThrownExceptions.Subscribe(_ => { });
 
         var minSeverityChanges = this.WhenAnyValue(x => x.MinSeverity);
 
@@ -186,6 +184,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     }
 
     public ReactiveCommand<Unit, Unit> CopyLogsCommand { get; }
+    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshArtifactsCommand { get; }
     public ReactiveCommand<Unit, Unit> NextSearchResultCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleDetailedLogCommand { get; }
@@ -426,7 +425,6 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     {
         _cts?.Cancel();
         _cts?.Dispose();
-        _refreshSubscription.Dispose();
         _filterSubscription.Dispose();
         _phaseTree.Dispose();
         _logs.Dispose();

@@ -47,8 +47,6 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader, IDisposabl
         Header = Observable.Return<object>(new SectionHeader("Projects",
             new HeaderAction("Add Project", "mdi-plus", AddProjectCommand, isPrimary: true),
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
-
-        _disposables.Add(AutoRefresh.Start(_client.AuthenticatedChanges, refresh, AutoRefreshIntervals.Section));
     }
 
     public IEnhancedCommand<Unit> RefreshCommand { get; }

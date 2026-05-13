@@ -36,8 +36,6 @@ public partial class BuildsViewModel : ReactiveObject, IHaveHeader, IDisposable
         Header = Observable.Return<object>(new SectionHeader("Builds",
             "All projects, oldest first",
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
-
-        disposables.Add(AutoRefresh.Start(client.AuthenticatedChanges, RefreshCommand, AutoRefreshIntervals.Section));
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
