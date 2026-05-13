@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Disposables;
+using System.Reactive.Linq;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
@@ -7,10 +9,11 @@ using ReactiveUI.SourceGenerators;
 
 namespace DotnetFleet.ViewModels;
 
-public partial class ProjectSecretsViewModel : ReactiveObject
+public partial class ProjectSecretsViewModel : ReactiveObject, IDisposable
 {
     private readonly FleetApiClient _client;
     private readonly Guid _projectId;
+    private readonly CompositeDisposable _disposables = [];
 
     [Reactive] private bool _isLoading;
     [Reactive] private string? _error;
@@ -30,14 +33,15 @@ public partial class ProjectSecretsViewModel : ReactiveObject
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadAsync);
         AddCommand = ReactiveCommand.CreateFromTask(AddAsync, canAdd);
 
-        RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
-        AddCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
+        _disposables.Add(RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
+        _disposables.Add(AddCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
 
-        RefreshCommand.Execute(Unit.Default).Subscribe();
+        _disposables.Add(AutoRefresh.Start(_client.AuthenticatedChanges, RefreshCommand, AutoRefreshIntervals.Section));
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> AddCommand { get; }
+    public void Dispose() => _disposables.Dispose();
 
     private async Task LoadAsync()
     {
@@ -46,9 +50,13 @@ public partial class ProjectSecretsViewModel : ReactiveObject
         try
         {
             var secrets = await _client.GetProjectSecretsAsync(_projectId);
-            Secrets.Clear();
-            foreach (var s in secrets)
-                Secrets.Add(new ProjectSecretViewModel(s, _projectId, _client, this));
+            ObservableCollectionSync.Sync(
+                Secrets,
+                secrets,
+                secret => secret.Id,
+                viewModel => viewModel.Secret.Id,
+                secret => new ProjectSecretViewModel(secret, _projectId, _client, this),
+                (viewModel, secret) => viewModel.ApplySecretUpdate(secret));
         }
         finally
         {
@@ -73,7 +81,7 @@ public partial class ProjectSecretViewModel : ReactiveObject
     private readonly Guid _projectId;
     private readonly ProjectSecretsViewModel _parent;
 
-    public Secret Secret { get; }
+    public Secret Secret { get; private set; }
 
     [Reactive] private string _name;
     [Reactive] private string _value;
@@ -101,6 +109,20 @@ public partial class ProjectSecretViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
     public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+
+    public void ApplySecretUpdate(Secret updated)
+    {
+        if (updated.Id != Secret.Id) return;
+
+        Secret = updated;
+        if (!IsEditing)
+        {
+            Name = updated.Name;
+            Value = updated.Value;
+        }
+
+        this.RaisePropertyChanged(nameof(Secret));
+    }
 
     private async Task DeleteAsync()
     {

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
@@ -13,10 +14,11 @@ using Zafiro.UI.Shell.Utils;
 namespace DotnetFleet.ViewModels;
 
 [Section(name: "Secrets", icon: "mdi-key-outline", sortIndex: 3)]
-public partial class SecretsViewModel : ReactiveObject, IHaveHeader
+public partial class SecretsViewModel : ReactiveObject, IHaveHeader, IDisposable
 {
     private readonly FleetApiClient _client;
     private readonly IFileSystemPicker _picker;
+    private readonly CompositeDisposable _disposables = [];
 
     [Reactive] private bool _isLoading;
     [Reactive] private string? _error;
@@ -37,23 +39,21 @@ public partial class SecretsViewModel : ReactiveObject, IHaveHeader
         AddCommand = ReactiveCommand.CreateFromTask(AddAsync, canAdd);
         ImportFromEnvCommand = ReactiveCommand.CreateFromTask(ImportFromEnvAsync);
 
-        RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
-        AddCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
-        ImportFromEnvCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
+        _disposables.Add(RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
+        _disposables.Add(AddCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
+        _disposables.Add(ImportFromEnvCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
 
         Header = Observable.Return<object>(new SectionHeader("Global Secrets",
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
 
-        _client.AuthenticatedChanges
-            .Where(authenticated => authenticated)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => RefreshCommand.Execute(Unit.Default).Subscribe(_ => { }, _ => { }));
+        _disposables.Add(AutoRefresh.Start(_client.AuthenticatedChanges, RefreshCommand, AutoRefreshIntervals.Section));
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> AddCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportFromEnvCommand { get; }
     public IObservable<object> Header { get; }
+    public void Dispose() => _disposables.Dispose();
 
     private async Task LoadAsync()
     {
@@ -62,9 +62,13 @@ public partial class SecretsViewModel : ReactiveObject, IHaveHeader
         try
         {
             var secrets = await _client.GetSecretsAsync();
-            Secrets.Clear();
-            foreach (var s in secrets)
-                Secrets.Add(new SecretViewModel(s, _client, this));
+            ObservableCollectionSync.Sync(
+                Secrets,
+                secrets,
+                secret => secret.Id,
+                viewModel => viewModel.Secret.Id,
+                secret => new SecretViewModel(secret, _client, this),
+                (viewModel, secret) => viewModel.ApplySecretUpdate(secret));
         }
         finally
         {
@@ -182,7 +186,7 @@ public partial class SecretViewModel : ReactiveObject
     private readonly FleetApiClient _client;
     private readonly SecretsViewModel _parent;
 
-    public Secret Secret { get; }
+    public Secret Secret { get; private set; }
 
     [Reactive] private string _name;
     [Reactive] private string _value;
@@ -209,6 +213,20 @@ public partial class SecretViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
     public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+
+    public void ApplySecretUpdate(Secret updated)
+    {
+        if (updated.Id != Secret.Id) return;
+
+        Secret = updated;
+        if (!IsEditing)
+        {
+            Name = updated.Name;
+            Value = updated.Value;
+        }
+
+        this.RaisePropertyChanged(nameof(Secret));
+    }
 
     private async Task DeleteAsync()
     {

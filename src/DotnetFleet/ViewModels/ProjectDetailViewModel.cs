@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using Avalonia.Media;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
@@ -14,14 +16,16 @@ using DialogOption = Zafiro.Avalonia.Dialogs.Option;
 
 namespace DotnetFleet.ViewModels;
 
-public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
+public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisposable
 {
     private readonly FleetApiClient _client;
     private readonly INavigator _navigator;
     private readonly IFileSystemPicker _fileSystemPicker;
     private readonly IDialog _dialog;
+    private readonly CompositeDisposable _disposables = [];
+    private readonly BehaviorSubject<object> _header;
 
-    public Project Project { get; }
+    public Project Project { get; private set; }
     public ProjectSecretsViewModel ProjectSecrets { get; }
     public PackageBuildOptionsViewModel BuildOptions { get; }
 
@@ -50,13 +54,17 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
             _navigator.Go(() => new EditProjectViewModel(Project, _client, _navigator, projectsForRefresh: null));
         });
 
-        RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
-        DeployCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
-        BuildPackagesCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
-        ClearFinishedJobsCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
-        RefreshCommand.Execute(Unit.Default).Subscribe();
+        _disposables.Add(RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
+        _disposables.Add(DeployCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
+        _disposables.Add(BuildPackagesCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
+        _disposables.Add(ClearFinishedJobsCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
+        _header = new BehaviorSubject<object>(CreateHeader());
+        Header = _header.AsObservable();
+        _disposables.Add(AutoRefresh.Start(_client.AuthenticatedChanges, RefreshCommand, AutoRefreshIntervals.Section));
+    }
 
-        Header = Observable.Return<object>(new SectionHeader(
+    private SectionHeader CreateHeader() =>
+        new(
             Project.Name,
             $"{Project.GitUrl} @ {Project.Branch}",
             new HeaderAction("Queue Deploy", "mdi-rocket-launch", DeployCommand, isPrimary: true),
@@ -64,8 +72,7 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
             new HeaderAction("Clear Builds", "mdi-broom", ClearFinishedJobsCommand),
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand),
             new HeaderAction("Project Secrets", "mdi-dots-horizontal", ProjectSecrets),
-            new HeaderAction("Edit", "mdi-pencil", EditCommand)));
-    }
+            new HeaderAction("Edit", "mdi-pencil", EditCommand));
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> DeployCommand { get; }
@@ -73,16 +80,36 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
     public ReactiveCommand<Unit, Unit> ClearFinishedJobsCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
     public IObservable<object> Header { get; }
+    public void Dispose()
+    {
+        _disposables.Dispose();
+        ProjectSecrets.Dispose();
+        _header.Dispose();
+    }
 
     private async Task LoadJobsAsync()
     {
         IsLoading = true;
+        Error = null;
         try
         {
-            var jobs = await _client.GetProjectJobsAsync(Project.Id);
-            Jobs.Clear();
-            foreach (var j in jobs.OrderByDescending(j => j.EnqueuedAt))
-                Jobs.Add(new JobViewModel(j, _client, _navigator, this, _fileSystemPicker));
+            var projectTask = _client.GetProjectAsync(Project.Id);
+            var jobsTask = _client.GetProjectJobsAsync(Project.Id);
+
+            await Task.WhenAll(projectTask, jobsTask);
+
+            var project = await projectTask;
+            if (project is not null)
+                ApplyProjectUpdate(project);
+
+            var jobs = await jobsTask;
+            ObservableCollectionSync.Sync(
+                Jobs,
+                jobs.OrderByDescending(j => j.EnqueuedAt),
+                job => job.Id,
+                viewModel => viewModel.Job.Id,
+                job => new JobViewModel(job, _client, _navigator, this, _fileSystemPicker),
+                (viewModel, job) => viewModel.ApplyJobUpdate(job));
         }
         finally
         {
@@ -138,6 +165,15 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader
     {
         await _client.DeleteFinishedProjectJobsAsync(Project.Id);
         await LoadJobsAsync();
+    }
+
+    private void ApplyProjectUpdate(Project updated)
+    {
+        if (updated.Id != Project.Id) return;
+
+        Project = updated;
+        this.RaisePropertyChanged(nameof(Project));
+        _header.OnNext(CreateHeader());
     }
 }
 
@@ -358,8 +394,13 @@ public partial class JobViewModel : ReactiveObject
     private readonly ProjectDetailViewModel? _projectDetail;
     private readonly IFileSystemPicker? _fileSystemPicker;
 
-    public DeploymentJob Job { get; }
-    public string? ProjectName { get; }
+    public DeploymentJob Job { get; private set; }
+    private string? projectName;
+    public string? ProjectName
+    {
+        get => projectName;
+        private set => this.RaiseAndSetIfChanged(ref projectName, value);
+    }
     public bool HasProjectName => !string.IsNullOrWhiteSpace(ProjectName);
 
     private string? _version;
@@ -378,7 +419,7 @@ public partial class JobViewModel : ReactiveObject
         _navigator = navigator;
         _projectDetail = projectDetail;
         _fileSystemPicker = fileSystemPicker;
-        ProjectName = projectName;
+        this.projectName = projectName;
         _version = job.Version;
         _displayName = ComputeDisplayName(job.Version);
 
@@ -412,15 +453,21 @@ public partial class JobViewModel : ReactiveObject
     /// raising change notifications for the user-visible fields. Used when the deployment is
     /// renamed (a version was detected) or any other field is updated by the coordinator.
     /// </summary>
-    public void ApplyJobUpdate(DeploymentJob updated)
+    public void ApplyJobUpdate(DeploymentJob updated, string? projectName = null)
     {
         if (updated.Id != Job.Id) return;
-        Job.Version = updated.Version;
-        Job.Status = updated.Status;
+
+        Job = updated;
+        if (projectName is not null)
+            ProjectName = projectName;
+
         Version = updated.Version;
+        this.RaisePropertyChanged(nameof(Job));
+        this.RaisePropertyChanged(nameof(HasProjectName));
         this.RaisePropertyChanged(nameof(StatusText));
         this.RaisePropertyChanged(nameof(StatusIcon));
         this.RaisePropertyChanged(nameof(StatusBrush));
+        this.RaisePropertyChanged(nameof(KindText));
     }
 
     private string ComputeDisplayName(string? version) =>

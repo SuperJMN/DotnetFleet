@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using DotnetFleet.Api.Client;
 using ReactiveUI;
@@ -11,11 +12,12 @@ using Zafiro.UI.Shell.Utils;
 namespace DotnetFleet.ViewModels;
 
 [Section(name: "Builds", icon: "mdi-history", sortIndex: 1)]
-public partial class BuildsViewModel : ReactiveObject, IHaveHeader
+public partial class BuildsViewModel : ReactiveObject, IHaveHeader, IDisposable
 {
     private readonly FleetApiClient client;
     private readonly INavigator navigator;
     private readonly IFileSystemPicker fileSystemPicker;
+    private readonly CompositeDisposable disposables = [];
 
     [Reactive] private bool isLoading;
     [Reactive] private string? error;
@@ -29,20 +31,18 @@ public partial class BuildsViewModel : ReactiveObject, IHaveHeader
         this.fileSystemPicker = fileSystemPicker;
 
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadBuilds);
-        RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message);
+        disposables.Add(RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
 
         Header = Observable.Return<object>(new SectionHeader("Builds",
             "All projects, oldest first",
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
 
-        client.AuthenticatedChanges
-            .Where(authenticated => authenticated)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => RefreshCommand.Execute(Unit.Default).Subscribe(_ => { }, _ => { }));
+        disposables.Add(AutoRefresh.Start(client.AuthenticatedChanges, RefreshCommand, AutoRefreshIntervals.Section));
     }
 
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public IObservable<object> Header { get; }
+    public void Dispose() => disposables.Dispose();
 
     private async Task LoadBuilds()
     {
@@ -59,17 +59,19 @@ public partial class BuildsViewModel : ReactiveObject, IHaveHeader
             var jobs = await jobsTask;
             var projectNames = projects.ToDictionary(project => project.Id, project => project.Name);
 
-            Builds.Clear();
-            foreach (var job in jobs.OrderBy(job => job.EnqueuedAt))
-            {
-                Builds.Add(new JobViewModel(
+            ObservableCollectionSync.Sync(
+                Builds,
+                jobs.OrderBy(job => job.EnqueuedAt),
+                job => job.Id,
+                viewModel => viewModel.Job.Id,
+                job => new JobViewModel(
                     job,
                     client,
                     navigator,
                     projectDetail: null,
                     fileSystemPicker: fileSystemPicker,
-                    projectName: ResolveProjectName(job.ProjectId, projectNames)));
-            }
+                    projectName: ResolveProjectName(job.ProjectId, projectNames)),
+                (viewModel, job) => viewModel.ApplyJobUpdate(job, ResolveProjectName(job.ProjectId, projectNames)));
         }
         finally
         {

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
@@ -15,11 +16,12 @@ using DialogOption = Zafiro.Avalonia.Dialogs.Option;
 namespace DotnetFleet.ViewModels;
 
 [Section(name: "Projects", icon: "mdi-folder-outline", sortIndex: 0)]
-public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
+public partial class ProjectsViewModel : ReactiveObject, IHaveHeader, IDisposable
 {
     private readonly FleetApiClient _client;
     private readonly IFileSystemPicker _fileSystemPicker;
     private readonly IDialog _dialog;
+    private readonly CompositeDisposable _disposables = [];
     internal readonly INavigator Navigator;
 
     [Reactive] private ProjectViewModel? _selectedProject;
@@ -35,28 +37,24 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
         Navigator = navigator;
 
         var refresh = ReactiveCommand.CreateFromTask(LoadProjectsAsync);
-        refresh.ThrownExceptions.Subscribe(_ => { });
+        _disposables.Add(refresh.ThrownExceptions.Subscribe(_ => { }));
         RefreshCommand = refresh.Enhance("Refresh");
 
         var addProject = ReactiveCommand.CreateFromTask(OpenAddProjectAsync);
-        addProject.ThrownExceptions.Subscribe(_ => { });
+        _disposables.Add(addProject.ThrownExceptions.Subscribe(_ => { }));
         AddProjectCommand = addProject.Enhance("Add Project");
 
         Header = Observable.Return<object>(new SectionHeader("Projects",
             new HeaderAction("Add Project", "mdi-plus", AddProjectCommand, isPrimary: true),
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
 
-        // Refresh whenever the client becomes authenticated. BehaviorSubject replays the current
-        // value, so this also covers the "already authenticated when the VM is built" case.
-        _client.AuthenticatedChanges
-            .Where(authenticated => authenticated)
-            .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(_ => refresh.Execute(Unit.Default).Subscribe(_ => { }, _ => { }));
+        _disposables.Add(AutoRefresh.Start(_client.AuthenticatedChanges, refresh, AutoRefreshIntervals.Section));
     }
 
     public IEnhancedCommand<Unit> RefreshCommand { get; }
     public IEnhancedCommand<Unit> AddProjectCommand { get; }
     public IObservable<object> Header { get; }
+    public void Dispose() => _disposables.Dispose();
 
     private async Task LoadProjectsAsync()
     {
@@ -64,9 +62,13 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader
         try
         {
             var list = await _client.GetProjectsAsync();
-            Projects.Clear();
-            foreach (var p in list)
-                Projects.Add(new ProjectViewModel(p, _client, Navigator, this, _fileSystemPicker, _dialog));
+            ObservableCollectionSync.Sync(
+                Projects,
+                list,
+                project => project.Id,
+                viewModel => viewModel.Project.Id,
+                project => new ProjectViewModel(project, _client, Navigator, this, _fileSystemPicker, _dialog),
+                (viewModel, project) => viewModel.ApplyProjectUpdate(project));
         }
         finally
         {
@@ -114,7 +116,7 @@ public partial class ProjectViewModel : ReactiveObject
     private readonly IFileSystemPicker _fileSystemPicker;
     private readonly IDialog _dialog;
 
-    public Project Project { get; }
+    public Project Project { get; private set; }
 
     public ProjectViewModel(
         Project project,
@@ -139,6 +141,14 @@ public partial class ProjectViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> OpenCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+
+    public void ApplyProjectUpdate(Project updated)
+    {
+        if (updated.Id != Project.Id) return;
+
+        Project = updated;
+        this.RaisePropertyChanged(nameof(Project));
+    }
 
     private void Open()
     {

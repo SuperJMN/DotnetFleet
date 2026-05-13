@@ -30,8 +30,9 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     private readonly SourceList<LogLine> _logs = new();
     private readonly JobPhaseTree _phaseTree = new(FormatPhaseName);
     private readonly IDisposable _filterSubscription;
+    private readonly IDisposable _refreshSubscription;
 
-    public DeploymentJob Job { get; }
+    public DeploymentJob Job { get; private set; }
 
     [Reactive] private string _statusText = string.Empty;
     [Reactive] private bool _isStreaming;
@@ -93,6 +94,9 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         CancelJobCommand = ReactiveCommand.CreateFromTask(CancelJobAsync,
             this.WhenAnyValue(x => x.CanCancel));
         RefreshArtifactsCommand.ThrownExceptions.Subscribe(ex => ErrorMessage = ex.Message);
+        var refreshSnapshot = ReactiveCommand.CreateFromTask(() => RefreshSnapshotAsync(default));
+        refreshSnapshot.ThrownExceptions.Subscribe(_ => { });
+        _refreshSubscription = AutoRefresh.Start(Observable.Return(true), refreshSnapshot, AutoRefreshIntervals.Detail);
 
         var minSeverityChanges = this.WhenAnyValue(x => x.MinSeverity);
 
@@ -115,51 +119,36 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         {
             CanCancel = true;
             StartStreaming();
-            StartPhasePolling();
         }
         else
         {
             LoadLogsAsync().ConfigureAwait(false);
-            // One-shot phase load for terminal jobs so the timeline still shows up.
-            _ = RefreshPhasesAsync(default);
-            _ = RefreshArtifactsAsync(default);
         }
     }
 
-    /// <summary>
-    /// Polls <c>/api/jobs/{id}/phases</c> every 2s while the job is in flight.
-    /// Cheap (one row per phase event, indexed by JobId) and simpler than a
-    /// dedicated SSE channel for what is essentially low-frequency data.
-    /// </summary>
-    private void StartPhasePolling()
-    {
-        if (_cts is null) return;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                while (!_cts.IsCancellationRequested)
-                {
-                    await RefreshPhasesAsync(_cts.Token);
-                    try { await Task.Delay(TimeSpan.FromSeconds(2), _cts.Token); }
-                    catch (OperationCanceledException) { break; }
-                }
-            }
-            catch { /* phase polling is telemetry — never let it crash the VM */ }
-        });
-    }
-
-    private async Task RefreshPhasesAsync(CancellationToken ct)
+    private async Task RefreshSnapshotAsync(CancellationToken ct)
     {
         try
         {
-            var phases = await _client.GetJobPhasesAsync(Job.Id);
-            var job = await _client.GetJobAsync(Job.Id);
+            var phasesTask = _client.GetJobPhasesAsync(Job.Id);
+            var jobTask = _client.GetJobAsync(Job.Id);
+            var artifactsTask = Job.Kind == JobKind.PackageBuild
+                ? _client.GetJobArtifactsAsync(Job.Id)
+                : Task.FromResult<List<PackageArtifact>>([]);
+
+            await Task.WhenAll(phasesTask, jobTask, artifactsTask);
+
+            var phases = await phasesTask;
+            var job = await jobTask;
+            var artifacts = await artifactsTask;
+
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
+                if (job is not null)
+                    ApplyJobSnapshot(job);
+
                 _phaseTree.Refresh(phases);
-                CurrentPhase = job?.CurrentPhase;
-                CurrentPhaseStartedAt = job?.CurrentPhaseStartedAt;
+                ApplyArtifacts(artifacts);
                 this.RaisePropertyChanged(nameof(HasCurrentPhase));
                 this.RaisePropertyChanged(nameof(HasPhases));
                 this.RaisePropertyChanged(nameof(CurrentPhaseDisplay));
@@ -323,9 +312,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         if (updated is not null)
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                StatusText = FormatStatus(updated.Status);
-                ErrorMessage = updated.ErrorMessage;
-                this.RaisePropertyChanged(nameof(HasError));
+                ApplyJobSnapshot(updated);
             });
 
         await RefreshArtifactsAsync(default);
@@ -337,13 +324,41 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             return;
 
         var artifacts = await _client.GetJobArtifactsAsync(Job.Id);
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-        {
-            Artifacts.Clear();
-            foreach (var artifact in artifacts)
-                Artifacts.Add(new PackageArtifactViewModel(artifact, this));
-            this.RaisePropertyChanged(nameof(HasArtifacts));
-        });
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyArtifacts(artifacts));
+    }
+
+    private void ApplyJobSnapshot(DeploymentJob updated)
+    {
+        if (updated.Id != Job.Id) return;
+
+        Job = updated;
+        StatusText = FormatStatus(updated.Status);
+        ErrorMessage = updated.ErrorMessage;
+        CurrentPhase = updated.CurrentPhase;
+        CurrentPhaseStartedAt = updated.CurrentPhaseStartedAt;
+        CanCancel = updated.Status is JobStatus.Running or JobStatus.Queued or JobStatus.Assigned
+                    && updated.CancellationRequestedAt is null;
+
+        this.RaisePropertyChanged(nameof(Job));
+        this.RaisePropertyChanged(nameof(HasError));
+        this.RaisePropertyChanged(nameof(HasCurrentPhase));
+        this.RaisePropertyChanged(nameof(CurrentPhaseDisplay));
+    }
+
+    private void ApplyArtifacts(IReadOnlyList<PackageArtifact> artifacts)
+    {
+        if (Job.Kind != JobKind.PackageBuild)
+            return;
+
+        ObservableCollectionSync.Sync(
+            Artifacts,
+            artifacts,
+            artifact => artifact.RelativePath,
+            viewModel => viewModel.Artifact.RelativePath,
+            artifact => new PackageArtifactViewModel(artifact, this),
+            (viewModel, artifact) => viewModel.ApplyArtifactUpdate(artifact));
+
+        this.RaisePropertyChanged(nameof(HasArtifacts));
     }
 
     private async Task SaveArtifactAsync(PackageArtifact artifact)
@@ -411,12 +426,13 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     {
         _cts?.Cancel();
         _cts?.Dispose();
+        _refreshSubscription.Dispose();
         _filterSubscription.Dispose();
         _phaseTree.Dispose();
         _logs.Dispose();
     }
 
-    public sealed class PackageArtifactViewModel
+    public sealed class PackageArtifactViewModel : ReactiveObject
     {
         private readonly JobDetailViewModel parent;
 
@@ -427,13 +443,22 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             SaveCommand = ReactiveCommand.CreateFromTask(() => this.parent.SaveArtifactAsync(Artifact));
         }
 
-        public PackageArtifact Artifact { get; }
+        public PackageArtifact Artifact { get; private set; }
         public string FileName => Artifact.FileName;
         public string SizeText => FormatSize(Artifact.SizeBytes);
         public string Sha256Text => string.IsNullOrWhiteSpace(Artifact.Sha256)
             ? ""
             : $"SHA-256 {Artifact.Sha256[..Math.Min(12, Artifact.Sha256.Length)]}";
         public ReactiveCommand<Unit, Unit> SaveCommand { get; }
+
+        public void ApplyArtifactUpdate(PackageArtifact updated)
+        {
+            Artifact = updated;
+            this.RaisePropertyChanged(nameof(Artifact));
+            this.RaisePropertyChanged(nameof(FileName));
+            this.RaisePropertyChanged(nameof(SizeText));
+            this.RaisePropertyChanged(nameof(Sha256Text));
+        }
 
         private static string FormatSize(long bytes)
         {

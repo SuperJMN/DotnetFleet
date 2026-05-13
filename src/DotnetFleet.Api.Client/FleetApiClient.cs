@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Reactive.Linq;
@@ -120,6 +121,16 @@ public class FleetApiClient
 
     public async Task<List<Project>> GetProjectsAsync() =>
         await http.GetFromJsonAsync<List<Project>>("/api/projects", JsonOptions) ?? [];
+
+    public async Task<Project?> GetProjectAsync(Guid id)
+    {
+        using var response = await http.GetAsync($"/api/projects/{id}");
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return null;
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<Project>(JsonOptions);
+    }
 
     public async Task<Project> CreateProjectAsync(string name, string gitUrl, string branch, int pollingIntervalMinutes = 0, string? gitToken = null)
     {
