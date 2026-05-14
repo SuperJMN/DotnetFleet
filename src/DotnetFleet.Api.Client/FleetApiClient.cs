@@ -224,6 +224,18 @@ public class FleetApiClient
     public async Task<List<DeploymentJob>> GetAllJobsAsync() =>
         await http.GetFromJsonAsync<List<DeploymentJob>>("/api/jobs", JsonOptions) ?? [];
 
+    /// <summary>
+    /// Deletes every job that has reached a terminal state (Succeeded, Failed or Cancelled),
+    /// along with their logs. Returns the number of jobs removed.
+    /// </summary>
+    public async Task<int> DeleteFinishedJobsAsync()
+    {
+        var response = await http.DeleteAsync("/api/jobs/finished");
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<DeleteFinishedJobsResult>(JsonOptions);
+        return payload?.Deleted ?? 0;
+    }
+
     public async Task<DeploymentJob?> GetJobAsync(Guid id) =>
         await http.GetFromJsonAsync<DeploymentJob>($"/api/jobs/{id}", JsonOptions);
 

@@ -18,6 +18,7 @@ public static class JobEndpoints
         group.MapGet("/{id:guid}/phases", GetPhases);
         group.MapGet("/{id:guid}/artifacts", GetArtifacts);
         group.MapGet("/{id:guid}/artifacts/{*relativePath}", DownloadArtifact);
+        group.MapDelete("/finished", DeleteFinishedJobs);
         group.MapPost("/{id:guid}/cancel", CancelJob);
 
         // Worker internal endpoints (authenticated by worker secret header)
@@ -41,6 +42,23 @@ public static class JobEndpoints
     {
         var job = await storage.GetJobAsync(id);
         return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+
+    private static async Task<IResult> DeleteFinishedJobs(
+        IFleetStorage storage,
+        PackageArtifactStore artifacts)
+    {
+        var terminal = new[] { JobStatus.Succeeded, JobStatus.Failed, JobStatus.Cancelled };
+        var artifactJobs = (await storage.GetJobsAsync())
+            .Where(job => job.Kind == JobKind.PackageBuild && terminal.Contains(job.Status))
+            .ToList();
+
+        var deleted = await storage.DeleteFinishedJobsAsync(null);
+
+        foreach (var job in artifactJobs)
+            await artifacts.DeleteAsync(job);
+
+        return Results.Ok(new { deleted });
     }
 
     /// <summary>

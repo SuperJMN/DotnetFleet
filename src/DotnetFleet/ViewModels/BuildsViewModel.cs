@@ -38,14 +38,18 @@ public partial class BuildsViewModel : ReactiveObject, IHaveHeader, IDisposable
         this.notificationService = notificationService;
 
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadBuilds);
+        ClearFinishedJobsCommand = ReactiveCommand.CreateFromTask(ClearFinishedJobs);
         disposables.Add(RefreshCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot load builds")));
+        disposables.Add(ClearFinishedJobsCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot clear builds")));
 
         Header = Observable.Return<object>(new SectionHeader("Builds",
             "All projects, newest first",
+            new HeaderAction("Clear Builds", "mdi-broom", ClearFinishedJobsCommand),
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
     }
 
     public ReactiveCommand<Unit, Maybe<Result>> RefreshCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result>> ClearFinishedJobsCommand { get; }
     public IObservable<object> Header { get; }
     public void Dispose() => disposables.Dispose();
 
@@ -57,36 +61,59 @@ public partial class BuildsViewModel : ReactiveObject, IHaveHeader, IDisposable
         {
             return await clientContext.Require().Bind(async client =>
             {
-                var projectsTask = client.GetProjectsAsync();
-                var jobsTask = client.GetAllJobsAsync();
-
-                await Task.WhenAll(projectsTask, jobsTask);
-
-                var projects = await projectsTask;
-                var jobs = await jobsTask;
-                var projectNames = projects.ToDictionary(project => project.Id, project => project.Name);
-
-                ObservableCollectionSync.Sync(
-                    Builds,
-                    jobs.OrderByDescending(job => job.EnqueuedAt),
-                    job => job.Id,
-                    viewModel => viewModel.Job.Id,
-                    job => new JobViewModel(
-                        job,
-                        client,
-                        navigator,
-                        projectDetail: null,
-                        fileSystemPicker: fileSystemPicker,
-                        projectName: ResolveProjectName(job.ProjectId, projectNames),
-                        clientContext: clientContext,
-                        notificationService: notificationService),
-                    (viewModel, job) => viewModel.ApplyJobUpdate(job, ResolveProjectName(job.ProjectId, projectNames)));
+                await LoadBuilds(client);
             });
         }
         finally
         {
             IsLoading = false;
         }
+    }
+
+    private async Task<Maybe<Result>> ClearFinishedJobs()
+    {
+        IsLoading = true;
+        Error = null;
+        try
+        {
+            return await clientContext.Require().Bind(async client =>
+            {
+                await client.DeleteFinishedJobsAsync();
+                await LoadBuilds(client);
+            });
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task LoadBuilds(FleetApiClient client)
+    {
+        var projectsTask = client.GetProjectsAsync();
+        var jobsTask = client.GetAllJobsAsync();
+
+        await Task.WhenAll(projectsTask, jobsTask);
+
+        var projects = await projectsTask;
+        var jobs = await jobsTask;
+        var projectNames = projects.ToDictionary(project => project.Id, project => project.Name);
+
+        ObservableCollectionSync.Sync(
+            Builds,
+            jobs.OrderByDescending(job => job.EnqueuedAt),
+            job => job.Id,
+            viewModel => viewModel.Job.Id,
+            job => new JobViewModel(
+                job,
+                client,
+                navigator,
+                projectDetail: null,
+                fileSystemPicker: fileSystemPicker,
+                projectName: ResolveProjectName(job.ProjectId, projectNames),
+                clientContext: clientContext,
+                notificationService: notificationService),
+            (viewModel, job) => viewModel.ApplyJobUpdate(job, ResolveProjectName(job.ProjectId, projectNames)));
     }
 
     private static string ResolveProjectName(Guid projectId, IReadOnlyDictionary<Guid, string> projectNames)
