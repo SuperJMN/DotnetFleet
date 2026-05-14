@@ -1,6 +1,7 @@
 using System.Reactive.Linq;
 using DotnetFleet.Api.Client;
 using DotnetFleet.ViewModels;
+using CSharpFunctionalExtensions;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
 
@@ -26,7 +27,7 @@ public partial class ConnectDialogViewModel : ReactiveObject
         x => x.EndpointUrl, x => x.IsBusy,
         (url, busy) => !busy && !string.IsNullOrWhiteSpace(url));
 
-    public async Task<bool> TryConnectAsync()
+    public async Task<Result> TryConnect()
     {
         Error = null;
         IsBusy = true;
@@ -42,26 +43,28 @@ public partial class ConnectDialogViewModel : ReactiveObject
             if (!response.IsSuccessStatusCode)
             {
                 Error = $"Unexpected response: {(int)response.StatusCode} {response.ReasonPhrase}";
-                return false;
+                return Result.Failure(Error);
             }
 
             _client.SetBaseAddress(url);
             _settings.SetEndpoint(url);
-            return true;
+            return Result.Success();
         }
         catch (TaskCanceledException)
         {
             Error = "Cannot connect: timeout reaching the coordinator.";
-            return false;
+            return Result.Failure(Error);
         }
         catch (Exception ex)
         {
             Error = $"Cannot connect: {ex.Message}";
-            return false;
+            return Result.Failure(Error);
         }
         finally
         {
             IsBusy = false;
         }
     }
+
+    public async Task<bool> TryConnectAsync() => (await TryConnect()).IsSuccess;
 }

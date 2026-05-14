@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using CSharpFunctionalExtensions;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
@@ -17,6 +18,7 @@ namespace DotnetFleet.ViewModels;
 public partial class SecretsViewModel : ReactiveObject, IHaveHeader, IDisposable
 {
     private readonly FleetApiClient _client;
+    private readonly IConnectedFleetClientContext clientContext;
     private readonly IFileSystemPicker _picker;
     private readonly CompositeDisposable _disposables = [];
 
@@ -27,9 +29,14 @@ public partial class SecretsViewModel : ReactiveObject, IHaveHeader, IDisposable
 
     public ObservableCollection<SecretViewModel> Secrets { get; } = [];
 
-    public SecretsViewModel(FleetApiClient client, IFileSystemPicker picker)
+    public SecretsViewModel(
+        FleetApiClient client,
+        IConnectedFleetClientContext clientContext,
+        IFileSystemPicker picker,
+        INotificationService notificationService)
     {
         _client = client;
+        this.clientContext = clientContext;
         _picker = picker;
 
         var canAdd = this.WhenAnyValue(x => x.NewName, x => x.NewValue,
@@ -39,7 +46,7 @@ public partial class SecretsViewModel : ReactiveObject, IHaveHeader, IDisposable
         AddCommand = ReactiveCommand.CreateFromTask(AddAsync, canAdd);
         ImportFromEnvCommand = ReactiveCommand.CreateFromTask(ImportFromEnvAsync);
 
-        _disposables.Add(RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
+        _disposables.Add(RefreshCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot load secrets")));
         _disposables.Add(AddCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
         _disposables.Add(ImportFromEnvCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
 
@@ -47,26 +54,29 @@ public partial class SecretsViewModel : ReactiveObject, IHaveHeader, IDisposable
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
     }
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result>> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> AddCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportFromEnvCommand { get; }
     public IObservable<object> Header { get; }
     public void Dispose() => _disposables.Dispose();
 
-    private async Task LoadAsync()
+    private async Task<Maybe<Result>> LoadAsync()
     {
         IsLoading = true;
         Error = null;
         try
         {
-            var secrets = await _client.GetSecretsAsync();
-            ObservableCollectionSync.Sync(
-                Secrets,
-                secrets,
-                secret => secret.Id,
-                viewModel => viewModel.Secret.Id,
-                secret => new SecretViewModel(secret, _client, this),
-                (viewModel, secret) => viewModel.ApplySecretUpdate(secret));
+            return await clientContext.Require().Bind(async client =>
+            {
+                var secrets = await client.GetSecretsAsync();
+                ObservableCollectionSync.Sync(
+                    Secrets,
+                    secrets,
+                    secret => secret.Id,
+                    viewModel => viewModel.Secret.Id,
+                    secret => new SecretViewModel(secret, client, this),
+                    (viewModel, secret) => viewModel.ApplySecretUpdate(secret));
+            });
         }
         finally
         {

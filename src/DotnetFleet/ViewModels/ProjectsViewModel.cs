@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using CSharpFunctionalExtensions;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
@@ -19,9 +20,10 @@ namespace DotnetFleet.ViewModels;
 [Section(name: "Projects", icon: "mdi-folder-outline", sortIndex: 0)]
 public partial class ProjectsViewModel : ReactiveObject, IHaveHeader, IDisposable
 {
-    private readonly FleetApiClient _client;
+    private readonly IConnectedFleetClientContext clientContext;
     private readonly IFileSystemPicker _fileSystemPicker;
     private readonly IDialog _dialog;
+    private readonly INotificationService notificationService;
     private readonly CompositeDisposable _disposables = [];
     internal readonly INavigator Navigator;
 
@@ -30,19 +32,25 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader, IDisposabl
 
     public ObservableCollection<ProjectViewModel> Projects { get; } = [];
 
-    public ProjectsViewModel(FleetApiClient client, INavigator navigator, IFileSystemPicker fileSystemPicker, IDialog dialog)
+    public ProjectsViewModel(
+        IConnectedFleetClientContext clientContext,
+        INavigator navigator,
+        IFileSystemPicker fileSystemPicker,
+        IDialog dialog,
+        INotificationService notificationService)
     {
-        _client = client;
+        this.clientContext = clientContext;
         _fileSystemPicker = fileSystemPicker;
         _dialog = dialog;
+        this.notificationService = notificationService;
         Navigator = navigator;
 
-        var refresh = ReactiveCommand.CreateFromTask(LoadProjectsAsync);
-        _disposables.Add(refresh.ThrownExceptions.Subscribe(_ => { }));
+        var refresh = ReactiveCommand.CreateFromTask(LoadProjects);
+        _disposables.Add(refresh.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot load projects")));
         RefreshCommand = refresh.Enhance("Refresh");
 
-        var addProject = ReactiveCommand.CreateFromTask(OpenAddProjectAsync);
-        _disposables.Add(addProject.ThrownExceptions.Subscribe(_ => { }));
+        var addProject = ReactiveCommand.CreateFromTask(OpenAddProject);
+        _disposables.Add(addProject.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot add project")));
         AddProjectCommand = addProject.Enhance("Add Project");
 
         Header = Observable.Return<object>(new SectionHeader("Projects",
@@ -50,27 +58,23 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader, IDisposabl
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
     }
 
-    public IEnhancedCommand<Unit> RefreshCommand { get; }
-    public IEnhancedCommand<Unit> AddProjectCommand { get; }
+    internal IConnectedFleetClientContext ClientContext => clientContext;
+    internal INotificationService NotificationService => notificationService;
+    public IEnhancedCommand<Maybe<Result>> RefreshCommand { get; }
+    public IEnhancedCommand<Maybe<Result>> AddProjectCommand { get; }
     public IObservable<object> Header { get; }
     public void Dispose() => _disposables.Dispose();
 
-    private async Task LoadProjectsAsync()
+    private async Task<Maybe<Result>> LoadProjects()
     {
         IsLoading = true;
         try
         {
-            var list = await _client.GetProjectsAsync();
-            ObservableCollectionSync.Sync(
-                Projects,
-                list,
-                project => project.Id,
-                viewModel => viewModel.Project.Id,
-                project => new ProjectViewModel(project, _client, Navigator, this, _fileSystemPicker, _dialog),
-                (viewModel, project) => viewModel.ApplyProjectUpdate(project));
-
-            foreach (var project in Projects)
-                _ = project.LoadProjectIcon();
+            return await clientContext.Require().Bind(async client =>
+            {
+                var list = await client.GetProjectsAsync();
+                ApplyProjects(client, list);
+            });
         }
         finally
         {
@@ -78,35 +82,53 @@ public partial class ProjectsViewModel : ReactiveObject, IHaveHeader, IDisposabl
         }
     }
 
-    private async Task OpenAddProjectAsync()
+    private async Task<Maybe<Result>> OpenAddProject()
     {
-        var vm = new AddProjectViewModel(_client);
-
-        var created = await _dialog.Show(vm, "Add Project", (_, closeable) =>
+        return await clientContext.Require().Bind(async client =>
         {
-            var saveCommand = ReactiveCommand.CreateFromTask(async () =>
+            var vm = new AddProjectViewModel(client);
+
+            var created = await _dialog.Show(vm, "Add Project", (_, closeable) =>
             {
-                if (await vm.TrySaveAsync())
+                var saveCommand = ReactiveCommand.CreateFromTask(async () =>
                 {
-                    closeable.Close();
-                }
-            }, vm.CanSave).Enhance();
+                    if (await vm.TrySaveAsync())
+                    {
+                        closeable.Close();
+                    }
+                }, vm.CanSave).Enhance();
 
-            return new IOption[]
+                return new IOption[]
+                {
+                    new DialogOption("Cancel",
+                        ReactiveCommand.Create(closeable.Dismiss).Enhance(),
+                        new Settings { IsCancel = true, Role = OptionRole.Cancel }),
+                    new DialogOption("Save",
+                        saveCommand,
+                        new Settings { IsDefault = true, Role = OptionRole.Primary }),
+                };
+            });
+
+            if (created)
             {
-                new DialogOption("Cancel",
-                    ReactiveCommand.Create(closeable.Dismiss).Enhance(),
-                    new Settings { IsCancel = true, Role = OptionRole.Cancel }),
-                new DialogOption("Save",
-                    saveCommand,
-                    new Settings { IsDefault = true, Role = OptionRole.Primary }),
-            };
+                var list = await client.GetProjectsAsync();
+                ApplyProjects(client, list);
+            }
         });
+    }
 
-        if (created)
-        {
-            await LoadProjectsAsync();
-        }
+    private void ApplyProjects(FleetApiClient client, IEnumerable<Project> list)
+    {
+        ObservableCollectionSync.Sync(
+            Projects,
+            list,
+            project => project.Id,
+            viewModel => viewModel.Project.Id,
+            project => new ProjectViewModel(project, client, Navigator, this, _fileSystemPicker, _dialog),
+            (viewModel, project) => viewModel.ApplyProjectUpdate(project));
+
+        foreach (var project in Projects)
+            _ = project.LoadProjectIcon();
     }
 }
 
@@ -231,7 +253,14 @@ public partial class ProjectViewModel : ReactiveObject
 
     private void Open()
     {
-        _navigator.Go(() => new ProjectDetailViewModel(Project, _client, _navigator, _fileSystemPicker, _dialog));
+        _navigator.Go(() => new ProjectDetailViewModel(
+            Project,
+            _client,
+            _parent.ClientContext,
+            _navigator,
+            _fileSystemPicker,
+            _dialog,
+            _parent.NotificationService));
     }
 
     private void Edit()

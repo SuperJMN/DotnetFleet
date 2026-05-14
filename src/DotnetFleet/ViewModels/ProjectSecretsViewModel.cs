@@ -2,16 +2,19 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using CSharpFunctionalExtensions;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI;
 
 namespace DotnetFleet.ViewModels;
 
 public partial class ProjectSecretsViewModel : ReactiveObject, IDisposable
 {
     private readonly FleetApiClient _client;
+    private readonly IConnectedFleetClientContext clientContext;
     private readonly Guid _projectId;
     private readonly CompositeDisposable _disposables = [];
 
@@ -22,39 +25,47 @@ public partial class ProjectSecretsViewModel : ReactiveObject, IDisposable
 
     public ObservableCollection<ProjectSecretViewModel> Secrets { get; } = [];
 
-    public ProjectSecretsViewModel(Guid projectId, FleetApiClient client)
+    public ProjectSecretsViewModel(
+        Guid projectId,
+        FleetApiClient client,
+        IConnectedFleetClientContext clientContext,
+        INotificationService notificationService)
     {
         _projectId = projectId;
         _client = client;
+        this.clientContext = clientContext;
 
         var canAdd = this.WhenAnyValue(x => x.NewName, x => x.NewValue,
             (n, v) => !string.IsNullOrWhiteSpace(n) && !string.IsNullOrWhiteSpace(v));
 
-        RefreshCommand = ReactiveCommand.CreateFromTask(LoadAsync);
+        RefreshCommand = ReactiveCommand.CreateFromTask(Load);
         AddCommand = ReactiveCommand.CreateFromTask(AddAsync, canAdd);
 
-        _disposables.Add(RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
+        _disposables.Add(RefreshCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot load project secrets")));
         _disposables.Add(AddCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
     }
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result>> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> AddCommand { get; }
     public void Dispose() => _disposables.Dispose();
 
-    private async Task LoadAsync()
+    private async Task<Maybe<Result>> Load()
     {
         IsLoading = true;
         Error = null;
         try
         {
-            var secrets = await _client.GetProjectSecretsAsync(_projectId);
-            ObservableCollectionSync.Sync(
-                Secrets,
-                secrets,
-                secret => secret.Id,
-                viewModel => viewModel.Secret.Id,
-                secret => new ProjectSecretViewModel(secret, _projectId, _client, this),
-                (viewModel, secret) => viewModel.ApplySecretUpdate(secret));
+            return await clientContext.Require().Bind(async client =>
+            {
+                var secrets = await client.GetProjectSecretsAsync(_projectId);
+                ObservableCollectionSync.Sync(
+                    Secrets,
+                    secrets,
+                    secret => secret.Id,
+                    viewModel => viewModel.Secret.Id,
+                    secret => new ProjectSecretViewModel(secret, _projectId, client, this),
+                    (viewModel, secret) => viewModel.ApplySecretUpdate(secret));
+            });
         }
         finally
         {

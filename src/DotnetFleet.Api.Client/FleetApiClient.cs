@@ -117,6 +117,13 @@ public class FleetApiClient
         return await response.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
     }
 
+    public async Task<SessionResponse?> GetSession()
+    {
+        using var response = await http.GetAsync("/api/auth/session");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<SessionResponse>(JsonOptions);
+    }
+
     // ── Projects ──────────────────────────────────────────────────────────────
 
     public async Task<List<Project>> GetProjectsAsync() =>
@@ -395,6 +402,7 @@ public class FleetApiClient
     }
 
     public record LoginResponse(string Token, string Username, string Role);
+    public record SessionResponse(string Username, string Role);
 
     public record WorkerInfo(
         Guid Id,

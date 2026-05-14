@@ -1,4 +1,5 @@
 using static BCrypt.Net.BCrypt;
+using System.Security.Claims;
 using DotnetFleet.Coordinator.Auth;
 using DotnetFleet.Core.Domain;
 using DotnetFleet.Core.Interfaces;
@@ -13,6 +14,7 @@ public static class AuthEndpoints
         var group = app.MapGroup("/api/auth");
 
         group.MapPost("/login", Login);
+        group.MapGet("/session", Session).RequireAuthorization();
         group.MapPost("/users", CreateUser).RequireAuthorization("Admin");
         group.MapGet("/users", ListUsers).RequireAuthorization("Admin");
         group.MapDelete("/users/{id:guid}", DeleteUser).RequireAuthorization("Admin");
@@ -29,6 +31,13 @@ public static class AuthEndpoints
 
         var token = jwt.GenerateToken(user);
         return Results.Ok(new { token, username = user.Username, role = user.Role.ToString() });
+    }
+
+    private static IResult Session(HttpContext httpContext)
+    {
+        var username = httpContext.User.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
+        var role = httpContext.User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        return Results.Ok(new { username, role });
     }
 
     private static async Task<IResult> CreateUser(

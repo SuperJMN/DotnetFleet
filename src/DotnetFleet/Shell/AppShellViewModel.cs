@@ -1,9 +1,12 @@
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using CSharpFunctionalExtensions;
+using DotnetFleet.Api.Client;
 using DotnetFleet.ViewModels;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI;
 using Zafiro.UI.Shell;
 
 namespace DotnetFleet.Shell;
@@ -17,7 +20,7 @@ public partial class AppShellViewModel : ReactiveObject, IDisposable
     [Reactive] private string? _backendVersion;
     [Reactive] private string? _backendEndpoint;
 
-    public AppShellViewModel(IShell shell, IBackendHealthMonitor health, AppBootstrapper bootstrapper)
+    public AppShellViewModel(IShell shell, IBackendHealthMonitor health, AppBootstrapper bootstrapper, INotificationService notificationService)
     {
         Shell = shell;
 
@@ -38,8 +41,10 @@ public partial class AppShellViewModel : ReactiveObject, IDisposable
             });
         _disposables.Add(sub);
 
-        ReconnectCommand = ReactiveCommand.CreateFromTask(bootstrapper.ShowConnectAsync);
-        LogoutCommand = ReactiveCommand.CreateFromTask(bootstrapper.LogoutAsync);
+        ReconnectCommand = ReactiveCommand.CreateFromTask(bootstrapper.ShowConnect);
+        LogoutCommand = ReactiveCommand.CreateFromTask(bootstrapper.Logout);
+        _disposables.Add(ReconnectCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Connection failed")));
+        _disposables.Add(LogoutCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Sign in failed")));
     }
 
     public void EnsureInitialSection()
@@ -51,8 +56,8 @@ public partial class AppShellViewModel : ReactiveObject, IDisposable
     }
 
     public IShell Shell { get; }
-    public ReactiveCommand<Unit, Unit> ReconnectCommand { get; }
-    public ReactiveCommand<Unit, Unit> LogoutCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result<FleetApiClient>>> ReconnectCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result<FleetApiClient>>> LogoutCommand { get; }
 
     public void Dispose() => _disposables.Dispose();
 }

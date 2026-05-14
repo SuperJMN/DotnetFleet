@@ -4,6 +4,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Avalonia.Media;
+using CSharpFunctionalExtensions;
 using DotnetFleet.Api.Client;
 using DotnetFleet.Core.Domain;
 using ReactiveUI;
@@ -19,9 +20,11 @@ namespace DotnetFleet.ViewModels;
 public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisposable
 {
     private readonly FleetApiClient _client;
+    private readonly IConnectedFleetClientContext clientContext;
     private readonly INavigator _navigator;
     private readonly IFileSystemPicker _fileSystemPicker;
     private readonly IDialog _dialog;
+    private readonly INotificationService notificationService;
     private readonly CompositeDisposable _disposables = [];
     private readonly BehaviorSubject<object> _header;
 
@@ -34,30 +37,38 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
 
     public ObservableCollection<JobViewModel> Jobs { get; } = [];
 
-    public ProjectDetailViewModel(Project project, FleetApiClient client, INavigator navigator, IFileSystemPicker fileSystemPicker, IDialog dialog)
+    public ProjectDetailViewModel(
+        Project project,
+        FleetApiClient client,
+        IConnectedFleetClientContext clientContext,
+        INavigator navigator,
+        IFileSystemPicker fileSystemPicker,
+        IDialog dialog,
+        INotificationService notificationService)
     {
         Project = project;
         _client = client;
+        this.clientContext = clientContext;
         _navigator = navigator;
         _fileSystemPicker = fileSystemPicker;
         _dialog = dialog;
+        this.notificationService = notificationService;
+        ProjectSecrets = new ProjectSecretsViewModel(project.Id, client, clientContext, notificationService);
+        BuildOptions = new PackageBuildOptionsViewModel(project.Id, clientContext);
 
-        ProjectSecrets = new ProjectSecretsViewModel(project.Id, client);
-        BuildOptions = new PackageBuildOptionsViewModel(project.Id, client);
-
-        RefreshCommand = ReactiveCommand.CreateFromTask(LoadJobsAsync);
-        DeployCommand = ReactiveCommand.CreateFromTask(DeployAsync);
-        BuildPackagesCommand = ReactiveCommand.CreateFromTask(ShowBuildPackagesDialogAsync);
-        ClearFinishedJobsCommand = ReactiveCommand.CreateFromTask(ClearFinishedJobsAsync);
+        RefreshCommand = ReactiveCommand.CreateFromTask(LoadJobs);
+        DeployCommand = ReactiveCommand.CreateFromTask(Deploy);
+        BuildPackagesCommand = ReactiveCommand.CreateFromTask(ShowBuildPackagesDialog);
+        ClearFinishedJobsCommand = ReactiveCommand.CreateFromTask(ClearFinishedJobs);
         EditCommand = ReactiveCommand.Create(() =>
         {
             _navigator.Go(() => new EditProjectViewModel(Project, _client, _navigator, projectsForRefresh: null));
         });
 
-        _disposables.Add(RefreshCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
-        _disposables.Add(DeployCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
-        _disposables.Add(BuildPackagesCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
-        _disposables.Add(ClearFinishedJobsCommand.ThrownExceptions.Subscribe(ex => Error = ex.Message));
+        _disposables.Add(RefreshCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot load project")));
+        _disposables.Add(DeployCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot queue deploy")));
+        _disposables.Add(BuildPackagesCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot queue build")));
+        _disposables.Add(ClearFinishedJobsCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot clear builds")));
         _header = new BehaviorSubject<object>(CreateHeader());
         Header = _header.AsObservable();
     }
@@ -73,10 +84,10 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
             new HeaderAction("Project Secrets", "mdi-dots-horizontal", ProjectSecrets),
             new HeaderAction("Edit", "mdi-pencil", EditCommand));
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
-    public ReactiveCommand<Unit, Unit> DeployCommand { get; }
-    public ReactiveCommand<Unit, Unit> BuildPackagesCommand { get; }
-    public ReactiveCommand<Unit, Unit> ClearFinishedJobsCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result>> RefreshCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result>> DeployCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result>> BuildPackagesCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result>> ClearFinishedJobsCommand { get; }
     public ReactiveCommand<Unit, Unit> EditCommand { get; }
     public IObservable<object> Header { get; }
     public void Dispose()
@@ -86,29 +97,32 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
         _header.Dispose();
     }
 
-    private async Task LoadJobsAsync()
+    private async Task<Maybe<Result>> LoadJobs()
     {
         IsLoading = true;
         Error = null;
         try
         {
-            var projectTask = _client.GetProjectAsync(Project.Id);
-            var jobsTask = _client.GetProjectJobsAsync(Project.Id);
+            return await clientContext.Require().Bind(async client =>
+            {
+                var projectTask = client.GetProjectAsync(Project.Id);
+                var jobsTask = client.GetProjectJobsAsync(Project.Id);
 
-            await Task.WhenAll(projectTask, jobsTask);
+                await Task.WhenAll(projectTask, jobsTask);
 
-            var project = await projectTask;
-            if (project is not null)
-                ApplyProjectUpdate(project);
+                var project = await projectTask;
+                if (project is not null)
+                    ApplyProjectUpdate(project);
 
-            var jobs = await jobsTask;
-            ObservableCollectionSync.Sync(
-                Jobs,
-                jobs.OrderByDescending(j => j.EnqueuedAt),
-                job => job.Id,
-                viewModel => viewModel.Job.Id,
-                job => new JobViewModel(job, _client, _navigator, this, _fileSystemPicker),
-                (viewModel, job) => viewModel.ApplyJobUpdate(job));
+                var jobs = await jobsTask;
+                ObservableCollectionSync.Sync(
+                    Jobs,
+                    jobs.OrderByDescending(j => j.EnqueuedAt),
+                    job => job.Id,
+                    viewModel => viewModel.Job.Id,
+                    job => new JobViewModel(job, client, _navigator, this, _fileSystemPicker, clientContext: clientContext, notificationService: notificationService),
+                    (viewModel, job) => viewModel.ApplyJobUpdate(job));
+            });
         }
         finally
         {
@@ -116,25 +130,30 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
         }
     }
 
-    private async Task DeployAsync()
+    private async Task<Maybe<Result>> Deploy()
     {
         Error = null;
-        var job = await _client.EnqueueDeployAsync(Project.Id);
-        Jobs.Insert(0, new JobViewModel(job, _client, _navigator, this, _fileSystemPicker));
+        return await clientContext.Require().Bind(async client =>
+        {
+            var job = await client.EnqueueDeployAsync(Project.Id);
+            Jobs.Insert(0, new JobViewModel(job, client, _navigator, this, _fileSystemPicker, clientContext: clientContext, notificationService: notificationService));
+        });
     }
 
-    private async Task ShowBuildPackagesDialogAsync()
+    private async Task<Maybe<Result>> ShowBuildPackagesDialog()
     {
         _ = BuildOptions.LoadPackageProjects();
 
         ICloseable? closeDialog = null;
+        var result = Maybe.From(Result.Success());
         var queueCommand = ReactiveCommand.CreateFromTask(async () =>
         {
             var request = BuildOptions.CreateRequest();
             if (request is null) return;
 
-            await QueuePackageBuildAsync(request);
-            closeDialog?.Close();
+            result = await QueuePackageBuild(request);
+            if (result.HasNoValue || result.Value.IsSuccess)
+                closeDialog?.Close();
         });
         queueCommand.ThrownExceptions.Subscribe(ex => BuildOptions.Error = ex.Message);
 
@@ -151,19 +170,34 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
                     new Settings { IsDefault = true, Role = OptionRole.Primary }),
             };
         }, size: DialogSize.Wide);
+
+        return result;
     }
 
-    private async Task QueuePackageBuildAsync(PackageBuildRequest request)
+    private async Task<Maybe<Result>> QueuePackageBuild(PackageBuildRequest request)
     {
         Error = null;
-        var job = await _client.EnqueuePackageBuildAsync(Project.Id, request);
-        Jobs.Insert(0, new JobViewModel(job, _client, _navigator, this, _fileSystemPicker));
+        return await clientContext.Require().Bind(async client =>
+        {
+            var job = await client.EnqueuePackageBuildAsync(Project.Id, request);
+            Jobs.Insert(0, new JobViewModel(job, client, _navigator, this, _fileSystemPicker, clientContext: clientContext, notificationService: notificationService));
+        });
     }
 
-    private async Task ClearFinishedJobsAsync()
+    private async Task<Maybe<Result>> ClearFinishedJobs()
     {
-        await _client.DeleteFinishedProjectJobsAsync(Project.Id);
-        await LoadJobsAsync();
+        return await clientContext.Require().Bind(async client =>
+        {
+            await client.DeleteFinishedProjectJobsAsync(Project.Id);
+            var jobs = await client.GetProjectJobsAsync(Project.Id);
+            ObservableCollectionSync.Sync(
+                Jobs,
+                jobs.OrderByDescending(j => j.EnqueuedAt),
+                job => job.Id,
+                viewModel => viewModel.Job.Id,
+                job => new JobViewModel(job, client, _navigator, this, _fileSystemPicker, clientContext: clientContext, notificationService: notificationService),
+                (viewModel, job) => viewModel.ApplyJobUpdate(job));
+        });
     }
 
     private void ApplyProjectUpdate(Project updated)
@@ -179,16 +213,16 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
 public partial class PackageBuildOptionsViewModel : ReactiveObject
 {
     private readonly Guid _projectId;
-    private readonly FleetApiClient _client;
+    private readonly IConnectedFleetClientContext clientContext;
 
     [Reactive] private bool _isLoading;
     [Reactive] private string? _error;
     [Reactive] private string _packageProject = "";
 
-    public PackageBuildOptionsViewModel(Guid projectId, FleetApiClient client)
+    public PackageBuildOptionsViewModel(Guid projectId, IConnectedFleetClientContext clientContext)
     {
         _projectId = projectId;
-        _client = client;
+        this.clientContext = clientContext;
 
         foreach (var platform in PackagePlatformViewModel.CreateDefaults())
             PackagePlatforms.Add(platform);
@@ -214,7 +248,11 @@ public partial class PackageBuildOptionsViewModel : ReactiveObject
         IsLoading = true;
         try
         {
-            var projects = await _client.GetPackageProjectsAsync(_projectId);
+            var projectResult = await clientContext.Require().Bind(client => client.GetPackageProjectsAsync(_projectId));
+            if (projectResult.HasNoValue || projectResult.Value.IsFailure)
+                return;
+
+            var projects = projectResult.Value.Value;
             PackageProjects.Clear();
             foreach (var project in projects)
                 PackageProjects.Add(project);
@@ -389,9 +427,11 @@ public partial class PackageTargetOptionViewModel : ReactiveObject
 public partial class JobViewModel : ReactiveObject
 {
     private readonly FleetApiClient _client;
+    private readonly IConnectedFleetClientContext? clientContext;
     private readonly INavigator _navigator;
     private readonly ProjectDetailViewModel? _projectDetail;
     private readonly IFileSystemPicker? _fileSystemPicker;
+    private readonly INotificationService? notificationService;
 
     public DeploymentJob Job { get; private set; }
     private string? projectName;
@@ -411,13 +451,17 @@ public partial class JobViewModel : ReactiveObject
         INavigator navigator,
         ProjectDetailViewModel? projectDetail = null,
         IFileSystemPicker? fileSystemPicker = null,
-        string? projectName = null)
+        string? projectName = null,
+        IConnectedFleetClientContext? clientContext = null,
+        INotificationService? notificationService = null)
     {
         Job = job;
         _client = client;
+        this.clientContext = clientContext;
         _navigator = navigator;
         _projectDetail = projectDetail;
         _fileSystemPicker = fileSystemPicker;
+        this.notificationService = notificationService;
         this.projectName = projectName;
         _version = job.Version;
         _displayName = ComputeDisplayName(job.Version);
@@ -511,6 +555,16 @@ public partial class JobViewModel : ReactiveObject
 
     private void Open()
     {
-        _navigator.Go(() => new JobDetailViewModel(Job, _client, _navigator, _projectDetail, _fileSystemPicker));
+        if (clientContext is null || notificationService is null)
+            return;
+
+        _navigator.Go(() => new JobDetailViewModel(
+            Job,
+            _client,
+            clientContext,
+            _navigator,
+            _projectDetail,
+            _fileSystemPicker,
+            notificationService));
     }
 }

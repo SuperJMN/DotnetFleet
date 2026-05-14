@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Disposables;
+using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -24,9 +26,12 @@ namespace DotnetFleet.ViewModels;
 public partial class JobDetailViewModel : ReactiveObject, IDisposable
 {
     private readonly FleetApiClient _client;
+    private readonly IConnectedFleetClientContext clientContext;
+    private readonly INotificationService notificationService;
     private readonly INavigator _navigator;
     private readonly IFileSystemPicker? _fileSystemPicker;
     private readonly ProjectDetailViewModel? _parentProject;
+    private readonly CompositeDisposable disposables = [];
     private readonly SourceList<LogLine> _logs = new();
     private readonly JobPhaseTree _phaseTree = new(FormatPhaseName);
     private readonly IDisposable _filterSubscription;
@@ -74,12 +79,16 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     public JobDetailViewModel(
         DeploymentJob job,
         FleetApiClient client,
+        IConnectedFleetClientContext clientContext,
         INavigator navigator,
         ProjectDetailViewModel? parentProject = null,
-        IFileSystemPicker? fileSystemPicker = null)
+        IFileSystemPicker? fileSystemPicker = null,
+        INotificationService notificationService = null!)
     {
         Job = job;
         _client = client;
+        this.clientContext = clientContext;
+        this.notificationService = notificationService;
         _navigator = navigator;
         _fileSystemPicker = fileSystemPicker;
         _parentProject = parentProject;
@@ -92,9 +101,9 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         ToggleDetailedLogCommand = ReactiveCommand.Create(ToggleDetailedLog);
         CancelJobCommand = ReactiveCommand.CreateFromTask(CancelJobAsync,
             this.WhenAnyValue(x => x.CanCancel));
-        RefreshArtifactsCommand.ThrownExceptions.Subscribe(ex => ErrorMessage = ex.Message);
-        RefreshCommand = ReactiveCommand.CreateFromTask(() => RefreshSnapshotAsync(default));
-        RefreshCommand.ThrownExceptions.Subscribe(_ => { });
+        RefreshArtifactsCommand.ThrownExceptions.Subscribe(ex => ErrorMessage = ex.Message).DisposeWith(disposables);
+        RefreshCommand = ReactiveCommand.CreateFromTask(() => RefreshSnapshot(default));
+        RefreshCommand.Results().HandleErrorsWith(this.notificationService, Maybe.From("Cannot refresh job")).DisposeWith(disposables);
 
         var minSeverityChanges = this.WhenAnyValue(x => x.MinSeverity);
 
@@ -111,7 +120,8 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             .Throttle(TimeSpan.FromMilliseconds(300))
             .DistinctUntilChanged()
             .ObserveOn(RxSchedulers.MainThreadScheduler)
-            .Subscribe(OnSearchTextChanged);
+            .Subscribe(OnSearchTextChanged)
+            .DisposeWith(disposables);
 
         if (job.Status is JobStatus.Running or JobStatus.Queued or JobStatus.Assigned)
         {
@@ -124,14 +134,14 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         }
     }
 
-    private async Task RefreshSnapshotAsync(CancellationToken ct)
+    private async Task<Maybe<Result>> RefreshSnapshot(CancellationToken ct)
     {
-        try
+        return await clientContext.Require().Bind(async client =>
         {
-            var phasesTask = _client.GetJobPhasesAsync(Job.Id);
-            var jobTask = _client.GetJobAsync(Job.Id);
+            var phasesTask = client.GetJobPhasesAsync(Job.Id);
+            var jobTask = client.GetJobAsync(Job.Id);
             var artifactsTask = Job.Kind == JobKind.PackageBuild
-                ? _client.GetJobArtifactsAsync(Job.Id)
+                ? client.GetJobArtifactsAsync(Job.Id)
                 : Task.FromResult<List<PackageArtifact>>([]);
 
             await Task.WhenAll(phasesTask, jobTask, artifactsTask);
@@ -151,8 +161,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
                 this.RaisePropertyChanged(nameof(HasPhases));
                 this.RaisePropertyChanged(nameof(CurrentPhaseDisplay));
             });
-        }
-        catch { /* ignore transient fetch errors */ }
+        });
     }
 
     /// <summary>
@@ -184,7 +193,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     }
 
     public ReactiveCommand<Unit, Unit> CopyLogsCommand { get; }
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result>> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshArtifactsCommand { get; }
     public ReactiveCommand<Unit, Unit> NextSearchResultCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleDetailedLogCommand { get; }
@@ -425,6 +434,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     {
         _cts?.Cancel();
         _cts?.Dispose();
+        disposables.Dispose();
         _filterSubscription.Dispose();
         _phaseTree.Dispose();
         _logs.Dispose();

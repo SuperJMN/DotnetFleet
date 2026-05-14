@@ -1,4 +1,5 @@
 using System.Reactive.Linq;
+using CSharpFunctionalExtensions;
 using DotnetFleet.Api.Client;
 using DotnetFleet.ViewModels;
 using ReactiveUI;
@@ -20,13 +21,19 @@ public partial class LoginDialogViewModel : ReactiveObject
     {
         _client = client;
         _settings = settings;
+        var credentials = settings.GetCredentials();
+        if (credentials is not null)
+        {
+            _username = credentials.Username;
+            _password = credentials.Password;
+        }
     }
 
     public IObservable<bool> CanLogin => this.WhenAnyValue(
         x => x.Username, x => x.Password, x => x.IsBusy,
         (u, p, busy) => !busy && !string.IsNullOrWhiteSpace(u) && !string.IsNullOrWhiteSpace(p));
 
-    public async Task<bool> TryLoginAsync()
+    public async Task<Result> TryLogin()
     {
         Error = null;
         IsBusy = true;
@@ -36,23 +43,26 @@ public partial class LoginDialogViewModel : ReactiveObject
             if (result is null)
             {
                 Error = "Login failed — no token returned.";
-                return false;
+                return Result.Failure(Error);
             }
 
             _settings.SetToken(result.Token);
+            _settings.SetCredentials(Username, Password);
             _client.SetToken(result.Token);
-            return true;
+            return Result.Success();
         }
         catch (Exception ex)
         {
             Error = ex.Message.Contains("401") || ex.Message.Contains("Unauthorized")
                 ? "Invalid username or password."
                 : $"Login error: {ex.Message}";
-            return false;
+            return Result.Failure(Error);
         }
         finally
         {
             IsBusy = false;
         }
     }
+
+    public async Task<bool> TryLoginAsync() => (await TryLogin()).IsSuccess;
 }

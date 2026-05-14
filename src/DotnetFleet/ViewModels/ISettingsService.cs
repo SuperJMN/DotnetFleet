@@ -10,18 +10,27 @@ public interface ISettingsService
     string? GetToken();
     void SetToken(string? token);
     void ClearToken();
+    LoginCredentials? GetCredentials();
+    void SetCredentials(string username, string password);
+    void ClearCredentials();
 }
+
+public sealed record LoginCredentials(string Username, string Password);
 
 public class InMemorySettingsService : ISettingsService
 {
     private string? _endpoint;
     private string? _token;
+    private LoginCredentials? credentials;
 
     public string? GetEndpoint() => _endpoint;
     public void SetEndpoint(string? endpoint) => _endpoint = endpoint;
     public string? GetToken() => _token;
     public void SetToken(string? token) => _token = token;
     public void ClearToken() => _token = null;
+    public LoginCredentials? GetCredentials() => credentials;
+    public void SetCredentials(string username, string password) => credentials = new LoginCredentials(username, password);
+    public void ClearCredentials() => credentials = null;
 }
 
 public class FileSettingsService : ISettingsService
@@ -39,6 +48,28 @@ public class FileSettingsService : ISettingsService
     public string? GetToken() => _data.GetValueOrDefault("token");
     public void SetToken(string? value) { _data["token"] = value; Save(); }
     public void ClearToken() { _data.Remove("token"); Save(); }
+    public LoginCredentials? GetCredentials()
+    {
+        var username = _data.GetValueOrDefault("username");
+        var password = _data.GetValueOrDefault("password");
+        return string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)
+            ? null
+            : new LoginCredentials(username, password);
+    }
+
+    public void SetCredentials(string username, string password)
+    {
+        _data["username"] = username;
+        _data["password"] = password;
+        Save();
+    }
+
+    public void ClearCredentials()
+    {
+        _data.Remove("username");
+        _data.Remove("password");
+        Save();
+    }
 
     private void Load()
     {

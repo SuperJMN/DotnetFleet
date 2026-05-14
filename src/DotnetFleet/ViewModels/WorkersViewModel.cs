@@ -3,9 +3,11 @@ using System.Globalization;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using CSharpFunctionalExtensions;
 using DotnetFleet.Api.Client;
 using ReactiveUI;
 using ReactiveUI.SourceGenerators;
+using Zafiro.UI;
 using Zafiro.UI.Navigation;
 using Zafiro.UI.Shell.Utils;
 
@@ -14,40 +16,43 @@ namespace DotnetFleet.ViewModels;
 [Section(name: "Workers", icon: "mdi-server", sortIndex: 2)]
 public partial class WorkersViewModel : ReactiveObject, IHaveHeader, IDisposable
 {
-    private readonly FleetApiClient _client;
+    private readonly IConnectedFleetClientContext clientContext;
     private readonly CompositeDisposable _disposables = [];
 
     [Reactive] private bool _isLoading;
 
     public ObservableCollection<WorkerItemViewModel> Workers { get; } = [];
 
-    public WorkersViewModel(FleetApiClient client)
+    public WorkersViewModel(IConnectedFleetClientContext clientContext, INotificationService notificationService)
     {
-        _client = client;
+        this.clientContext = clientContext;
         RefreshCommand = ReactiveCommand.CreateFromTask(LoadAsync);
-        _disposables.Add(RefreshCommand.ThrownExceptions.Subscribe(_ => { }));
+        _disposables.Add(RefreshCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot load workers")));
 
         Header = Observable.Return<object>(new SectionHeader("Workers",
             new HeaderAction("Refresh", "mdi-refresh", RefreshCommand)));
     }
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<Unit, Maybe<Result>> RefreshCommand { get; }
     public IObservable<object> Header { get; }
     public void Dispose() => _disposables.Dispose();
 
-    private async Task LoadAsync()
+    private async Task<Maybe<Result>> LoadAsync()
     {
         IsLoading = true;
         try
         {
-            var workers = await _client.GetWorkersAsync();
-            ObservableCollectionSync.Sync(
-                Workers,
-                workers,
-                worker => worker.Id,
-                viewModel => viewModel.Worker.Id,
-                worker => new WorkerItemViewModel(worker, _client),
-                (viewModel, worker) => viewModel.ApplyWorkerUpdate(worker));
+            return await clientContext.Require().Bind(async client =>
+            {
+                var workers = await client.GetWorkersAsync();
+                ObservableCollectionSync.Sync(
+                    Workers,
+                    workers,
+                    worker => worker.Id,
+                    viewModel => viewModel.Worker.Id,
+                    worker => new WorkerItemViewModel(worker, client),
+                    (viewModel, worker) => viewModel.ApplyWorkerUpdate(worker));
+            });
         }
         finally
         {

@@ -11,6 +11,7 @@ using DotnetFleet.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Zafiro.Avalonia.Dialogs;
+using Zafiro.Avalonia.Dialogs.Implementations;
 using Zafiro.Avalonia.Icons;
 using Zafiro.Avalonia.Misc;
 using Zafiro.Avalonia.Storage;
@@ -54,6 +55,7 @@ public class App : Application
         services.AddAllSectionsFromAttributes(logger);
 
         services.AddSingleton(DialogService.Create());
+        services.AddSingleton<INotificationService>(sp => new NotificationDialog(sp.GetRequiredService<IDialog>()));
         services.AddSingleton<IFileSystemPicker>(_ => new AvaloniaFileSystemPicker(() =>
         {
             var lifetime = Current?.ApplicationLifetime;
@@ -68,6 +70,8 @@ public class App : Application
         }));
         services.AddTransient<ConnectDialogViewModel>();
         services.AddTransient<LoginDialogViewModel>();
+        services.AddSingleton<IFleetClientConnectionFlow, FleetClientConnectionFlow>();
+        services.AddSingleton<IConnectedFleetClientContext, ConnectedFleetClientContext>();
         services.AddSingleton<AppBootstrapper>();
         services.AddSingleton<AppShellViewModel>();
 
