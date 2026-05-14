@@ -41,14 +41,18 @@
                             BorderThickness="1"
                             CornerRadius="6">
                         <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
-                            <Border Width="56"
-                                    Height="56"
-                                    Padding="6"
-                                    CornerRadius="6"
-                                    ClipToBounds="True"
-                                    Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
-                                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                                    BorderThickness="1">
+                            <EnhancedButton Width="56"
+                                            Height="56"
+                                            Padding="6"
+                                            CornerRadius="6"
+                                            ClipToBounds="True"
+                                            HorizontalContentAlignment="Stretch"
+                                            VerticalContentAlignment="Stretch"
+                                            Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+                                            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                            BorderThickness="1"
+                                            ToolTip.Tip="Change icon"
+                                            Command="{Binding ChangeIconCommand}">
                                 <Grid>
                                     <Image Source="{Binding ProjectIconBytes, Converter={x:Static converters:ProjectIconConverters.ByteArrayToBitmap}}"
                                            Stretch="Uniform"
@@ -61,7 +65,7 @@
                                                 VerticalAlignment="Center"
                                                 IsVisible="{Binding HasNoProjectIcon}" />
                                 </Grid>
-                            </Border>
+                            </EnhancedButton>
                             <StackPanel Spacing="4" MinWidth="200" FlexPanel.Grow="1">
                                 <TextBlock Text="{Binding Project.Name}"
                                            FontWeight="SemiBold" FontSize="14" />
@@ -78,9 +82,6 @@
                             </StackPanel>
                             <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
                                 <EnhancedButton Content="Open" Icon="{Icon mdi-folder-open-outline}" Classes="Primary" Command="{Binding OpenCommand}" />
-                                <EnhancedButton ToolTip.Tip="Change icon" Command="{Binding ChangeIconCommand}">
-                                    <icons:Icon Value="mdi-image-outline" />
-                                </EnhancedButton>
                                 <EnhancedButton ToolTip.Tip="Reset icon" Command="{Binding ResetIconCommand}">
                                     <icons:Icon Value="mdi-refresh" />
                                 </EnhancedButton>

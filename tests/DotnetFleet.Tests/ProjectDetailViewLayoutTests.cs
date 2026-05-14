@@ -54,6 +54,27 @@ public class ProjectDetailViewLayoutTests
     }
 
     [Fact]
+    public void ProjectsView_ShouldChangeIconFromTheProjectIcon()
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", "ProjectsView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        var iconButtons = document.Descendants(axaml + "EnhancedButton")
+            .Where(button => button.Attribute("Command")?.Value == "{Binding ChangeIconCommand}")
+            .ToList();
+
+        iconButtons.Should().ContainSingle();
+        var iconButton = iconButtons.Single();
+        iconButton.Attribute("Width")?.Value.Should().Be("56");
+        iconButton.Attribute("Height")?.Value.Should().Be("56");
+        iconButton.Attribute("ToolTip.Tip")?.Value.Should().Be("Change icon");
+        iconButton.Descendants(axaml + "Image")
+            .Select(image => image.Attribute("IsVisible")?.Value)
+            .Should()
+            .Contain("{Binding HasProjectIcon}");
+    }
+
+    [Fact]
     public void PackageBuildOptionsDialog_ShouldExposeBuildTargetOptions()
     {
         var document = XDocument.Load(ProjectFilePath("Views", "PackageBuildOptionsView.axaml"));
