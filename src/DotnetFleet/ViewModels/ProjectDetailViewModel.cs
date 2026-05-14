@@ -514,7 +514,7 @@ public partial class JobViewModel : ReactiveObject
     }
 
     private string ComputeDisplayName(string? version) =>
-        string.IsNullOrWhiteSpace(version) ? Job.Id.ToString("N")[..8] : version!;
+        string.IsNullOrWhiteSpace(version) ? Job.Id.ToString("N")[..8] : VersionDisplay.Visible(version)!;
 
     public string StatusText => Job.Status switch
     {

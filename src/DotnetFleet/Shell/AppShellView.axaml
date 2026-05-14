@@ -45,7 +45,8 @@
                                    VerticalAlignment="Center"
                                    Opacity="0.6"
                                    FontSize="11"
-                                   Text="{Binding BackendVersion, StringFormat='v{0}'}"
+                                   Text="{Binding BackendDisplayVersion}"
+                                   ToolTip.Tip="{Binding BackendVersion}"
                                    IsVisible="{Binding BackendVersion, Converter={x:Static ObjectConverters.IsNotNull}}" />
                         <TextBlock Grid.Column="4"
                                    VerticalAlignment="Center"

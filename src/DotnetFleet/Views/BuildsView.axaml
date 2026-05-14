@@ -55,7 +55,8 @@
                                             FlexPanel.Grow="1">
                                     <TextBlock FontSize="13"
                                                FontWeight="SemiBold"
-                                               Text="{Binding DisplayName}" />
+                                               Text="{Binding DisplayName}"
+                                               ToolTip.Tip="{Binding Version}" />
                                     <TextBlock FontSize="12"
                                                Opacity="0.6">
                                         <Run Text="{Binding ProjectName}" />

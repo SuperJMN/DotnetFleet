@@ -37,6 +37,7 @@ public partial class AppShellViewModel : ReactiveObject, IDisposable
                 BackendHealth = s.State;
                 BackendHealthMessage = s.Message;
                 BackendVersion = s.Version;
+                this.RaisePropertyChanged(nameof(BackendDisplayVersion));
                 BackendEndpoint = s.Endpoint?.ToString().TrimEnd('/');
             });
         _disposables.Add(sub);
@@ -58,6 +59,7 @@ public partial class AppShellViewModel : ReactiveObject, IDisposable
     public IShell Shell { get; }
     public ReactiveCommand<Unit, Maybe<Result<FleetApiClient>>> ReconnectCommand { get; }
     public ReactiveCommand<Unit, Maybe<Result<FleetApiClient>>> LogoutCommand { get; }
+    public string? BackendDisplayVersion => VersionDisplay.VisibleWithPrefix(BackendVersion);
 
     public void Dispose() => _disposables.Dispose();
 }

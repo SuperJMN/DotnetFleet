@@ -30,12 +30,12 @@ public class JobViewModelDisplayNameTests
     [Fact]
     public void Initial_version_on_the_underlying_job_drives_the_display_name()
     {
-        var job = new DeploymentJob { Id = Guid.NewGuid(), Version = "2.0.1" };
+        var job = new DeploymentJob { Id = Guid.NewGuid(), Version = "2.0.1+58f1c495e00554b14859456e8557aa98b9b177dd" };
 
         var vm = BuildVm(job);
 
         vm.DisplayName.Should().Be("2.0.1");
-        vm.Version.Should().Be("2.0.1");
+        vm.Version.Should().Be("2.0.1+58f1c495e00554b14859456e8557aa98b9b177dd");
     }
 
     [Fact]
@@ -51,11 +51,11 @@ public class JobViewModelDisplayNameTests
                 seen.Add(vm.DisplayName);
         };
 
-        var renamed = new DeploymentJob { Id = job.Id, Version = "3.4.5-rc.1" };
+        var renamed = new DeploymentJob { Id = job.Id, Version = "3.4.5-rc.1+build.91" };
         vm.ApplyJobUpdate(renamed);
 
         vm.DisplayName.Should().Be("3.4.5-rc.1");
-        vm.Version.Should().Be("3.4.5-rc.1");
+        vm.Version.Should().Be("3.4.5-rc.1+build.91");
         seen.Should().Contain("3.4.5-rc.1");
     }
 

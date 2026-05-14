@@ -40,8 +40,9 @@
                                     <TextBlock Text="{Binding EmbeddedLabel}"
                                                Opacity="0.5" FontSize="12"
                                                VerticalAlignment="Center" />
-                                    <TextBlock Text="{Binding Worker.Version, StringFormat='v{0}'}"
+                                    <TextBlock Text="{Binding DisplayVersion}"
                                                IsVisible="{Binding Worker.Version, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                               ToolTip.Tip="{Binding Worker.Version}"
                                                Opacity="0.6" FontSize="11"
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis"

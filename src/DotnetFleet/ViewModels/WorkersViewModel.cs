@@ -94,6 +94,7 @@ public partial class WorkerItemViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(StatusLabel));
         this.RaisePropertyChanged(nameof(EmbeddedLabel));
         this.RaisePropertyChanged(nameof(CapabilityLabel));
+        this.RaisePropertyChanged(nameof(DisplayVersion));
     }
 
     public string StatusLabel => Worker.Status switch
@@ -105,6 +106,8 @@ public partial class WorkerItemViewModel : ReactiveObject
     };
 
     public string EmbeddedLabel => Worker.IsEmbedded ? "(embedded)" : string.Empty;
+
+    public string? DisplayVersion => VersionDisplay.VisibleWithPrefix(Worker.Version);
 
     public string CapabilityLabel
     {
