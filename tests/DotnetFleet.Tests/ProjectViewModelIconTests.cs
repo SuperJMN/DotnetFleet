@@ -96,6 +96,64 @@ public sealed class ProjectViewModelIconTests
         vm.ProjectIconBytes.Should().Equal(Png);
     }
 
+    [Fact]
+    public async Task ChangeProjectIcon_WhenUploadIsRejected_DoesNotThrow()
+    {
+        var project = new Project { Id = Guid.NewGuid(), Name = "App" };
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest));
+        var client = new FleetApiClient(handler, handler);
+        client.SetBaseAddress("http://localhost:5000");
+        var picker = Substitute.For<IFileSystemPicker>();
+        var file = new NamedByteSource("icon.png", ByteSource.FromBytes(Png));
+        picker.PickForOpen(Arg.Any<FileTypeFilter[]>())
+            .Returns(Task.FromResult(Result.Success(Maybe.From<INamedByteSource>(file))));
+        var vm = new ProjectViewModel(
+            project,
+            client,
+            Substitute.For<Zafiro.UI.Navigation.INavigator>(),
+            null!,
+            picker,
+            Substitute.For<Zafiro.Avalonia.Dialogs.IDialog>());
+
+        var act = () => vm.ChangeProjectIcon();
+
+        await act.Should().NotThrowAsync();
+        vm.HasProjectIcon.Should().BeFalse();
+        vm.ProjectIconBytes.Should().BeNull();
+        vm.IconError.Should().Contain("Could not update project icon");
+    }
+
+    [Fact]
+    public async Task ChangeProjectIcon_RejectsUnsupportedFileWithoutUploading()
+    {
+        var project = new Project { Id = Guid.NewGuid(), Name = "App" };
+        var uploadAttempted = false;
+        var handler = new StubHandler(_ =>
+        {
+            uploadAttempted = true;
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        var client = new FleetApiClient(handler, handler);
+        client.SetBaseAddress("http://localhost:5000");
+        var picker = Substitute.For<IFileSystemPicker>();
+        var file = new NamedByteSource("icon.svg", ByteSource.FromBytes([1, 2, 3]));
+        picker.PickForOpen(Arg.Any<FileTypeFilter[]>())
+            .Returns(Task.FromResult(Result.Success(Maybe.From<INamedByteSource>(file))));
+        var vm = new ProjectViewModel(
+            project,
+            client,
+            Substitute.For<Zafiro.UI.Navigation.INavigator>(),
+            null!,
+            picker,
+            Substitute.For<Zafiro.Avalonia.Dialogs.IDialog>());
+
+        await vm.ChangeProjectIcon();
+
+        uploadAttempted.Should().BeFalse();
+        vm.HasProjectIcon.Should().BeFalse();
+        vm.IconError.Should().Be("Unsupported icon format. Use PNG, JPEG or ICO.");
+    }
+
     private static FleetApiClient CreateClient(Guid projectId, HttpResponseMessage iconResponse)
     {
         var handler = new StubHandler(request =>

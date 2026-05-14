@@ -63,6 +63,11 @@
                                 <TextBlock Text="{Binding Project.GitUrl}"
                                            Opacity="0.6" FontSize="12"
                                            TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding IconError}"
+                                           Foreground="Red"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           IsVisible="{Binding IconError, Converter={x:Static ObjectConverters.IsNotNull}}" />
                                 <TextBlock FontSize="11" Opacity="0.5">
                                     <Run Text="Branch: " />
                                     <Run Text="{Binding Project.Branch}" />

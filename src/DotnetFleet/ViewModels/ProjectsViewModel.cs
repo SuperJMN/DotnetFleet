@@ -124,6 +124,7 @@ public partial class ProjectViewModel : ReactiveObject
     [Reactive] private bool _hasProjectIcon;
     [Reactive] private bool _hasNoProjectIcon = true;
     [Reactive] private bool _isIconLoading;
+    [Reactive] private string? _iconError;
 
     public ProjectViewModel(
         Project project,
@@ -203,30 +204,73 @@ public partial class ProjectViewModel : ReactiveObject
 
     public async Task ChangeProjectIcon()
     {
+        IconError = null;
         var pickResult = await _fileSystemPicker.PickForOpen(
             new FileTypeFilter("Image files", ["*.png", "*.jpg", "*.jpeg", "*.ico"]),
             new FileTypeFilter("All files", ["*"]));
 
-        if (pickResult.IsFailure || pickResult.Value.HasNoValue)
+        if (pickResult.IsFailure)
+        {
+            IconError = pickResult.Error;
+            return;
+        }
+
+        if (pickResult.Value.HasNoValue)
             return;
 
         var file = pickResult.Value.Value;
-        await using var stream = file.ToStream();
-        using var buffer = new MemoryStream();
-        await stream.CopyToAsync(buffer);
-        var bytes = buffer.ToArray();
+        if (!ProjectIconPolicy.IsSupportedFileName(file.Name))
+        {
+            IconError = $"Unsupported icon format. Use {ProjectIconPolicy.SupportedFormatsDescription}.";
+            return;
+        }
 
-        await _client.SetProjectIcon(Project.Id, bytes, file.Name);
-        loadedIconProjectId = Project.Id;
-        SetProjectIcon(bytes);
+        if (file.Length.HasValue && file.Length.Value > ProjectIconPolicy.MaxIconBytes)
+        {
+            IconError = IconTooLargeMessage();
+            return;
+        }
+
+        var readResult = await file.ReadAll();
+        if (readResult.IsFailure)
+        {
+            IconError = readResult.Error;
+            return;
+        }
+
+        var bytes = readResult.Value;
+        if (bytes.Length > ProjectIconPolicy.MaxIconBytes)
+        {
+            IconError = IconTooLargeMessage();
+            return;
+        }
+
+        try
+        {
+            await _client.SetProjectIcon(Project.Id, bytes, file.Name);
+            loadedIconProjectId = Project.Id;
+            SetProjectIcon(bytes);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            IconError = $"Could not update project icon: {ex.Message}";
+        }
     }
 
     public async Task ResetProjectIcon()
     {
-        await _client.ResetProjectIcon(Project.Id);
-        loadedIconProjectId = null;
-        SetProjectIcon(null);
-        await LoadProjectIcon();
+        IconError = null;
+        try
+        {
+            await _client.ResetProjectIcon(Project.Id);
+            loadedIconProjectId = null;
+            SetProjectIcon(null);
+            await LoadProjectIcon();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            IconError = $"Could not reset project icon: {ex.Message}";
+        }
     }
 
     private void Open()
@@ -251,4 +295,7 @@ public partial class ProjectViewModel : ReactiveObject
         HasProjectIcon = ProjectIconBytes is not null;
         HasNoProjectIcon = ProjectIconBytes is null;
     }
+
+    private static string IconTooLargeMessage() =>
+        $"Icon must be {ProjectIconPolicy.MaxIconBytes:N0} bytes or smaller.";
 }

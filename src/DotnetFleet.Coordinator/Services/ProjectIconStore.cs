@@ -8,7 +8,7 @@ public sealed record ProjectIcon(byte[] Bytes, string ContentType, string Extens
 
 public sealed class ProjectIconStore
 {
-    internal const long MaxIconBytes = 1_000_000;
+    internal const long MaxIconBytes = ProjectIconPolicy.MaxIconBytes;
     private readonly string rootDir;
     private readonly ILogger<ProjectIconStore> logger;
 
@@ -141,7 +141,7 @@ public sealed class ProjectIconStore
             return null;
 
         var extension = Path.GetExtension(fileName);
-        var contentType = ContentTypeFor(extension);
+        var contentType = ProjectIconPolicy.ContentTypeForExtension(extension);
         return contentType is null ? null : new ProjectIcon(bytes, contentType, extension.ToLowerInvariant());
     }
 
@@ -167,7 +167,7 @@ public sealed class ProjectIconStore
             return null;
 
         var extension = Path.GetExtension(info.FullName);
-        var contentType = ContentTypeFor(extension);
+        var contentType = ProjectIconPolicy.ContentTypeForExtension(extension);
         if (contentType is null)
             return null;
 
@@ -190,7 +190,7 @@ public sealed class ProjectIconStore
             return null;
 
         var extension = Path.GetExtension(file);
-        var contentType = ContentTypeFor(extension);
+        var contentType = ProjectIconPolicy.ContentTypeForExtension(extension);
         return contentType is null
             ? null
             : new ProjectIcon(await File.ReadAllBytesAsync(file, ct), contentType, extension.ToLowerInvariant());
@@ -234,17 +234,6 @@ public sealed class ProjectIconStore
     {
         return IsPreferredUiIcon(path)
                || string.Equals(Path.GetExtension(path), ".ico", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? ContentTypeFor(string extension)
-    {
-        return extension.ToLowerInvariant() switch
-        {
-            ".png" => "image/png",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".ico" => "image/x-icon",
-            _ => null
-        };
     }
 
     private string ProjectDirectory(Guid projectId) =>
