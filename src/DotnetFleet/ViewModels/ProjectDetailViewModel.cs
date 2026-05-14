@@ -36,6 +36,8 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
     [Reactive] private string? _error;
 
     public ObservableCollection<JobViewModel> Jobs { get; } = [];
+    public bool HasJobHistory => Jobs.Count > 0;
+    public bool ShowEmptyJobHistory => !IsLoading && Jobs.Count == 0;
 
     public ProjectDetailViewModel(
         Project project,
@@ -100,6 +102,7 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
     private async Task<Maybe<Result>> LoadJobs()
     {
         IsLoading = true;
+        RaiseJobHistoryStateChanged();
         Error = null;
         try
         {
@@ -122,11 +125,14 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
                     viewModel => viewModel.Job.Id,
                     job => new JobViewModel(job, client, _navigator, this, _fileSystemPicker, clientContext: clientContext, notificationService: notificationService),
                     (viewModel, job) => viewModel.ApplyJobUpdate(job));
+
+                RaiseJobHistoryStateChanged();
             });
         }
         finally
         {
             IsLoading = false;
+            RaiseJobHistoryStateChanged();
         }
     }
 
@@ -137,6 +143,7 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
         {
             var job = await client.EnqueueDeployAsync(Project.Id);
             Jobs.Insert(0, new JobViewModel(job, client, _navigator, this, _fileSystemPicker, clientContext: clientContext, notificationService: notificationService));
+            RaiseJobHistoryStateChanged();
         });
     }
 
@@ -181,6 +188,7 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
         {
             var job = await client.EnqueuePackageBuildAsync(Project.Id, request);
             Jobs.Insert(0, new JobViewModel(job, client, _navigator, this, _fileSystemPicker, clientContext: clientContext, notificationService: notificationService));
+            RaiseJobHistoryStateChanged();
         });
     }
 
@@ -197,6 +205,8 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
                 viewModel => viewModel.Job.Id,
                 job => new JobViewModel(job, client, _navigator, this, _fileSystemPicker, clientContext: clientContext, notificationService: notificationService),
                 (viewModel, job) => viewModel.ApplyJobUpdate(job));
+
+            RaiseJobHistoryStateChanged();
         });
     }
 
@@ -207,6 +217,12 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
         Project = updated;
         this.RaisePropertyChanged(nameof(Project));
         _header.OnNext(CreateHeader());
+    }
+
+    private void RaiseJobHistoryStateChanged()
+    {
+        this.RaisePropertyChanged(nameof(HasJobHistory));
+        this.RaisePropertyChanged(nameof(ShowEmptyJobHistory));
     }
 }
 

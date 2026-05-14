@@ -24,63 +24,87 @@
                      Height="4"
                      Margin="0,0,0,8" />
 
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl ItemsSource="{Binding Jobs}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:JobViewModel">
-                        <Border Padding="12,8"
-                                Margin="0,2"
-                                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                                CornerRadius="4">
-                            <FlexPanel Wrap="Wrap"
-                                       Gap="12"
-                                       AlignItems="Center">
-                                <FlexPanel Wrap="NoWrap"
-                                           Gap="6"
-                                           AlignItems="Center"
-                                           VerticalAlignment="Center"
-                                           MinWidth="140">
-                                    <ContentControl Content="{Binding StatusIcon}"
-                                                    IconOptions.Fill="{Binding StatusBrush}"
-                                                    IconOptions.Size="16"
-                                                    VerticalAlignment="Center" />
-                                    <TextBlock Text="{Binding StatusText}"
-                                               Foreground="{Binding StatusBrush}"
-                                               FontWeight="SemiBold"
-                                               VerticalAlignment="Center" />
+        <Grid>
+            <Border IsVisible="{Binding ShowEmptyJobHistory}"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    CornerRadius="6"
+                    Padding="24"
+                    HorizontalAlignment="Stretch">
+                <StackPanel Spacing="6"
+                            MaxWidth="620"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="No builds or deployments yet"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="Use Queue Deploy or Queue Build above to enqueue the first run."
+                               Opacity="0.7"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                          IsVisible="{Binding HasJobHistory}">
+                <ItemsControl ItemsSource="{Binding Jobs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:JobViewModel">
+                            <Border Padding="12,8"
+                                    Margin="0,2"
+                                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                    CornerRadius="4">
+                                <FlexPanel Wrap="Wrap"
+                                           Gap="12"
+                                           AlignItems="Center">
+                                    <FlexPanel Wrap="NoWrap"
+                                               Gap="6"
+                                               AlignItems="Center"
+                                               VerticalAlignment="Center"
+                                               MinWidth="140">
+                                        <ContentControl Content="{Binding StatusIcon}"
+                                                        IconOptions.Fill="{Binding StatusBrush}"
+                                                        IconOptions.Size="16"
+                                                        VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding StatusText}"
+                                                   Foreground="{Binding StatusBrush}"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" />
+                                    </FlexPanel>
+
+                                    <StackPanel Spacing="2"
+                                                MinWidth="180"
+                                                FlexPanel.Grow="1">
+                                        <TextBlock FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding DisplayName}"
+                                                   ToolTip.Tip="{Binding Version}" />
+                                        <TextBlock FontSize="12"
+                                                   Opacity="0.6">
+                                            <Run Text="{Binding KindText}" />
+                                            <Run Text=" · Queued: " />
+                                            <Run Text="{Binding Job.EnqueuedAt}" />
+                                        </TextBlock>
+                                        <TextBlock FontSize="12"
+                                                   Opacity="0.5"
+                                                   IsVisible="{Binding Job.TriggerCommitSha, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                            <Run Text="SHA: " />
+                                            <Run Text="{Binding Job.TriggerCommitSha}" />
+                                        </TextBlock>
+                                    </StackPanel>
+
+                                    <EnhancedButton Content="View Status"
+                                                    Icon="{Icon mdi-format-list-checks}"
+                                                    Classes="Primary"
+                                                    Command="{Binding OpenCommand}" />
                                 </FlexPanel>
-
-                                <StackPanel Spacing="2"
-                                            MinWidth="180"
-                                            FlexPanel.Grow="1">
-                                    <TextBlock FontSize="13"
-                                               FontWeight="SemiBold"
-                                               Text="{Binding DisplayName}"
-                                               ToolTip.Tip="{Binding Version}" />
-                                    <TextBlock FontSize="12"
-                                               Opacity="0.6">
-                                        <Run Text="{Binding KindText}" />
-                                        <Run Text=" · Queued: " />
-                                        <Run Text="{Binding Job.EnqueuedAt}" />
-                                    </TextBlock>
-                                    <TextBlock FontSize="12"
-                                               Opacity="0.5"
-                                               IsVisible="{Binding Job.TriggerCommitSha, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                        <Run Text="SHA: " />
-                                        <Run Text="{Binding Job.TriggerCommitSha}" />
-                                    </TextBlock>
-                                </StackPanel>
-
-                                <EnhancedButton Content="View Status"
-                                                Icon="{Icon mdi-format-list-checks}"
-                                                Classes="Primary"
-                                                Command="{Binding OpenCommand}" />
-                            </FlexPanel>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
 
     </DockPanel>
 

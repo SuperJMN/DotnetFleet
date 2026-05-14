@@ -21,6 +21,36 @@ public class ProjectDetailViewLayoutTests
     }
 
     [Fact]
+    public void ProjectDetailView_ShouldGuideUsersWhenThereAreNoBuildsWithoutDuplicatingHeaderActions()
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", "ProjectDetailView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        document.Descendants(axaml + "Border")
+            .Select(border => border.Attribute("IsVisible")?.Value)
+            .Should()
+            .Contain("{Binding ShowEmptyJobHistory}");
+
+        document.Descendants(axaml + "ScrollViewer")
+            .Select(scrollViewer => scrollViewer.Attribute("IsVisible")?.Value)
+            .Should()
+            .Contain("{Binding HasJobHistory}");
+
+        document.Descendants(axaml + "TextBlock")
+            .Select(textBlock => textBlock.Attribute("Text")?.Value)
+            .Should()
+            .Contain([
+                "No builds or deployments yet",
+                "Use Queue Deploy or Queue Build above to enqueue the first run."
+            ]);
+
+        document.Descendants(axaml + "EnhancedButton")
+            .Select(button => button.Attribute("Content")?.Value)
+            .Should()
+            .NotContain(["Queue Deploy", "Queue Build"]);
+    }
+
+    [Fact]
     public void BuildsView_ShouldShowAllBuildsWithProjectContext()
     {
         var document = XDocument.Load(ProjectFilePath("Views", "BuildsView.axaml"));
@@ -72,6 +102,41 @@ public class ProjectDetailViewLayoutTests
             .Select(image => image.Attribute("IsVisible")?.Value)
             .Should()
             .Contain("{Binding HasProjectIcon}");
+    }
+
+    [Fact]
+    public void ProjectsView_ShouldKeepProjectActionsTogether()
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", "ProjectsView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        var actionRows = document.Descendants(axaml + "FlexPanel")
+            .Where(panel => panel.Attribute("HorizontalAlignment")?.Value == "Right")
+            .Where(panel => panel.Attribute("VerticalAlignment")?.Value == "Bottom")
+            .Where(panel => panel.Attribute("JustifyContent")?.Value == "End")
+            .ToList();
+
+        actionRows.Should().ContainSingle();
+        actionRows.Single()
+            .Descendants(axaml + "EnhancedButton")
+            .Select(button => button.Attribute("Command")?.Value)
+            .Should()
+            .Contain(["{Binding ResetIconCommand}", "{Binding EditCommand}", "{Binding DeleteCommand}"]);
+
+        var openCards = document.Descendants(axaml + "EnhancedButton")
+            .Where(button => button.Attribute("Command")?.Value == "{Binding OpenCommand}")
+            .ToList();
+
+        openCards.Should().ContainSingle();
+        var openCard = openCards.Single();
+        openCard.Attribute("Content")?.Value.Should().BeNull();
+        openCard.Attribute("ToolTip.Tip")?.Value.Should().Be("Open project");
+        openCard.Attribute("HorizontalContentAlignment")?.Value.Should().Be("Stretch");
+
+        document.Descendants(axaml + "EnhancedButton")
+            .Where(button => button.Attribute("Content")?.Value == "Open")
+            .Should()
+            .BeEmpty();
     }
 
     [Fact]
