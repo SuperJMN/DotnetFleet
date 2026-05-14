@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
@@ -23,7 +24,7 @@ using IOPath = System.IO.Path;
 
 namespace DotnetFleet.ViewModels;
 
-public partial class JobDetailViewModel : ReactiveObject, IDisposable
+public partial class JobDetailViewModel : ReactiveObject, IHaveHeader, IDisposable
 {
     private readonly FleetApiClient _client;
     private readonly IConnectedFleetClientContext clientContext;
@@ -35,6 +36,8 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     private readonly SourceList<LogLine> _logs = new();
     private readonly JobPhaseTree _phaseTree = new(FormatPhaseName);
     private readonly IDisposable _filterSubscription;
+    private readonly BehaviorSubject<object> _header;
+    private bool isDisposed;
 
     public DeploymentJob Job { get; private set; }
 
@@ -94,6 +97,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         _parentProject = parentProject;
         _statusText = FormatStatus(job.Status);
         _errorMessage = job.ErrorMessage;
+        _canCancel = IsJobCancelable(job);
 
         CopyLogsCommand = ReactiveCommand.CreateFromTask(CopyLogsToClipboard);
         RefreshArtifactsCommand = ReactiveCommand.CreateFromTask(() => RefreshArtifactsAsync(default));
@@ -104,6 +108,8 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         RefreshArtifactsCommand.ThrownExceptions.Subscribe(ex => ErrorMessage = ex.Message).DisposeWith(disposables);
         RefreshCommand = ReactiveCommand.CreateFromTask(() => RefreshSnapshot(default));
         RefreshCommand.Results().HandleErrorsWith(this.notificationService, Maybe.From("Cannot refresh job")).DisposeWith(disposables);
+        _header = new BehaviorSubject<object>(CreateHeader());
+        Header = _header.AsObservable();
 
         var minSeverityChanges = this.WhenAnyValue(x => x.MinSeverity);
 
@@ -125,7 +131,6 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 
         if (job.Status is JobStatus.Running or JobStatus.Queued or JobStatus.Assigned)
         {
-            CanCancel = true;
             StartStreaming();
         }
         else
@@ -133,6 +138,8 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             LoadLogsAsync().ConfigureAwait(false);
         }
     }
+
+    public IObservable<object> Header { get; }
 
     private async Task<Maybe<Result>> RefreshSnapshot(CancellationToken ct)
     {
@@ -226,6 +233,7 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     {
         IsDetailedLogVisible = !IsDetailedLogVisible;
         this.RaisePropertyChanged(nameof(DetailedLogButtonText));
+        PublishHeader();
     }
 
     private async Task CopyLogsToClipboard()
@@ -247,10 +255,12 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             await _client.CancelJobAsync(Job.Id);
             CanCancel = false;
             StatusText = JobStatus.Cancelled.ToString();
+            PublishHeader();
         }
         catch (Exception ex)
         {
             StatusText = $"Cancel failed: {ex.Message}";
+            PublishHeader();
         }
     }
 
@@ -267,10 +277,12 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
     {
         _cts = new CancellationTokenSource();
         IsStreaming = true;
+        PublishHeader();
         _ = StreamLogsAsync(_cts.Token).ContinueWith(_ =>
         {
             IsStreaming = false;
             CanCancel = false;
+            PublishHeader();
         });
     }
 
@@ -285,7 +297,11 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
             if (evt.Type == FleetApiClient.SseEventType.Status)
             {
                 if (Enum.TryParse<JobStatus>(evt.Data, out var status))
-                    Avalonia.Threading.Dispatcher.UIThread.Post(() => StatusText = FormatStatus(status));
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        StatusText = FormatStatus(status);
+                        PublishHeader();
+                    });
                 continue;
             }
 
@@ -344,13 +360,13 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         ErrorMessage = updated.ErrorMessage;
         CurrentPhase = updated.CurrentPhase;
         CurrentPhaseStartedAt = updated.CurrentPhaseStartedAt;
-        CanCancel = updated.Status is JobStatus.Running or JobStatus.Queued or JobStatus.Assigned
-                    && updated.CancellationRequestedAt is null;
+        CanCancel = IsJobCancelable(updated);
 
         this.RaisePropertyChanged(nameof(Job));
         this.RaisePropertyChanged(nameof(HasError));
         this.RaisePropertyChanged(nameof(HasCurrentPhase));
         this.RaisePropertyChanged(nameof(CurrentPhaseDisplay));
+        PublishHeader();
     }
 
     private void ApplyArtifacts(IReadOnlyList<PackageArtifact> artifacts)
@@ -423,6 +439,59 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
         _ => status.ToString()
     };
 
+    private SectionHeader CreateHeader()
+    {
+        var actions = new List<HeaderAction>();
+
+        if (CanCancel)
+            actions.Add(new HeaderAction("Cancel", "mdi-stop-circle-outline", CancelJobCommand, isDestructive: true));
+
+        actions.Add(new HeaderAction(DetailedLogButtonText, "mdi-text-box-search-outline", ToggleDetailedLogCommand));
+        actions.Add(new HeaderAction("Refresh", "mdi-refresh", RefreshCommand));
+
+        return new SectionHeader(HeaderTitle, HeaderSubtitle, actions.ToArray());
+    }
+
+    private string HeaderTitle => $"{HeaderKind} {HeaderJobName}";
+
+    private string HeaderKind => Job.Kind == JobKind.PackageBuild ? "Package build" : "Deployment";
+
+    private string HeaderJobName =>
+        string.IsNullOrWhiteSpace(Job.Version)
+            ? Job.Id.ToString("N")[..8]
+            : VersionDisplay.Visible(Job.Version) ?? Job.Version;
+
+    private string HeaderSubtitle
+    {
+        get
+        {
+            var parts = new List<string> { $"Status: {StatusText}" };
+
+            if (HasCurrentPhase)
+                parts.Add($"Current phase: {CurrentPhaseDisplay}");
+
+            if (IsStreaming)
+                parts.Add("Streaming");
+
+            if (Job.EnqueuedAt != default)
+                parts.Add($"Queued: {Job.EnqueuedAt:g}");
+
+            return string.Join(" | ", parts);
+        }
+    }
+
+    private void PublishHeader()
+    {
+        if (isDisposed)
+            return;
+
+        _header.OnNext(CreateHeader());
+    }
+
+    private static bool IsJobCancelable(DeploymentJob job) =>
+        job.Status is JobStatus.Running or JobStatus.Queued or JobStatus.Assigned
+        && job.CancellationRequestedAt is null;
+
     private void FeedBatchToTerminal(List<LogLine> batch)
     {
         if (TerminalModel is null) return;
@@ -432,12 +501,14 @@ public partial class JobDetailViewModel : ReactiveObject, IDisposable
 
     public void Dispose()
     {
+        isDisposed = true;
         _cts?.Cancel();
         _cts?.Dispose();
         disposables.Dispose();
         _filterSubscription.Dispose();
         _phaseTree.Dispose();
         _logs.Dispose();
+        _header.Dispose();
     }
 
     public sealed class PackageArtifactViewModel : ReactiveObject

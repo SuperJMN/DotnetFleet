@@ -4,6 +4,10 @@
              xmlns:icons="clr-namespace:Optris.Icons.Avalonia;assembly=Optris.Icons.Avalonia"
              xmlns:converters="clr-namespace:DotnetFleet.Converters"
              x:Class="DotnetFleet.Views.ProjectsView"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             d:DesignHeight="500"
+             d:DesignWidth="400"
              x:DataType="vm:ProjectsViewModel">
 
     <Interaction.Behaviors>
@@ -37,8 +41,9 @@
                             BorderThickness="1"
                             CornerRadius="6">
                         <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
-                            <Border Width="40"
-                                    Height="40"
+                            <Border Width="56"
+                                    Height="56"
+                                    Padding="6"
                                     CornerRadius="6"
                                     ClipToBounds="True"
                                     Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
@@ -46,11 +51,11 @@
                                     BorderThickness="1">
                                 <Grid>
                                     <Image Source="{Binding ProjectIconBytes, Converter={x:Static converters:ProjectIconConverters.ByteArrayToBitmap}}"
-                                           Stretch="UniformToFill"
+                                           Stretch="Uniform"
                                            IsVisible="{Binding HasProjectIcon}" />
                                     <icons:Icon Value="mdi-folder-outline"
-                                                Width="22"
-                                                Height="22"
+                                                Width="28"
+                                                Height="28"
                                                 Opacity="0.65"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"

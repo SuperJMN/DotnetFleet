@@ -52,7 +52,15 @@
                                 <zac:EnhancedButton Content="{Binding Text}"
                                                     Command="{Binding Command}"
                                                     Classes="Primary"
-                                                    IsVisible="{Binding IsPrimary}">
+                                                    IsVisible="{Binding IsPrimaryCommand}">
+                                    <zac:EnhancedButton.Icon>
+                                        <icons:Icon Value="{Binding IconCode}" />
+                                    </zac:EnhancedButton.Icon>
+                                </zac:EnhancedButton>
+                                <zac:EnhancedButton Content="{Binding Text}"
+                                                    Command="{Binding Command}"
+                                                    Classes="Destructive"
+                                                    IsVisible="{Binding IsDestructiveCommand}">
                                     <zac:EnhancedButton.Icon>
                                         <icons:Icon Value="{Binding IconCode}" />
                                     </zac:EnhancedButton.Icon>

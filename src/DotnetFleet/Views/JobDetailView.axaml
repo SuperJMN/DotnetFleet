@@ -13,29 +13,6 @@
 
     <DockPanel Margin="16">
 
-        <!-- Header: wraps on narrow widths -->
-        <FlexPanel DockPanel.Dock="Top"
-                   Wrap="Wrap" Gap="12" AlignItems="Center"
-                   Margin="0,0,0,12">
-            <StackPanel Spacing="2" VerticalAlignment="Center"
-                        FlexPanel.Grow="1" MinWidth="200">
-                <TextBlock FontSize="16" FontWeight="Bold" TextTrimming="CharacterEllipsis">
-                    <Run Text="Job — " />
-                    <Run Text="{Binding Job.Id}" />
-                </TextBlock>
-                <TextBlock FontSize="13">
-                    <Run Text="Status: " />
-                    <Run Text="{Binding StatusText}" FontWeight="SemiBold" />
-                </TextBlock>
-            </StackPanel>
-            <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
-                <EnhancedButton Content="Cancel" Icon="{Icon mdi-stop-circle-outline}" Classes="Destructive" Command="{Binding CancelJobCommand}"
-                                IsVisible="{Binding CanCancel}" />
-                <TextBlock Text="Streaming…" FontSize="11" Opacity="0.6"
-                           IsVisible="{Binding IsStreaming}" VerticalAlignment="Center" />
-            </FlexPanel>
-        </FlexPanel>
-
         <!-- Error banner: shown when the job has an ErrorMessage (Failed/Cancelled). -->
         <Border DockPanel.Dock="Top"
                 IsVisible="{Binding HasError}"
@@ -73,20 +50,11 @@
             </FlexPanel>
         </Border>
 
-        <FlexPanel DockPanel.Dock="Top"
-                   Wrap="Wrap"
-                   Gap="8"
-                   AlignItems="Center"
-                   Margin="0,0,0,8">
-            <TextBlock Text="Phase status"
-                       FontSize="14"
-                       FontWeight="SemiBold"
-                       FlexPanel.Grow="1" />
-            <EnhancedButton Content="{Binding DetailedLogButtonText}"
-                            Icon="{Icon mdi-text-box-search-outline}"
-                            Classes="Secondary"
-                            Command="{Binding ToggleDetailedLogCommand}" />
-        </FlexPanel>
+        <TextBlock DockPanel.Dock="Top"
+                   Text="Phase status"
+                   FontSize="14"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,8" />
 
         <Expander DockPanel.Dock="Top"
                   Header="Package artifacts"

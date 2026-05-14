@@ -23,12 +23,13 @@ public sealed class SectionHeader
 
 public sealed class HeaderAction
 {
-    public HeaderAction(string text, string iconCode, ICommand command, bool isPrimary = false)
+    public HeaderAction(string text, string iconCode, ICommand command, bool isPrimary = false, bool isDestructive = false)
     {
         Text = text;
         IconCode = iconCode;
         Command = command;
         IsPrimary = isPrimary;
+        IsDestructive = isDestructive;
     }
 
     public HeaderAction(string text, string iconCode, object flyoutContent)
@@ -42,7 +43,10 @@ public sealed class HeaderAction
     public string IconCode { get; }
     public ICommand? Command { get; }
     public bool IsPrimary { get; }
+    public bool IsDestructive { get; }
     public object? FlyoutContent { get; }
     public bool HasFlyout => FlyoutContent is not null;
-    public bool IsSecondaryCommand => !IsPrimary && !HasFlyout;
+    public bool IsPrimaryCommand => IsPrimary && !IsDestructive && !HasFlyout;
+    public bool IsDestructiveCommand => IsDestructive && !HasFlyout;
+    public bool IsSecondaryCommand => !IsPrimary && !IsDestructive && !HasFlyout;
 }
