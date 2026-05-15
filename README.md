@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src/DotnetFleet/Assets/SmallLogo.png" alt="DotnetDeployer.Fleet logo" width="96" />
+<img src="assets/logo.png" alt="DotnetDeployer.Fleet logo" width="96" />
 
 # DotnetDeployer.Fleet
 
