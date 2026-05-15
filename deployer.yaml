@@ -3,7 +3,7 @@ version: 1
 github:
   enabled: true
   owner: SuperJMN
-  repo: DotnetFleet
+  repo: DotnetDeployer.Fleet
   token:
     from: env
     name: GITHUB_TOKEN
@@ -43,4 +43,5 @@ nuget:
     from: env
     name: NUGET_API_KEY
   packages:
+    - project: src/DotnetDeployer.Fleet.Tool/DotnetDeployer.Fleet.Tool.csproj
     - project: src/DotnetFleet.Tool/DotnetFleet.Tool.csproj

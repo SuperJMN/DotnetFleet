@@ -5,11 +5,11 @@ using DotnetFleet.WorkerService;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 
-var rootCommand = new RootCommand("DotnetFleet — self-hosted CI/CD for .NET projects");
+var rootCommand = new RootCommand($"{ToolIdentity.ProductName} — run DotnetDeployer on managed machines");
 
 // ── fleet coordinator ────────────────────────────────────────────────────────
 
-var coordinatorCommand = new Command("coordinator", "Start the DotnetFleet coordinator (API server)");
+var coordinatorCommand = new Command("coordinator", $"Start the {ToolIdentity.ProductName} coordinator (API server)");
 
 var portOption = new Option<int>("--port", "-p")
 {
@@ -165,7 +165,7 @@ coordinatorCommand.Subcommands.Add(coordStatusCommand);
 
 // ── fleet worker ─────────────────────────────────────────────────────────────
 
-var workerCommand = new Command("worker", "Start a DotnetFleet worker that connects to a coordinator");
+var workerCommand = new Command("worker", $"Start a {ToolIdentity.ProductName} worker that connects to a coordinator");
 
 var coordinatorUrlOption = new Option<string?>("--coordinator", "-c")
 {
@@ -225,7 +225,7 @@ workerCommand.SetAction(async (parseResult, cancellationToken) =>
         .CreateLogger();
 
     Console.WriteLine();
-    Console.WriteLine($"  DotnetFleet Worker \"{workerName}\"");
+    Console.WriteLine($"  {ToolIdentity.ProductName} Worker \"{workerName}\"");
     Console.WriteLine($"  Coordinator: {resolved.Url}");
     Console.WriteLine($"  Data dir:    {dataDir}");
     Console.WriteLine();
@@ -347,7 +347,7 @@ workerCommand.Subcommands.Add(workerUnregisterCommand);
 
 // ── fleet update ─────────────────────────────────────────────────────────────
 
-var updateCommand = new Command("update", "Update DotnetFleet.Tool and restart local coordinator/worker services");
+var updateCommand = new Command("update", $"Update {ToolIdentity.CurrentPackageId} and restart local coordinator/worker services");
 
 var skipToolUpdateOption = new Option<bool>("--skip-tool-update")
 {
@@ -355,7 +355,7 @@ var skipToolUpdateOption = new Option<bool>("--skip-tool-update")
 };
 var updateVersionOption = new Option<string?>("--version")
 {
-    Description = "Pin a specific DotnetFleet.Tool version (default: latest)"
+    Description = $"Pin a specific {ToolIdentity.CurrentPackageId} version (default: latest)"
 };
 var updatePrereleaseOption = new Option<bool>("--prerelease")
 {
@@ -387,11 +387,11 @@ updateCommand.SetAction(async (parseResult, _) =>
 
 // ── fleet version ────────────────────────────────────────────────────────────
 
-var versionCommand = new Command("version", "Show DotnetFleet version");
+var versionCommand = new Command("version", $"Show {ToolIdentity.ProductName} version");
 versionCommand.SetAction(_ =>
 {
     var version = typeof(FleetConfig).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-    Console.WriteLine($"DotnetFleet {version}");
+    Console.WriteLine($"{ToolIdentity.ProductName} {version}");
 });
 
 // ── Root ─────────────────────────────────────────────────────────────────────
@@ -411,7 +411,7 @@ static void PrintCoordinatorBanner(int port, string registrationToken, string ad
 
     Console.WriteLine();
     Console.WriteLine("  ╔══════════════════════════════════════════════════════════════╗");
-    Console.WriteLine("  ║                   DotnetFleet Coordinator                    ║");
+    Console.WriteLine("  ║              DotnetDeployer.Fleet Coordinator                ║");
     Console.WriteLine("  ╠══════════════════════════════════════════════════════════════╣");
     Console.WriteLine($"  ║  Listening on:       {Truncate(listenUrl, 37),-37} ║");
     Console.WriteLine($"  ║  Admin credentials:  admin / {Truncate(adminPassword, 28),-28} ║");

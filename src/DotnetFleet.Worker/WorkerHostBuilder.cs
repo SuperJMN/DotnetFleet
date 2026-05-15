@@ -32,7 +32,7 @@ public static class WorkerHostBuilder
 
         builder.Services.AddWindowsService(serviceOptions =>
         {
-            serviceOptions.ServiceName = "DotnetFleet Worker";
+            serviceOptions.ServiceName = "DotnetDeployer.Fleet Worker";
         });
 
         builder.Configuration.AddEnvironmentVariables(prefix: "FLEET_");

@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace DotnetFleet.Tool;
 
 /// <summary>
-/// Installs, uninstalls and queries DotnetFleet services as OS services.
+/// Installs, uninstalls and queries DotnetDeployer.Fleet services as OS services.
 /// Linux uses systemd; Windows uses the Service Control Manager.
 /// </summary>
 public static class ServiceInstaller
@@ -83,7 +83,7 @@ public static class ServiceInstaller
         var dotnetRoot = ResolveDotnetRoot();
         var args = BuildCoordinatorArgs(opts);
         var unit = GenerateUnit(
-            description: "DotnetFleet Coordinator",
+            description: $"{ToolIdentity.ProductName} Coordinator",
             execStart: $"{fleetPath} coordinator {args}",
             workingDirectory: opts.DataDir,
             user: user,
@@ -196,7 +196,7 @@ public static class ServiceInstaller
         var dotnetRoot = ResolveDotnetRoot();
         var args = BuildWorkerArgs(opts);
         var unit = GenerateUnit(
-            description: $"DotnetFleet Worker ({opts.Name})",
+            description: $"{ToolIdentity.ProductName} Worker ({opts.Name})",
             execStart: $"{fleetPath} worker {args}",
             workingDirectory: opts.DataDir,
             user: user,
@@ -251,7 +251,7 @@ public static class ServiceInstaller
     public record UpdateOptions(bool SkipToolUpdate, string? Version, bool IncludePrerelease);
 
     /// <summary>
-    /// Updates the DotnetFleet.Tool global tool and restarts any locally installed
+    /// Updates the installed Fleet global tool and restarts any locally installed
     /// fleet-coordinator / fleet-worker-* systemd services so they pick up the new binary.
     /// </summary>
     public static async Task UpdateLocalServicesAsync(UpdateOptions opts)
@@ -268,8 +268,8 @@ public static class ServiceInstaller
         var installedServices = DiscoverInstalledFleetServices();
 
         Console.WriteLine();
-        Console.WriteLine("  Updating DotnetFleet on this machine");
-        Console.WriteLine("  ────────────────────────────────────");
+        Console.WriteLine($"  Updating {ToolIdentity.ProductName} on this machine");
+        Console.WriteLine("  ───────────────────────────────────────────");
         if (installedServices.Count == 0)
         {
             Console.WriteLine("  (no local fleet services found)");
@@ -300,14 +300,14 @@ public static class ServiceInstaller
 
             Console.WriteLine();
             if (versionBefore == null && versionAfter != null)
-                Console.WriteLine($"  ✓ DotnetFleet.Tool installed: {versionAfter}");
+                Console.WriteLine($"  ✓ {ToolIdentity.CurrentPackageId} installed: {versionAfter}");
             else if (versionBefore != null && versionAfter != null &&
                      !string.Equals(versionBefore, versionAfter, StringComparison.Ordinal))
-                Console.WriteLine($"  ✓ DotnetFleet.Tool updated: {versionBefore} → {versionAfter}");
+                Console.WriteLine($"  ✓ {ToolIdentity.CurrentPackageId} updated: {versionBefore} → {versionAfter}");
             else if (versionAfter != null)
-                Console.WriteLine($"  • DotnetFleet.Tool already up to date ({versionAfter}); nothing to update.");
+                Console.WriteLine($"  • {ToolIdentity.CurrentPackageId} already up to date ({versionAfter}); nothing to update.");
             else
-                Console.WriteLine("  • DotnetFleet.Tool: could not determine installed version.");
+                Console.WriteLine($"  • {ToolIdentity.CurrentPackageId}: could not determine installed version.");
         }
         else
         {
@@ -390,7 +390,7 @@ public static class ServiceInstaller
 
     private static async Task<int> RunDotnetToolCommandAsync(string verb, string? version, bool includePrerelease)
     {
-        var toolArgs = new List<string> { "tool", verb, "-g", "DotnetFleet.Tool" };
+        var toolArgs = new List<string> { "tool", verb, "-g", ToolIdentity.CurrentPackageId };
         if (!string.IsNullOrWhiteSpace(version))
         {
             toolArgs.Add("--version");
@@ -425,7 +425,7 @@ public static class ServiceInstaller
     }
 
     /// <summary>
-    /// Returns the installed version of the DotnetFleet.Tool global tool, or null if it
+    /// Returns the installed version of the current Fleet global tool, or null if it
     /// is not installed or the version could not be determined.
     /// </summary>
     private static async Task<string?> GetInstalledToolVersionAsync()
@@ -443,17 +443,7 @@ public static class ServiceInstaller
             if (proc.ExitCode != 0)
                 return null;
 
-            foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var trimmed = line.Trim();
-                // Format: "<package id>      <version>      <commands>"
-                var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 2 &&
-                    string.Equals(parts[0], "dotnetfleet.tool", StringComparison.OrdinalIgnoreCase))
-                {
-                    return parts[1];
-                }
-            }
+            return ToolIdentity.FindInstalledVersion(stdout, ToolIdentity.CurrentPackageId);
         }
         catch
         {
@@ -735,7 +725,7 @@ public static class ServiceInstaller
 
     /// <summary>
     /// Returns the absolute path to the 'fleet' global tool for <paramref name="targetUser"/>,
-    /// auto-installing the DotnetFleet.Tool global tool if we're currently running from an
+    /// auto-installing the Fleet global tool if we're currently running from an
     /// ephemeral location (e.g. dnx / NuGet package cache). systemd needs a stable ExecStart path.
     /// </summary>
     private static async Task<string> EnsureFleetGlobalToolAsync(string targetUser)
@@ -755,19 +745,19 @@ public static class ServiceInstaller
         var verb = File.Exists(globalToolPath) ? "update" : "install";
 
         Console.WriteLine();
-        Console.WriteLine($"  • DotnetFleet.Tool global tool is required for systemd services.");
+        Console.WriteLine($"  • {ToolIdentity.CurrentPackageId} global tool is required for systemd services.");
         if (ephemeral)
             Console.WriteLine($"    Detected ephemeral execution path: {currentExe}");
-        Console.WriteLine($"    Running 'dotnet tool {verb} -g DotnetFleet.Tool{(pinnedVersion != null ? $" --version {pinnedVersion}" : "")}' for user '{targetUser}'...");
+        Console.WriteLine($"    Running 'dotnet tool {verb} -g {ToolIdentity.CurrentPackageId}{(pinnedVersion != null ? $" --version {pinnedVersion}" : "")}' for user '{targetUser}'...");
         Console.WriteLine();
 
         var exitCode = await RunDotnetToolCommandAsync(verb, pinnedVersion, includePrerelease: false);
         if (exitCode != 0)
         {
             throw new InvalidOperationException(
-                $"Failed to install DotnetFleet.Tool global tool for user '{targetUser}' " +
+                $"Failed to install {ToolIdentity.CurrentPackageId} global tool for user '{targetUser}' " +
                 $"(dotnet tool {verb} exited with code {exitCode}). " +
-                "Install it manually with: dotnet tool install -g DotnetFleet.Tool");
+                $"Install it manually with: dotnet tool install -g {ToolIdentity.CurrentPackageId}");
         }
 
         if (!File.Exists(globalToolPath))
@@ -805,16 +795,8 @@ public static class ServiceInstaller
 
     private static string? ExtractToolVersionFromPath(string path)
     {
-        // dnx / NuGet layout: .../packages/dotnetfleet.tool/<version>/tools/<tfm>/<rid>/...
-        const string marker = "/dotnetfleet.tool/";
-        var idx = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (idx < 0) return null;
-        var rest = path[(idx + marker.Length)..];
-        var slash = rest.IndexOf('/');
-        if (slash <= 0) return null;
-        var candidate = rest[..slash];
-        // Sanity check: looks like a SemVer-ish version (starts with a digit).
-        return candidate.Length > 0 && char.IsDigit(candidate[0]) ? candidate : null;
+        // dnx / NuGet layout: .../packages/<package-id>/<version>/tools/<tfm>/<rid>/...
+        return ToolIdentity.ExtractVersionFromPath(path);
     }
 
     private static string ResolveRunAsUser()

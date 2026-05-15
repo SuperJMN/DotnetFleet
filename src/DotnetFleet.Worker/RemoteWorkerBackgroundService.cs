@@ -220,7 +220,7 @@ public class RemoteWorkerBackgroundService : BackgroundService
 
             try
             {
-                await Log($"=== DotnetFleet Worker | Job {job.Id} ===");
+                await Log($"=== DotnetDeployer.Fleet Worker | Job {job.Id} ===");
                 await Log($"Project: {project.Name} | Branch: {branch}");
                 await Log($"Git URL: {project.GitUrl}");
 

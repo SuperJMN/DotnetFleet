@@ -1,8 +1,8 @@
-# DotnetFleet — Preguntas Frecuentes (FAQ)
+# DotnetDeployer.Fleet — Preguntas Frecuentes (FAQ)
 
 Recopilación de las dudas más habituales sobre instalación, operación y
-resolución de problemas en DotnetFleet. Si no encuentras la respuesta aquí,
-revisa el [README](../README.md) o abre una issue.
+resolución de problemas en DotnetDeployer.Fleet. Si no encuentras la respuesta
+aquí, revisa el [README](../README.md) o abre una issue.
 
 ---
 
@@ -27,7 +27,7 @@ El camino más rápido, asumiendo Linux + .NET 10 SDK ya instalado:
 
 ```bash
 # 1. Instala la global tool (deja el binario en ~/.dotnet/tools/fleet)
-dotnet tool install -g DotnetFleet.Tool
+dotnet tool install -g DotnetDeployer.Fleet.Tool
 
 # 2. Arranca el coordinador en primer plano (Ctrl+C para parar)
 fleet coordinator
@@ -50,7 +50,7 @@ raíz y pulsa **Deploy Now**.
 | Worker en otra máquina de la LAN               | `fleet worker --token <token>` (URL la encuentra por mDNS)                                             |
 | Sin mDNS / red restringida                     | `fleet worker --coordinator http://host:5000 --token <token> --no-discover`                            |
 | Varios workers en el mismo host                | `fleet worker --name build-01` y `fleet worker --name build-02`                                        |
-| Sin instalar la global tool                    | `dnx dotnetfleet.tool coordinator` y `dnx dotnetfleet.tool worker`                                     |
+| Sin instalar la global tool                    | `dnx dotnetdeployer.fleet.tool coordinator` y `dnx dotnetdeployer.fleet.tool worker`                                     |
 | Cambiar puerto / contraseña / data-dir         | `fleet coordinator --port 8080 --admin-password 's3cret' --data-dir /opt/fleet`                        |
 
 ### Y para producción
@@ -62,10 +62,11 @@ Salta a [Servicios](#servicios-instalación-gestión-y-actualización).
 
 ## Instalación y arranque
 
-### ¿Qué necesito instalado para usar DotnetFleet?
+### ¿Qué necesito instalado para usar DotnetDeployer.Fleet?
 
 .NET 10 SDK (para `dnx`) o tener instalada la herramienta global
-`DotnetFleet.Tool`. En Linux necesitas `systemd` si quieres registrar
+`DotnetDeployer.Fleet.Tool` (o el paquete de compatibilidad `DotnetFleet.Tool`
+si ya lo tenías instalado). En Linux necesitas `systemd` si quieres registrar
 coordinador/worker como servicios. En Windows los comandos de servicio piden
 elevación UAC automáticamente; en scripts no interactivos usa una terminal
 elevada. Los repos que despliegues solo necesitan
@@ -74,7 +75,7 @@ se descarga sola).
 
 ### ¿Tengo que instalar la tool globalmente o puedo usar `dnx` siempre?
 
-Para uso puntual basta `dnx dotnetfleet.tool ...`. Para servicios instalados
+Para uso puntual basta `dnx dotnetdeployer.fleet.tool ...`. Para servicios instalados
 sí se requiere una ruta estable. En Linux la herramienta usa la global tool
 (`~/.dotnet/tools/fleet`); en Windows instala una copia de herramienta bajo
 `%ProgramData%\DotnetFleet\tools`. Si llamas a `coordinator install` o
@@ -285,11 +286,11 @@ home y verás:
 
 > You must install .NET to run this application. … .NET location: Not found
 
-> ℹ️ La autoelevación correcta para apphosts requiere **DotnetFleet.Tool
+> ℹ️ La autoelevación correcta para apphosts requiere **DotnetDeployer.Fleet.Tool
 > ≥ 0.0.36**. En versiones anteriores el wrapper duplicaba el path de la DLL
 > y `install` fallaba con "Comando o argumento no reconocido
-> '/home/.../DotnetFleet.Tool.dll'". Si lo ves, actualiza con
-> `dotnet tool update -g DotnetFleet.Tool` y reintenta.
+> '/home/.../DotnetDeployer.Fleet.Tool.dll'". Si lo ves, actualiza con
+> `dotnet tool update -g DotnetDeployer.Fleet.Tool` y reintenta.
 
 ### Gestión diaria de los servicios
 
@@ -344,7 +345,7 @@ que basta con reiniciar.
 ### Actualización manual (si prefieres control fino)
 
 ```bash
-dotnet tool update -g DotnetFleet.Tool
+dotnet tool update -g DotnetDeployer.Fleet.Tool
 sudo systemctl restart fleet-coordinator
 sudo systemctl restart fleet-worker-<nombre>
 ```
@@ -354,7 +355,7 @@ En Windows:
 ```powershell
 Stop-Service fleet-coordinator
 Stop-Service fleet-worker-<nombre>
-dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetFleet.Tool
+dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetDeployer.Fleet.Tool
 Start-Service fleet-coordinator
 Start-Service fleet-worker-<nombre>
 ```
@@ -362,7 +363,7 @@ Start-Service fleet-worker-<nombre>
 ### Rollback a una versión anterior
 
 ```bash
-dotnet tool update -g DotnetFleet.Tool --version <versión-anterior>
+dotnet tool update -g DotnetDeployer.Fleet.Tool --version <versión-anterior>
 sudo systemctl restart fleet-coordinator
 sudo systemctl restart fleet-worker-<nombre>
 ```
@@ -372,7 +373,7 @@ En Windows:
 ```powershell
 Stop-Service fleet-coordinator
 Stop-Service fleet-worker-<nombre>
-dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetFleet.Tool --version <versión-anterior>
+dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetDeployer.Fleet.Tool --version <versión-anterior>
 Start-Service fleet-coordinator
 Start-Service fleet-worker-<nombre>
 ```
@@ -393,7 +394,7 @@ plano (`fleet coordinator`, `fleet worker`) bajo el gestor que prefieras:
 
 ### ¿Hay una guía específica para Windows?
 
-Sí: [DotnetFleet on Windows](WINDOWS.md). Cubre instalación como Windows
+Sí: [DotnetDeployer.Fleet on Windows](WINDOWS.md). Cubre instalación como Windows
 Service, UAC, nombres en el Administrador de tareas, rutas en ProgramData,
 logs, firewall, actualización y troubleshooting.
 
@@ -419,7 +420,7 @@ Por ejemplo:
 fleet-worker-DESKTOP-NMC4AGI
 ```
 
-El nombre visible es `DotnetFleet Worker ({nombre})`. En **Details/Procesos**
+El nombre visible es `DotnetDeployer.Fleet Worker ({nombre})`. En **Details/Procesos**
 lo normal es ver el proceso como `fleet.exe`.
 
 Verificación por consola:
@@ -462,7 +463,7 @@ La CLI necesita el `registrationToken` para el primer registro. Si solo tienes
 credenciales admin, entra al host del coordinador y lee su `config.json`, o
 registra el worker vía API admin y guarda la respuesta en el `worker.json` del
 data-dir del worker. La guía Windows incluye el contexto operativo:
-[DotnetFleet on Windows](WINDOWS.md).
+[DotnetDeployer.Fleet on Windows](WINDOWS.md).
 
 ### ¿Cómo veo logs del worker Windows?
 
@@ -487,6 +488,9 @@ locales `fleet-coordinator` / `fleet-worker-*`. Si solo quieres reiniciar:
 fleet update --skip-tool-update
 ```
 
+Si haces una actualización manual y esa ruta venía de una instalación antigua,
+usa `DotnetFleet.Tool` como package id. `fleet update` lo detecta por ti.
+
 ### ¿Necesito abrir firewall en Windows?
 
 Solo si el coordinador corre en Windows y otros equipos deben entrar a su
@@ -495,7 +499,7 @@ necesita salida TCP hacia el coordinador.
 
 ```powershell
 New-NetFirewallRule `
-  -DisplayName "DotnetFleet Coordinator" `
+  -DisplayName "DotnetDeployer.Fleet Coordinator" `
   -Direction Inbound `
   -Protocol TCP `
   -LocalPort 5000 `
@@ -577,7 +581,7 @@ worker, caché de repos) se conserva.
 ### ¿Cómo hago rollback a una versión anterior?
 
 ```bash
-dotnet tool update -g DotnetFleet.Tool --version <versión-anterior>
+dotnet tool update -g DotnetDeployer.Fleet.Tool --version <versión-anterior>
 sudo systemctl restart fleet-coordinator
 sudo systemctl restart fleet-worker-<nombre>
 ```
@@ -587,7 +591,7 @@ En Windows:
 ```powershell
 Stop-Service fleet-coordinator
 Stop-Service fleet-worker-<nombre>
-dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetFleet.Tool --version <versión-anterior>
+dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetDeployer.Fleet.Tool --version <versión-anterior>
 Start-Service fleet-coordinator
 Start-Service fleet-worker-<nombre>
 ```
@@ -724,8 +728,8 @@ Comprueba:
    [sección de servicios](#y-si-la-autoelevación-no-funciona).
 3. **Versión < 0.0.36 con `install`.** Hubo un bug en `SudoElevation` que al
    reejecutarse con `sudo` añadía el path de la DLL como argumento, dando
-   `Comando o argumento no reconocido '/home/.../DotnetFleet.Tool.dll'`.
-   Solución: `dotnet tool update -g DotnetFleet.Tool` (≥ 0.0.36).
+   `Comando o argumento no reconocido '/home/.../DotnetDeployer.Fleet.Tool.dll'`.
+   Solución: `dotnet tool update -g DotnetDeployer.Fleet.Tool` (≥ 0.0.36).
 4. **El servicio se llama por el nombre del worker.** Si no pasas `--name`,
    usa el `hostname`. Verifica el nombre real con:
    ```bash

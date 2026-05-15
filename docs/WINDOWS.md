@@ -1,6 +1,6 @@
-# DotnetFleet on Windows
+# DotnetDeployer.Fleet on Windows
 
-This guide covers running DotnetFleet from a Windows workstation or server, including native Windows Service installation.
+This guide covers running DotnetDeployer.Fleet from a Windows workstation or server, including native Windows Service installation.
 
 ## Requirements
 
@@ -12,11 +12,11 @@ This guide covers running DotnetFleet from a Windows workstation or server, incl
 Install the CLI:
 
 ```powershell
-dotnet tool install -g DotnetFleet.Tool
+dotnet tool install -g DotnetDeployer.Fleet.Tool
 fleet version
 ```
 
-You can also use `dnx dotnetfleet.tool ...` for one-off commands.
+You can also use `dnx dotnetdeployer.fleet.tool ...` for one-off commands. Existing installs of the compatibility package `DotnetFleet.Tool` continue to work.
 
 ## Foreground Mode
 
@@ -44,7 +44,7 @@ The URL must include `http://` or `https://`.
 
 ## Install As Windows Services
 
-DotnetFleet installs native Windows Services through the Service Control Manager. If you run the command from a non-elevated terminal, Windows will show a UAC elevation prompt. For unattended scripts, start PowerShell as Administrator first.
+DotnetDeployer.Fleet installs native Windows Services through the Service Control Manager. If you run the command from a non-elevated terminal, Windows will show a UAC elevation prompt. For unattended scripts, start PowerShell as Administrator first.
 
 Install a coordinator:
 
@@ -73,8 +73,8 @@ After first registration, the worker persists its own credentials and no longer 
 
 | Component | Service name | Display name |
 |---|---|---|
-| Coordinator | `fleet-coordinator` | `DotnetFleet Coordinator` |
-| Worker | `fleet-worker-{name}` | `DotnetFleet Worker ({name})` |
+| Coordinator | `fleet-coordinator` | `DotnetDeployer.Fleet Coordinator` |
+| Worker | `fleet-worker-{name}` | `DotnetDeployer.Fleet Worker ({name})` |
 
 In Task Manager, open the **Services** tab and search by the service name, for example `fleet-worker-DESKTOP-NMC4AGI`. In **Details**, the process appears as `fleet.exe`.
 
@@ -89,7 +89,7 @@ sc.exe query fleet-worker-DESKTOP-NMC4AGI
 
 ## Data And Logs
 
-Installed Windows services use `%ProgramData%\DotnetFleet`.
+Installed Windows services still use `%ProgramData%\DotnetFleet` for compatibility with existing installations.
 
 | Item | Default path |
 |---|---|
@@ -120,7 +120,7 @@ Stop-Service fleet-worker-build-01
 Start-Service fleet-worker-build-01
 ```
 
-DotnetFleet commands:
+DotnetDeployer.Fleet commands:
 
 ```powershell
 fleet coordinator status
@@ -134,7 +134,7 @@ fleet coordinator uninstall
 
 ## Update
 
-Update the service-local tool and restart local DotnetFleet services:
+Update the service-local tool and restart local DotnetDeployer.Fleet services:
 
 ```powershell
 fleet update
@@ -157,10 +157,13 @@ Manual update:
 ```powershell
 Stop-Service fleet-coordinator
 Stop-Service fleet-worker-build-01
-dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetFleet.Tool
+dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetDeployer.Fleet.Tool
 Start-Service fleet-coordinator
 Start-Service fleet-worker-build-01
 ```
+
+If that tool path contains the compatibility package from an older install,
+update `DotnetFleet.Tool` instead. `fleet update` detects this automatically.
 
 Data under `%ProgramData%\DotnetFleet` is preserved across updates.
 
@@ -168,7 +171,7 @@ Data under `%ProgramData%\DotnetFleet` is preserved across updates.
 
 ### The service is not visible in Task Manager
 
-Search the **Services** tab for `fleet-worker-{name}`, not only `DotnetFleet`. The display name is `DotnetFleet Worker ({name})`, and the process in **Details** is `fleet.exe`.
+Search the **Services** tab for `fleet-worker-{name}`, not only the product name. The display name is `DotnetDeployer.Fleet Worker ({name})`, and the process in **Details** is `fleet.exe`.
 
 Verify through SCM:
 
@@ -220,7 +223,7 @@ For a coordinator running on Windows, allow inbound TCP traffic to the chosen po
 
 ```powershell
 New-NetFirewallRule `
-  -DisplayName "DotnetFleet Coordinator" `
+  -DisplayName "DotnetDeployer.Fleet Coordinator" `
   -Direction Inbound `
   -Protocol TCP `
   -LocalPort 5000 `

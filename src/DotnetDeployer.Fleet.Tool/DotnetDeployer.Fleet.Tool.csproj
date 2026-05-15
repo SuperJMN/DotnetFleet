@@ -5,22 +5,26 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>DotnetFleet.Tool</RootNamespace>
+    <AssemblyName>DotnetDeployer.Fleet.Tool</AssemblyName>
 
-    <!-- NuGet Tool packaging -->
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>fleet</ToolCommandName>
-    <PackageId>DotnetFleet.Tool</PackageId>
-    <Description>Compatibility package for DotnetDeployer.Fleet, the coordinator/worker layer that runs DotnetDeployer on managed machines.</Description>
+    <PackageId>DotnetDeployer.Fleet.Tool</PackageId>
+    <Description>Coordinator and worker CLI for running DotnetDeployer on managed machines.</Description>
     <Authors>SuperJMN</Authors>
-    <PackageTags>ci;cd;deploy;fleet;dotnet</PackageTags>
+    <PackageTags>ci;cd;deploy;fleet;dotnet;dotnetdeployer</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/SuperJMN/DotnetDeployer.Fleet</RepositoryUrl>
-    <!-- Coordinator and Worker both ship appsettings.json; allow last-writer-wins during pack/publish -->
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Required to host ASP.NET Core (Coordinator) from a non-Web SDK project -->
+    <Compile Include="..\DotnetFleet.Tool\**\*.cs"
+             Exclude="..\DotnetFleet.Tool\bin\**;..\DotnetFleet.Tool\obj\**"
+             LinkBase="DotnetFleet.Tool" />
+  </ItemGroup>
+
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="Serilog" />
@@ -30,13 +34,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="DotnetFleet.Tests" />
-  </ItemGroup>
-
-  <ItemGroup>
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
       <_Parameter1>NuGetPackageId</_Parameter1>
-      <_Parameter2>DotnetFleet.Tool</_Parameter2>
+      <_Parameter2>DotnetDeployer.Fleet.Tool</_Parameter2>
     </AssemblyAttribute>
   </ItemGroup>
 

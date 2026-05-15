@@ -38,7 +38,7 @@ public static class CoordinatorHostBuilder
 
         builder.Services.AddWindowsService(serviceOptions =>
         {
-            serviceOptions.ServiceName = "DotnetFleet Coordinator";
+            serviceOptions.ServiceName = "DotnetDeployer.Fleet Coordinator";
         });
 
         var logPath = ResolveLogPath(options.DataDir);

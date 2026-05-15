@@ -73,8 +73,8 @@ internal static class WindowsServiceManager
         var imagePath = BuildCoordinatorImagePath(fleetPath, opts);
         await InstallServiceAsync(
             CoordinatorServiceName,
-            "DotnetFleet Coordinator",
-            "DotnetFleet Coordinator",
+            $"{ToolIdentity.ProductName} Coordinator",
+            $"{ToolIdentity.ProductName} Coordinator",
             imagePath);
 
         Console.WriteLine();
@@ -127,8 +127,8 @@ internal static class WindowsServiceManager
 
         await InstallServiceAsync(
             serviceName,
-            $"DotnetFleet Worker ({opts.Name})",
-            $"DotnetFleet Worker ({opts.Name})",
+            $"{ToolIdentity.ProductName} Worker ({opts.Name})",
+            $"{ToolIdentity.ProductName} Worker ({opts.Name})",
             imagePath);
 
         Console.WriteLine();
@@ -166,8 +166,8 @@ internal static class WindowsServiceManager
         var installedServices = await DiscoverInstalledFleetServicesAsync();
 
         Console.WriteLine();
-        Console.WriteLine("  Updating DotnetFleet on this machine");
-        Console.WriteLine("  ────────────────────────────────────");
+        Console.WriteLine($"  Updating {ToolIdentity.ProductName} on this machine");
+        Console.WriteLine("  ───────────────────────────────────────────");
         if (installedServices.Count == 0)
         {
             Console.WriteLine("  (no local fleet services found)");
@@ -191,9 +191,13 @@ internal static class WindowsServiceManager
 
         if (!opts.SkipToolUpdate)
         {
-            var versionBefore = await GetInstalledServiceToolVersionAsync();
-            var verb = File.Exists(Path.Combine(GetServiceToolsDir(), "fleet.exe")) ? "update" : "install";
-            var exitCode = await RunDotnetToolPathCommandAsync(verb, opts.Version, opts.IncludePrerelease);
+            var installedPackageId = await GetInstalledServiceToolPackageIdAsync();
+            var packageId = installedPackageId ?? ToolIdentity.CurrentPackageId;
+            var versionBefore = installedPackageId is null
+                ? null
+                : await GetInstalledServiceToolVersionAsync(packageId);
+            var verb = installedPackageId is null ? "install" : "update";
+            var exitCode = await RunDotnetToolPathCommandAsync(verb, packageId, opts.Version, opts.IncludePrerelease);
             if (exitCode != 0)
             {
                 Console.Error.WriteLine();
@@ -204,17 +208,17 @@ internal static class WindowsServiceManager
                 throw new InvalidOperationException($"dotnet tool {verb} failed.");
             }
 
-            var versionAfter = await GetInstalledServiceToolVersionAsync();
+            var versionAfter = await GetInstalledServiceToolVersionAsync(packageId);
             Console.WriteLine();
             if (versionBefore == null && versionAfter != null)
-                Console.WriteLine($"  ✓ DotnetFleet.Tool installed: {versionAfter}");
+                Console.WriteLine($"  ✓ {packageId} installed: {versionAfter}");
             else if (versionBefore != null && versionAfter != null &&
                 !string.Equals(versionBefore, versionAfter, StringComparison.Ordinal))
-                Console.WriteLine($"  ✓ DotnetFleet.Tool updated: {versionBefore} → {versionAfter}");
+                Console.WriteLine($"  ✓ {packageId} updated: {versionBefore} → {versionAfter}");
             else if (versionAfter != null)
-                Console.WriteLine($"  • DotnetFleet.Tool already up to date ({versionAfter}); nothing to update.");
+                Console.WriteLine($"  • {packageId} already up to date ({versionAfter}); nothing to update.");
             else
-                Console.WriteLine("  • DotnetFleet.Tool: could not determine installed version.");
+                Console.WriteLine($"  • {packageId}: could not determine installed version.");
         }
         else
         {
@@ -277,16 +281,16 @@ internal static class WindowsServiceManager
             return fleetPath;
 
         Console.WriteLine();
-        Console.WriteLine("  • DotnetFleet.Tool service-local tool is required for Windows services.");
+        Console.WriteLine($"  • {ToolIdentity.CurrentPackageId} service-local tool is required for Windows services.");
         Console.WriteLine($"    Installing into {toolsDir}...");
         Console.WriteLine();
 
         var pinnedVersion = ExtractToolVersionFromPath(Environment.ProcessPath);
-        var exitCode = await RunDotnetToolPathCommandAsync("install", pinnedVersion, includePrerelease: false);
+        var exitCode = await RunDotnetToolPathCommandAsync("install", ToolIdentity.CurrentPackageId, pinnedVersion, includePrerelease: false);
         if (exitCode != 0)
         {
             throw new InvalidOperationException(
-                $"Failed to install DotnetFleet.Tool into '{toolsDir}' " +
+                $"Failed to install {ToolIdentity.CurrentPackageId} into '{toolsDir}' " +
                 $"(dotnet tool install exited with code {exitCode}).");
         }
 
@@ -303,13 +307,14 @@ internal static class WindowsServiceManager
 
     private static async Task<int> RunDotnetToolPathCommandAsync(
         string verb,
+        string packageId,
         string? version,
         bool includePrerelease)
     {
         var toolsDir = GetServiceToolsDir();
         Directory.CreateDirectory(toolsDir);
 
-        var args = new List<string> { "tool", verb, "--tool-path", toolsDir, "DotnetFleet.Tool" };
+        var args = new List<string> { "tool", verb, "--tool-path", toolsDir, packageId };
         if (!string.IsNullOrWhiteSpace(version))
         {
             args.Add("--version");
@@ -326,7 +331,7 @@ internal static class WindowsServiceManager
         return code;
     }
 
-    private static async Task<string?> GetInstalledServiceToolVersionAsync()
+    private static async Task<string?> GetInstalledServiceToolVersionAsync(string packageId)
     {
         var toolsDir = GetServiceToolsDir();
         var (stdout, _, code) = await RunProcessAsync(
@@ -336,15 +341,17 @@ internal static class WindowsServiceManager
         if (code != 0)
             return null;
 
-        foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var parts = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2 &&
-                string.Equals(parts[0], "dotnetfleet.tool", StringComparison.OrdinalIgnoreCase))
-                return parts[1];
-        }
+        return ToolIdentity.FindInstalledVersion(stdout, packageId);
+    }
 
-        return null;
+    private static async Task<string?> GetInstalledServiceToolPackageIdAsync()
+    {
+        var toolsDir = GetServiceToolsDir();
+        var (stdout, _, code) = await RunProcessAsync(
+            "dotnet",
+            ["tool", "list", "--tool-path", toolsDir],
+            throwOnError: false);
+        return code == 0 ? ToolIdentity.FindInstalledKnownPackageId(stdout) : null;
     }
 
     private static async Task InstallServiceAsync(
@@ -579,17 +586,6 @@ internal static class WindowsServiceManager
             return null;
 
         var normalized = path.Replace('\\', '/');
-        const string marker = "/dotnetfleet.tool/";
-        var idx = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (idx < 0)
-            return null;
-
-        var rest = normalized[(idx + marker.Length)..];
-        var slash = rest.IndexOf('/');
-        if (slash <= 0)
-            return null;
-
-        var candidate = rest[..slash];
-        return candidate.Length > 0 && char.IsDigit(candidate[0]) ? candidate : null;
+        return ToolIdentity.ExtractVersionFromPath(normalized);
     }
 }

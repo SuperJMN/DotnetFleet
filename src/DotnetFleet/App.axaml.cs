@@ -81,7 +81,7 @@ public class App : Application
         this.Connect(
             () => new AppShellView(),
             _ => provider.GetRequiredService<AppShellViewModel>(),
-            () => new Window { Title = "DotnetFleet", Width = 1200, Height = 800 });
+            () => new Window { Title = "DotnetDeployer.Fleet", Width = 1200, Height = 800 });
 
         var bootstrapper = provider.GetRequiredService<AppBootstrapper>();
         Dispatcher.UIThread.Post(async () => await bootstrapper.RunAsync(), DispatcherPriority.Background);

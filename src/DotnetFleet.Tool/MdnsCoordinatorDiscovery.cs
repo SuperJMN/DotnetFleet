@@ -4,7 +4,7 @@ using Makaretu.Dns;
 namespace DotnetFleet.Tool;
 
 /// <summary>
-/// Browses the LAN via multicast DNS for advertised DotnetFleet coordinators
+/// Browses the LAN via multicast DNS for advertised DotnetDeployer.Fleet coordinators
 /// (service type <c>_dotnetfleet._tcp.local.</c>).
 ///
 /// The TXT record carries the instance name and version; the SRV record provides

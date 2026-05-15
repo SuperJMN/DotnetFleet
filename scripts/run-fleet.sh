@@ -49,7 +49,7 @@ wait_for_url() {
 }
 
 echo "==> Build (release)..."
-dotnet build "$ROOT/DotnetFleet.slnx" -c Release --nologo -v minimal
+dotnet build "$ROOT/DotnetDeployer.Fleet.slnx" -c Release --nologo -v minimal
 
 COORD_DLL="$ROOT/src/DotnetFleet.Coordinator/bin/Release/net10.0/DotnetFleet.Coordinator.dll"
 WORKER_DLL="$ROOT/src/DotnetFleet.Worker/bin/Release/net10.0/DotnetFleet.Worker.dll"

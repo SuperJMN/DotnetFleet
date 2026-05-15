@@ -1,13 +1,14 @@
 <div align="center">
 
-<img src="src/DotnetFleet/Assets/SmallLogo.png" alt="DotnetFleet logo" width="96" />
+<img src="src/DotnetFleet/Assets/SmallLogo.png" alt="DotnetDeployer.Fleet logo" width="96" />
 
-# DotnetFleet
+# DotnetDeployer.Fleet
 
-**Self-hosted CI/CD for .NET — up and running in 3 commands.**
+**Run DotnetDeployer on managed machines — up and running in 3 commands.**
 
-Deploy your .NET projects on your own infrastructure.
-No GitHub Actions. No Azure DevOps. Just your machines.
+DotnetDeployer is the deployment engine. DotnetDeployer.Fleet adds a coordinator,
+workers, repository cloning, secrets, live logs, and package artifacts so the
+same `deployer.yaml` can run remotely or distributed across your own machines.
 
 Built on top of [DotnetDeployer](https://github.com/SuperJMN/DotnetDeployer).
 
@@ -22,7 +23,7 @@ Built on top of [DotnetDeployer](https://github.com/SuperJMN/DotnetDeployer).
 **1. Install the CLI**
 
 ```bash
-dotnet tool install -g DotnetFleet.Tool
+dotnet tool install -g DotnetDeployer.Fleet.Tool
 ```
 
 **2. Start a coordinator**
@@ -39,7 +40,7 @@ fleet worker
 
 That's it. The worker auto-detects the coordinator running on the same machine — no URL or token needed. (Across machines on the LAN, mDNS finds the coordinator automatically and you only need to pass `--token <token>` once.)
 
-You now have a working CI/CD pipeline. Add projects from the [Desktop App](#desktop-app), trigger deploys, and watch live logs.
+You now have managed remote execution for DotnetDeployer. Add projects from the [Desktop App](#desktop-app), trigger deploys, and watch live logs.
 
 ---
 
@@ -108,7 +109,7 @@ Each repo you deploy must contain a **`deployer.yaml`** at the root. See the [Do
 ### CLI Tool
 
 ```bash
-dotnet tool install -g DotnetFleet.Tool
+dotnet tool install -g DotnetDeployer.Fleet.Tool
 ```
 
 This gives you the `fleet` command. Verify with:
@@ -120,12 +121,16 @@ fleet version
 To update later:
 
 ```bash
-dotnet tool update -g DotnetFleet.Tool
+dotnet tool update -g DotnetDeployer.Fleet.Tool
 ```
+
+The older `DotnetFleet.Tool` package remains available as a compatibility
+package for existing installs. Do not install both packages globally at the same
+time because both expose the same `fleet` command.
 
 ### Desktop App
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/SuperJMN/DotnetFleet/releases):
+Download the latest release for your platform from [GitHub Releases](https://github.com/SuperJMN/DotnetDeployer.Fleet/releases):
 
 | Platform | Format |
 |---|---|
@@ -153,8 +158,8 @@ The most convenient option today is [Zap](https://github.com/srevinsaju/zap):
 # Install the manager once
 curl https://raw.githubusercontent.com/srevinsaju/zap/main/install.sh | bash
 
-# Install DotnetFleet from GitHub Releases (picks the right arch automatically)
-zap install --from-github SuperJMN/DotnetFleet
+# Install DotnetDeployer.Fleet from GitHub Releases (picks the right arch automatically)
+zap install --from-github SuperJMN/DotnetDeployer.Fleet
 
 # Later, update everything tracked by Zap
 zap update --all
@@ -163,7 +168,7 @@ zap update --all
 Alternatives: [AM / AppMan](https://github.com/ivan-hc/AM) (CLI, broader catalog)
 or [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) (GTK4 GUI for
 GNOME). Both can track the GitHub release feed and surface updates without any
-support code in DotnetFleet itself.
+support code in DotnetDeployer.Fleet itself.
 
 On Windows and macOS, just download the new installer / DMG from the releases
 page when you want to upgrade.
@@ -182,7 +187,7 @@ On first run the coordinator auto-generates a **JWT secret** and a **registratio
 
 ```
   ╔══════════════════════════════════════════════════════════════╗
-  ║                   DotnetFleet Coordinator                    ║
+  ║              DotnetDeployer.Fleet Coordinator                ║
   ╠══════════════════════════════════════════════════════════════╣
   ║  Listening on:       http://0.0.0.0:5000                     ║
   ║  Admin credentials:  admin / admin                           ║
@@ -198,7 +203,7 @@ Secrets are generated once and reused across restarts — you'll always get the 
 
 ### Step 2 — Connect Workers
 
-DotnetFleet has two layers of auto-discovery so you rarely need to type the coordinator URL or copy a token:
+DotnetDeployer.Fleet has two layers of auto-discovery so you rarely need to type the coordinator URL or copy a token:
 
 **Same machine (no flags needed):**
 
@@ -262,30 +267,30 @@ If you just installed .NET and don't yet have anything else, you can do the whol
 On Linux, you don't need `sudo` — the tool re-executes itself under `sudo` automatically, preserving `PATH`, `DOTNET_ROOT` and `HOME` so root can still find your per-user .NET install. On Windows, the command requests UAC elevation automatically; for unattended scripts, start PowerShell as Administrator first:
 
 ```bash
-dnx dotnetfleet.tool coordinator install --port 5000
+dnx dotnetdeployer.fleet.tool coordinator install --port 5000
 ```
 
-On Linux, you'll be prompted once for your sudo password. The first time you do this, the installer also detects it's running from `dnx`'s ephemeral cache and **automatically performs `dotnet tool install -g DotnetFleet.Tool`** for the calling user, so the systemd unit's `ExecStart=` points at the stable global-tool path (`~/.dotnet/tools/fleet`) instead of a cache location that may disappear later.
+On Linux, you'll be prompted once for your sudo password. The first time you do this, the installer also detects it's running from `dnx`'s ephemeral cache and **automatically performs `dotnet tool install -g DotnetDeployer.Fleet.Tool`** for the calling user, so the systemd unit's `ExecStart=` points at the stable global-tool path (`~/.dotnet/tools/fleet`) instead of a cache location that may disappear later.
 
 On Windows, the installer uses a service-local tool path under `%ProgramData%\DotnetFleet\tools`, so services do not depend on a user's profile or `dnx` cache.
 
 A worker on the same machine looks the same — and thanks to local auto-discovery you don't need `--coordinator` or `--token`:
 
 ```bash
-dnx dotnetfleet.tool worker install --name build-01
+dnx dotnetdeployer.fleet.tool worker install --name build-01
 ```
 
 For a worker on a **different** machine, mDNS finds the coordinator's URL automatically — you only have to supply the token:
 
 ```bash
-dnx dotnetfleet.tool worker install --token <token> --name build-01
+dnx dotnetdeployer.fleet.tool worker install --token <token> --name build-01
 ```
 
 #### Option B — Install the global tool first, then use `fleet` directly
 
 ```bash
 # One-time:
-dotnet tool install -g DotnetFleet.Tool
+dotnet tool install -g DotnetDeployer.Fleet.Tool
 
 # Then (Linux: no sudo needed because fleet re-execs itself; Windows: UAC elevation is requested when needed):
 fleet coordinator install --port 5000
@@ -342,7 +347,7 @@ fleet worker uninstall --name build-01
 
 On Linux, services run as the calling user (via `SUDO_USER`) and write unit files to `/etc/systemd/system/`. On Windows, services run under LocalSystem and store the service-local tool under `%ProgramData%\DotnetFleet\tools`.
 
-For Windows-specific details, including Task Manager names, log paths, updates, UAC behavior and firewall rules, see [DotnetFleet on Windows](docs/WINDOWS.md).
+For Windows-specific details, including Task Manager names, log paths, updates, UAC behavior and firewall rules, see [DotnetDeployer.Fleet on Windows](docs/WINDOWS.md).
 
 Both platforms use these service names:
 
@@ -405,7 +410,7 @@ When total cached repo size exceeds the limit (in GB), the worker automatically 
 
 ### Upgrading
 
-Upgrading DotnetFleet replaces only the tool binary — **all data is preserved** (projects, jobs, worker credentials, configuration, cached repos). Data lives under `--data-dir` (default `~/.fleet/`), which is independent of the tool installation.
+Upgrading DotnetDeployer.Fleet replaces only the tool binary — **all data is preserved** (projects, jobs, worker credentials, configuration, cached repos). Data lives under `--data-dir` (default `~/.fleet/`), which is independent of the tool installation.
 
 #### One-shot update
 
@@ -421,7 +426,7 @@ Options:
 
 ```
 --skip-tool-update      Only restart services; skip 'dotnet tool update'
---version <version>     Pin a specific DotnetFleet.Tool version
+--version <version>     Pin a specific installed Fleet tool version
 --prerelease            Allow prerelease versions when updating
 ```
 
@@ -430,7 +435,7 @@ Options:
 If you'd rather do it by hand:
 
 ```bash
-dotnet tool update -g DotnetFleet.Tool
+dotnet tool update -g DotnetDeployer.Fleet.Tool
 fleet version   # verify the new version
 sudo systemctl restart fleet-coordinator
 sudo systemctl restart fleet-worker-<name>
@@ -441,11 +446,16 @@ On Windows:
 ```powershell
 Stop-Service fleet-coordinator
 Stop-Service fleet-worker-<name>
-dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetFleet.Tool
+dotnet tool update --tool-path "$env:ProgramData\DotnetFleet\tools" DotnetDeployer.Fleet.Tool
 fleet version   # verify the new version
 Start-Service fleet-coordinator
 Start-Service fleet-worker-<name>
 ```
+
+If the service-local tool was originally installed from the compatibility
+package, use `DotnetFleet.Tool` in the manual `dotnet tool update` command
+instead. The automatic `fleet update` command detects the installed package for
+you.
 
 > Linux systemd unit files point at the **global tool** (`~/.dotnet/tools/fleet`), and Windows services point at the service-local tool under `%ProgramData%\DotnetFleet\tools`. There's no need to re-run `install` after a tool update.
 
@@ -502,7 +512,7 @@ fleet version                          Show version
 
 fleet update [options]                 Update tool + restart local services
   --skip-tool-update            Only restart services
-  --version <version>           Pin a specific DotnetFleet.Tool version
+  --version <version>           Pin a specific installed Fleet tool version
   --prerelease                  Allow prerelease versions
 ```
 
@@ -560,13 +570,14 @@ All settings can be provided via CLI flags, `appsettings.json`, or **environment
 └──────────────────────────┘   └──────────────────────────┘
 ```
 
-Coordinator and Workers are **separate processes**. You run one or more `DotnetFleet.Worker` instances and they connect to the coordinator over HTTP.
+Coordinator and Workers are **separate processes**. The implementation assemblies still use the `DotnetFleet.*` names for compatibility, while the product and NuGet entrypoint are `DotnetDeployer.Fleet`.
 
 ### Components
 
 | Project | Role |
 |---|---|
-| `DotnetFleet.Tool` | **CLI tool** (`fleet`) — install via `dotnet tool install -g DotnetFleet.Tool` |
+| `DotnetDeployer.Fleet.Tool` | **CLI tool** (`fleet`) — install via `dotnet tool install -g DotnetDeployer.Fleet.Tool` |
+| `DotnetFleet.Tool` | Compatibility CLI package for existing installs |
 | `DotnetFleet.Core` | Domain models, interfaces, enums |
 | `DotnetFleet.Coordinator` | ASP.NET Core API + queue + polling + EF Core SQLite |
 | `DotnetFleet.Worker` | Standalone Generic Host: git clone/fetch + `dnx dotnetdeployer.tool -y` |
@@ -659,7 +670,7 @@ NO_GUI=1 ./scripts/run-fleet.sh     # headless (no Desktop App)
 ## Running Tests
 
 ```bash
-dotnet test
+dotnet test DotnetDeployer.Fleet.slnx
 ```
 
 ---

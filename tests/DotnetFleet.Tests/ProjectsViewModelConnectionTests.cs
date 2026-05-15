@@ -51,6 +51,13 @@ public sealed class ProjectsViewModelConnectionTests
         var context = Substitute.For<IConnectedFleetClientContext>();
         context.Require().Returns(Task.FromResult(Maybe.From(Result.Failure<FleetApiClient>("Cannot connect"))));
         var notificationService = Substitute.For<Zafiro.UI.INotificationService>();
+        var notificationShown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        notificationService.Show(Arg.Any<string>(), Arg.Any<Maybe<string>>())
+            .Returns(_ =>
+            {
+                notificationShown.TrySetResult();
+                return Task.CompletedTask;
+            });
         var vm = new ProjectsViewModel(
             context,
             Substitute.For<Zafiro.UI.Navigation.INavigator>(),
@@ -59,6 +66,7 @@ public sealed class ProjectsViewModelConnectionTests
             notificationService);
 
         await vm.AddProjectCommand.Execute().FirstAsync();
+        await notificationShown.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         await notificationService.Received(1).Show("Cannot connect", Maybe.From("Cannot add project"));
     }

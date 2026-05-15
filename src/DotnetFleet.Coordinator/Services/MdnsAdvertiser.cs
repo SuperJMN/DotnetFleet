@@ -58,7 +58,7 @@ public sealed class MdnsAdvertiser : IHostedService, IDisposable
                     "txtvers=1",
                     $"instance={instanceName}",
                     $"version={version}",
-                    "service=DotnetFleet"
+                    "service=DotnetDeployer.Fleet"
                 },
                 TTL = TimeSpan.FromMinutes(75)
             });

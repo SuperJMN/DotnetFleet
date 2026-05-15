@@ -10,14 +10,14 @@
     <ApplicationId>com.superjmn.dotnetfleet</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
-    <ApplicationTitle>DotnetFleet</ApplicationTitle>
+    <ApplicationTitle>DotnetDeployer.Fleet</ApplicationTitle>
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">
     <ApplicationId>com.superjmn.dotnetfleet.debug</ApplicationId>
-    <ApplicationTitle>DotnetFleet (Debug)</ApplicationTitle>
+    <ApplicationTitle>DotnetDeployer.Fleet (Debug)</ApplicationTitle>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Release'">

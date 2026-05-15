@@ -119,10 +119,10 @@ public class WindowsServiceManagerTests : IDisposable
             NOMBRE_PARA_MOSTRAR: Información de la aplicación
 
             NOMBRE_SERVICIO: fleet-coordinator
-            NOMBRE_MOSTRAR : DotnetFleet Coordinator
+            NOMBRE_MOSTRAR : DotnetDeployer.Fleet Coordinator
 
             NOMBRE_DE_SERVICIO: fleet-worker-smoke-worker
-            NOMBRE_PARA_MOSTRAR: DotnetFleet Worker (smoke-worker)
+            NOMBRE_PARA_MOSTRAR: DotnetDeployer.Fleet Worker (smoke-worker)
             """;
 
         var services = WindowsServiceManager.FindFleetServiceNames(output);

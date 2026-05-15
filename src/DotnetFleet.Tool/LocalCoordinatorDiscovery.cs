@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace DotnetFleet.Tool;
 
 /// <summary>
-/// Locates a DotnetFleet coordinator running on the same machine and returns its URL +
+/// Locates a DotnetDeployer.Fleet coordinator running on the same machine and returns its URL +
 /// registration token, so a worker can self-bootstrap without the user having to copy
 /// secrets between commands.
 ///
