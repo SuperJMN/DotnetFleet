@@ -360,7 +360,7 @@ public static class JobEndpoints
         job.Status = job.CancellationRequestedAt is not null && !req.Success
             ? JobStatus.Cancelled
             : req.Success ? JobStatus.Succeeded : JobStatus.Failed;
-        job.FinishedAt = now;
+        job.MarkFinished(now);
         job.ErrorMessage = req.ErrorMessage;
         await storage.UpdateJobAsync(job);
 
@@ -541,7 +541,7 @@ public static class JobEndpoints
         if (completedImmediately)
         {
             job.Status = JobStatus.Cancelled;
-            job.FinishedAt = now;
+            job.MarkFinished(now);
         }
 
         await storage.UpdateJobAsync(job);

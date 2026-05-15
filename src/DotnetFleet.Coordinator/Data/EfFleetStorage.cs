@@ -504,7 +504,7 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         foreach (var job in staleJobs)
         {
             job.Status = JobStatus.Failed;
-            job.FinishedAt = now;
+            job.MarkFinished(now);
             job.ErrorMessage = "Worker unresponsive — marked as failed by stale job reaper.";
         }
 
@@ -527,7 +527,7 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         foreach (var job in timedOutJobs)
         {
             job.Status = JobStatus.Failed;
-            job.FinishedAt = now;
+            job.MarkFinished(now);
             job.ErrorMessage = "Timed out — no worker claimed this job within the allowed window.";
         }
 
@@ -563,7 +563,7 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         foreach (var job in liveJobs)
         {
             job.Status = JobStatus.Failed;
-            job.FinishedAt = now;
+            job.MarkFinished(now);
             job.ErrorMessage = reason;
         }
 
@@ -586,7 +586,7 @@ public class EfFleetStorage(IDbContextFactory<FleetDbContext> factory, IWorkerSe
         foreach (var job in stuckJobs)
         {
             job.Status = JobStatus.Failed;
-            job.FinishedAt = now;
+            job.MarkFinished(now);
             job.ErrorMessage = "Timed out — worker claimed this job but never started it.";
         }
 

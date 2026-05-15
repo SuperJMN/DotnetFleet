@@ -31,6 +31,22 @@
             </StackPanel>
         </Border>
 
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                CornerRadius="4"
+                Padding="10,6"
+                Margin="0,0,0,8">
+            <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
+                <ContentControl Content="{Icon mdi-timer-outline}"
+                                IconOptions.Size="14"
+                                VerticalAlignment="Center" />
+                <TextBlock Text="Elapsed:" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Opacity="0.8" />
+                <TextBlock Text="{Binding ElapsedText}"
+                           FontWeight="SemiBold" VerticalAlignment="Center" />
+            </FlexPanel>
+        </Border>
+
         <!-- Current phase badge: shown while a phase is in flight -->
         <Border DockPanel.Dock="Top"
                 IsVisible="{Binding HasCurrentPhase}"

@@ -27,7 +27,9 @@ public sealed class JobDetailViewModelHeaderTests
             Kind = JobKind.PackageBuild,
             Status = JobStatus.Succeeded,
             Version = "2.0.1+58f1c495e00554b14859456e8557aa98b9b177dd",
-            EnqueuedAt = new DateTimeOffset(2026, 5, 14, 10, 30, 0, TimeSpan.Zero)
+            EnqueuedAt = new DateTimeOffset(2026, 5, 14, 10, 30, 0, TimeSpan.Zero),
+            FinishedAt = new DateTimeOffset(2026, 5, 14, 10, 32, 5, TimeSpan.Zero),
+            TotalDurationMs = 125_000
         };
         using var vm = CreateViewModel(job);
 
@@ -35,6 +37,7 @@ public sealed class JobDetailViewModelHeaderTests
 
         header.Title.Should().Be("Package build 2.0.1");
         header.Subtitle.Should().Contain("Succeeded");
+        header.Subtitle.Should().Contain("Elapsed: 2:05");
         header.Subtitle.Should().Contain("Queued:");
         header.Actions.Select(action => action.Text).Should().Equal("Detailed log", "Refresh");
     }

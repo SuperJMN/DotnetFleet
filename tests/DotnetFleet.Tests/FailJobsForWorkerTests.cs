@@ -82,6 +82,8 @@ public class FailJobsForWorkerTests : IDisposable
         (await storage.GetJobAsync(running.Id))!.Status.Should().Be(JobStatus.Failed);
         (await storage.GetJobAsync(assigned.Id))!.Status.Should().Be(JobStatus.Failed);
         (await storage.GetJobAsync(running.Id))!.ErrorMessage.Should().Be("Worker restarted while running this job.");
+        (await storage.GetJobAsync(running.Id))!.TotalDurationMs.Should().BeGreaterThan(0);
+        (await storage.GetJobAsync(assigned.Id))!.TotalDurationMs.Should().BeGreaterThan(0);
 
         // Untouched
         (await storage.GetJobAsync(succeeded.Id))!.Status.Should().Be(JobStatus.Succeeded);

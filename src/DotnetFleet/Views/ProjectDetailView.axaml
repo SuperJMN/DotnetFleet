@@ -85,6 +85,8 @@
                                             <Run Text="{Binding KindText}" />
                                             <Run Text=" · Queued: " />
                                             <Run Text="{Binding Job.EnqueuedAt}" />
+                                            <Run Text=" · Elapsed: " />
+                                            <Run Text="{Binding ElapsedText}" />
                                         </TextBlock>
                                         <TextBlock FontSize="12"
                                                    Opacity="0.5"

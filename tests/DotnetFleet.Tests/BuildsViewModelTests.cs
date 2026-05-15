@@ -77,7 +77,7 @@ public sealed class BuildsViewModelTests
         });
         var context = Substitute.For<IConnectedFleetClientContext>();
         context.Require().Returns(Task.FromResult(Maybe.From(Result.Success(client))));
-        var vm = CreateViewModel(context);
+        using var vm = CreateViewModel(context);
 
         await vm.RefreshCommand.Execute().FirstAsync();
         await vm.ClearFinishedJobsCommand.Execute().FirstAsync();
@@ -91,7 +91,7 @@ public sealed class BuildsViewModelTests
     [Fact]
     public async Task Header_ShouldExposeClearBuildsAction()
     {
-        var vm = CreateViewModel(Substitute.For<IConnectedFleetClientContext>());
+        using var vm = CreateViewModel(Substitute.For<IConnectedFleetClientContext>());
 
         var header = (SectionHeader)await vm.Header.FirstAsync();
 

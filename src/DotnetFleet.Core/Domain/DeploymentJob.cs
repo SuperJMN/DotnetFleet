@@ -17,6 +17,7 @@ public class DeploymentJob
     public DateTimeOffset? AssignedAt { get; set; }
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
+    public long? TotalDurationMs { get; set; }
     public string? ErrorMessage { get; set; }
 
     /// <summary>
@@ -56,4 +57,25 @@ public class DeploymentJob
     /// UI to compute "elapsed in current phase".
     /// </summary>
     public DateTimeOffset? CurrentPhaseStartedAt { get; set; }
+
+    public void MarkFinished(DateTimeOffset finishedAt)
+    {
+        FinishedAt = finishedAt;
+        TotalDurationMs = GetElapsedDurationMs(finishedAt);
+        CurrentPhase = null;
+        CurrentPhaseStartedAt = null;
+    }
+
+    public long? GetElapsedDurationMs(DateTimeOffset now)
+    {
+        if (FinishedAt is not null && TotalDurationMs is not null)
+            return TotalDurationMs;
+
+        var start = EnqueuedAt != default ? EnqueuedAt : StartedAt ?? AssignedAt;
+        if (start is null)
+            return null;
+
+        var end = FinishedAt ?? now;
+        return Math.Max(0, (long)(end - start.Value).TotalMilliseconds);
+    }
 }

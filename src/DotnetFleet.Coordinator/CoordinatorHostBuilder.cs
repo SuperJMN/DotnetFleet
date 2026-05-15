@@ -212,6 +212,7 @@ public static class CoordinatorHostBuilder
         // Smart-scheduler columns: AssignedAt + EstimatedDurationMs (issue: smart scheduling).
         await EnsureJobColumnAsync(db, "AssignedAt", "INTEGER NULL");
         await EnsureJobColumnAsync(db, "EstimatedDurationMs", "INTEGER NULL");
+        await EnsureJobColumnAsync(db, "TotalDurationMs", "INTEGER NULL");
         await EnsureJobColumnAsync(db, "Kind", "INTEGER NOT NULL DEFAULT 0");
         await EnsureJobColumnAsync(db, "PackageRequestJson", "TEXT NULL");
 
@@ -265,7 +266,7 @@ public static class CoordinatorHostBuilder
         foreach (var job in orphanedJobs)
         {
             job.Status = JobStatus.Failed;
-            job.FinishedAt = now;
+            job.MarkFinished(now);
             job.ErrorMessage = "Failed during coordinator restart — job state could not be recovered.";
         }
 

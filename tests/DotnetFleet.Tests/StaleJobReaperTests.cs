@@ -120,6 +120,7 @@ public class StaleJobReaperTests : IDisposable
         var job = await storage.GetJobAsync(runningJob.Id);
         job!.Status.Should().Be(JobStatus.Failed);
         job.ErrorMessage.Should().Contain("Worker unresponsive");
+        job.TotalDurationMs.Should().BeGreaterThan(0);
     }
 
     [Fact]
@@ -165,6 +166,7 @@ public class StaleJobReaperTests : IDisposable
         var job = await storage.GetJobAsync(stuckJob.Id);
         job!.Status.Should().Be(JobStatus.Failed);
         job.ErrorMessage.Should().Contain("never started");
+        job.TotalDurationMs.Should().BeGreaterThan(0);
 
         var recent = await storage.GetJobAsync(recentJob.Id);
         recent!.Status.Should().Be(JobStatus.Assigned);

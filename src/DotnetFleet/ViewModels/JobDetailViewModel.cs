@@ -64,6 +64,7 @@ public partial class JobDetailViewModel : ReactiveObject, IHaveHeader, IDisposab
     public string DetailedLogButtonText => IsDetailedLogVisible ? "Hide detailed log" : "Detailed log";
 
     public bool HasError => !string.IsNullOrWhiteSpace(_errorMessage);
+    public string ElapsedText => JobDurationFormatter.Format(Job.GetElapsedDurationMs(DateTimeOffset.UtcNow));
 
     public ReadOnlyObservableCollection<LogLine> FilteredLogs { get; }
 
@@ -110,6 +111,9 @@ public partial class JobDetailViewModel : ReactiveObject, IHaveHeader, IDisposab
         RefreshCommand.Results().HandleErrorsWith(this.notificationService, Maybe.From("Cannot refresh job")).DisposeWith(disposables);
         _header = new BehaviorSubject<object>(CreateHeader());
         Header = _header.AsObservable();
+        Observable.Timer(TimeSpan.Zero, TimeSpan.FromSeconds(1), RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => RefreshElapsed())
+            .DisposeWith(disposables);
 
         var minSeverityChanges = this.WhenAnyValue(x => x.MinSeverity);
 
@@ -366,6 +370,13 @@ public partial class JobDetailViewModel : ReactiveObject, IHaveHeader, IDisposab
         this.RaisePropertyChanged(nameof(HasError));
         this.RaisePropertyChanged(nameof(HasCurrentPhase));
         this.RaisePropertyChanged(nameof(CurrentPhaseDisplay));
+        this.RaisePropertyChanged(nameof(ElapsedText));
+        PublishHeader();
+    }
+
+    private void RefreshElapsed()
+    {
+        this.RaisePropertyChanged(nameof(ElapsedText));
         PublishHeader();
     }
 
@@ -469,6 +480,8 @@ public partial class JobDetailViewModel : ReactiveObject, IHaveHeader, IDisposab
 
             if (HasCurrentPhase)
                 parts.Add($"Current phase: {CurrentPhaseDisplay}");
+
+            parts.Add($"Elapsed: {ElapsedText}");
 
             if (IsStreaming)
                 parts.Add("Streaming");

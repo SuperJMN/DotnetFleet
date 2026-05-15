@@ -70,4 +70,46 @@ public class JobViewModelDisplayNameTests
         vm.Version.Should().Be("1.0.0");
         vm.DisplayName.Should().Be("1.0.0");
     }
+
+    [Theory]
+    [InlineData(65_000, "1:05")]
+    [InlineData(3_723_000, "1:02:03")]
+    public void ElapsedText_uses_the_persisted_total_duration(long durationMs, string expected)
+    {
+        var job = new DeploymentJob
+        {
+            Id = Guid.NewGuid(),
+            Status = JobStatus.Failed,
+            FinishedAt = DateTimeOffset.UtcNow,
+            TotalDurationMs = durationMs
+        };
+
+        var vm = BuildVm(job);
+
+        vm.ElapsedText.Should().Be(expected);
+    }
+
+    [Fact]
+    public void ElapsedText_updates_when_underlying_job_duration_changes()
+    {
+        var job = new DeploymentJob
+        {
+            Id = Guid.NewGuid(),
+            Status = JobStatus.Running,
+            EnqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-1)
+        };
+        var vm = BuildVm(job);
+
+        var updated = new DeploymentJob
+        {
+            Id = job.Id,
+            Status = JobStatus.Succeeded,
+            FinishedAt = DateTimeOffset.UtcNow,
+            TotalDurationMs = 125_000
+        };
+
+        vm.ApplyJobUpdate(updated);
+
+        vm.ElapsedText.Should().Be("2:05");
+    }
 }

@@ -41,6 +41,8 @@ public partial class BuildsViewModel : ReactiveObject, IHaveHeader, IDisposable
         ClearFinishedJobsCommand = ReactiveCommand.CreateFromTask(ClearFinishedJobs);
         disposables.Add(RefreshCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot load builds")));
         disposables.Add(ClearFinishedJobsCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot clear builds")));
+        disposables.Add(Observable.Timer(TimeSpan.Zero, TimeSpan.FromSeconds(1), RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => RefreshBuildElapsed()));
 
         Header = Observable.Return<object>(new SectionHeader("Builds",
             "All projects, newest first",
@@ -52,6 +54,12 @@ public partial class BuildsViewModel : ReactiveObject, IHaveHeader, IDisposable
     public ReactiveCommand<Unit, Maybe<Result>> ClearFinishedJobsCommand { get; }
     public IObservable<object> Header { get; }
     public void Dispose() => disposables.Dispose();
+
+    private void RefreshBuildElapsed()
+    {
+        foreach (var build in Builds)
+            build.RefreshElapsed();
+    }
 
     private async Task<Maybe<Result>> LoadBuilds()
     {

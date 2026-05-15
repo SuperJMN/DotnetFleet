@@ -71,6 +71,8 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
         _disposables.Add(DeployCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot queue deploy")));
         _disposables.Add(BuildPackagesCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot queue build")));
         _disposables.Add(ClearFinishedJobsCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Cannot clear builds")));
+        _disposables.Add(Observable.Timer(TimeSpan.Zero, TimeSpan.FromSeconds(1), RxSchedulers.MainThreadScheduler)
+            .Subscribe(_ => RefreshJobElapsed()));
         _header = new BehaviorSubject<object>(CreateHeader());
         Header = _header.AsObservable();
     }
@@ -223,6 +225,12 @@ public partial class ProjectDetailViewModel : ReactiveObject, IHaveHeader, IDisp
     {
         this.RaisePropertyChanged(nameof(HasJobHistory));
         this.RaisePropertyChanged(nameof(ShowEmptyJobHistory));
+    }
+
+    private void RefreshJobElapsed()
+    {
+        foreach (var job in Jobs)
+            job.RefreshElapsed();
     }
 }
 
@@ -507,6 +515,8 @@ public partial class JobViewModel : ReactiveObject
         private set => this.RaiseAndSetIfChanged(ref _displayName, value);
     }
 
+    public string ElapsedText => JobDurationFormatter.Format(Job.GetElapsedDurationMs(DateTimeOffset.UtcNow));
+
     /// <summary>
     /// Pushes a fresher snapshot of the underlying <see cref="DeploymentJob"/> into this VM,
     /// raising change notifications for the user-visible fields. Used when the deployment is
@@ -527,7 +537,10 @@ public partial class JobViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(StatusIcon));
         this.RaisePropertyChanged(nameof(StatusBrush));
         this.RaisePropertyChanged(nameof(KindText));
+        RefreshElapsed();
     }
+
+    public void RefreshElapsed() => this.RaisePropertyChanged(nameof(ElapsedText));
 
     private string ComputeDisplayName(string? version) =>
         string.IsNullOrWhiteSpace(version) ? Job.Id.ToString("N")[..8] : VersionDisplay.Visible(version)!;

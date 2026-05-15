@@ -68,6 +68,7 @@ public class JobCancellationTests : IDisposable
         cancelled!.Status.Should().Be(JobStatus.Cancelled);
         cancelled.CancellationRequestedAt.Should().NotBeNull();
         cancelled.FinishedAt.Should().NotBeNull();
+        cancelled.TotalDurationMs.Should().BeGreaterThan(0);
         cancelled.StartedAt.Should().BeNull();
     }
 

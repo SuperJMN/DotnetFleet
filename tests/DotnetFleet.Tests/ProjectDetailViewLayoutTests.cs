@@ -64,12 +64,36 @@ public class ProjectDetailViewLayoutTests
         document.Descendants(axaml + "Run")
             .Select(run => run.Attribute("Text")?.Value)
             .Should()
-            .Contain("{Binding ProjectName}");
+            .Contain(["{Binding ProjectName}", "{Binding ElapsedText}"]);
 
         document.Descendants(axaml + "EnhancedButton")
             .Select(button => button.Attribute("Content")?.Value)
             .Should()
             .Contain("View Status");
+    }
+
+    [Fact]
+    public void ProjectDetailView_ShouldShowElapsedTimeForEachJob()
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", "ProjectDetailView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        document.Descendants(axaml + "Run")
+            .Select(run => run.Attribute("Text")?.Value)
+            .Should()
+            .Contain([" · Elapsed: ", "{Binding ElapsedText}"]);
+    }
+
+    [Fact]
+    public void JobDetailView_ShouldShowLiveElapsedTime()
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", "JobDetailView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        document.Descendants(axaml + "TextBlock")
+            .Select(textBlock => textBlock.Attribute("Text")?.Value)
+            .Should()
+            .Contain(["Elapsed:", "{Binding ElapsedText}"]);
     }
 
     [Fact]

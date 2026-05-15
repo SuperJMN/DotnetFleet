@@ -71,6 +71,40 @@ public class JobLifecycleRaceTests : IDisposable
         (await storage.GetJobAsync(jobId))!.Status.Should().Be(JobStatus.Cancelled);
     }
 
+    [Fact]
+    public async Task ReportCompleted_WhenJobFinishes_ShouldPersistTotalDuration()
+    {
+        var storage = new EfFleetStorage(factory, new CapabilityWorkerSelector());
+        var projectId = Guid.NewGuid();
+        var workerId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+        var enqueuedAt = DateTimeOffset.UtcNow.AddMinutes(-3);
+
+        await storage.AddProjectAsync(new Project
+        {
+            Id = projectId, Name = "p", GitUrl = "https://example.com/r.git", Branch = "main"
+        });
+        await storage.AddJobAsync(new DeploymentJob
+        {
+            Id = jobId,
+            ProjectId = projectId,
+            WorkerId = workerId,
+            Status = JobStatus.Running,
+            EnqueuedAt = enqueuedAt,
+            AssignedAt = enqueuedAt.AddSeconds(10),
+            StartedAt = enqueuedAt.AddSeconds(20)
+        });
+
+        var result = await InvokeReportCompleted(jobId, workerId, storage);
+
+        var status = result.GetType().GetProperty("StatusCode")?.GetValue(result) as int?;
+        status.Should().Be(StatusCodes.Status200OK);
+        var completed = await storage.GetJobAsync(jobId);
+        completed!.Status.Should().Be(JobStatus.Succeeded);
+        completed.FinishedAt.Should().NotBeNull();
+        completed.TotalDurationMs.Should().BeGreaterThan(170_000);
+    }
+
     private static async Task SeedTerminalJob(
         EfFleetStorage storage,
         Guid projectId,
