@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:DotnetFleet.ViewModels"
+             xmlns:converters="clr-namespace:DotnetFleet.Converters"
              x:Class="DotnetFleet.Views.BuildsView"
              x:DataType="vm:BuildsViewModel">
 
@@ -35,6 +36,21 @@
                             <FlexPanel Wrap="Wrap"
                                        Gap="12"
                                        AlignItems="Center">
+                                <Grid Width="44"
+                                      Height="44"
+                                      ClipToBounds="True"
+                                      VerticalAlignment="Center">
+                                    <Image Source="{Binding ProjectIconBytes, Converter={x:Static converters:ProjectIconConverters.ByteArrayToBitmap}}"
+                                           Stretch="Uniform"
+                                           IsVisible="{Binding HasProjectIcon}" />
+                                    <ContentControl Content="{Icon mdi-application-outline}"
+                                                    IconOptions.Size="28"
+                                                    Opacity="0.65"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    IsVisible="{Binding HasNoProjectIcon}" />
+                                </Grid>
+
                                 <FlexPanel Wrap="NoWrap"
                                            Gap="6"
                                            AlignItems="Center"

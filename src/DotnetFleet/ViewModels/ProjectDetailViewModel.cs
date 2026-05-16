@@ -468,6 +468,9 @@ public partial class JobViewModel : ReactiveObject
 
     private string? _version;
     private string _displayName = string.Empty;
+    private byte[]? projectIconBytes;
+    private bool hasProjectIcon;
+    private bool hasNoProjectIcon = true;
 
     public JobViewModel(
         DeploymentJob job,
@@ -513,6 +516,30 @@ public partial class JobViewModel : ReactiveObject
     {
         get => _displayName;
         private set => this.RaiseAndSetIfChanged(ref _displayName, value);
+    }
+
+    public byte[]? ProjectIconBytes
+    {
+        get => projectIconBytes;
+        set
+        {
+            var normalized = value is { Length: > 0 } ? value : null;
+            this.RaiseAndSetIfChanged(ref projectIconBytes, normalized);
+            HasProjectIcon = normalized is not null;
+            HasNoProjectIcon = normalized is null;
+        }
+    }
+
+    public bool HasProjectIcon
+    {
+        get => hasProjectIcon;
+        private set => this.RaiseAndSetIfChanged(ref hasProjectIcon, value);
+    }
+
+    public bool HasNoProjectIcon
+    {
+        get => hasNoProjectIcon;
+        private set => this.RaiseAndSetIfChanged(ref hasNoProjectIcon, value);
     }
 
     public string ElapsedText => JobDurationFormatter.Format(Job.GetElapsedDurationMs(DateTimeOffset.UtcNow));
