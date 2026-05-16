@@ -14,9 +14,8 @@
                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                 BorderThickness="0,1,0,0"
                 Padding="12,4">
-            <Grid ColumnDefinitions="*,Auto">
-                <EnhancedButton Grid.Column="0"
-                                Command="{Binding ReconnectCommand}"
+            <Grid>
+                <EnhancedButton Command="{Binding ReconnectCommand}"
                                 Background="Transparent"
                                 BorderThickness="0"
                                 Padding="0"
@@ -56,13 +55,6 @@
                                    IsVisible="{Binding BackendHealthMessage, Converter={x:Static ObjectConverters.IsNotNull}}" />
                     </Grid>
                 </EnhancedButton>
-
-                <EnhancedButton Grid.Column="1"
-                                Margin="12,0,0,0"
-                                Classes="Destructive"
-                                Command="{Binding LogoutCommand}"
-                                Icon="{Icon mdi-logout}"
-                                ToolTip.Tip="Sign out — clear the current session" />
             </Grid>
         </Border>
 

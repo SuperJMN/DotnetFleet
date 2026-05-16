@@ -43,9 +43,7 @@ public partial class AppShellViewModel : ReactiveObject, IDisposable
         _disposables.Add(sub);
 
         ReconnectCommand = ReactiveCommand.CreateFromTask(bootstrapper.ShowConnect);
-        LogoutCommand = ReactiveCommand.CreateFromTask(bootstrapper.Logout);
         _disposables.Add(ReconnectCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Connection failed")));
-        _disposables.Add(LogoutCommand.Results().HandleErrorsWith(notificationService, Maybe.From("Sign in failed")));
     }
 
     public void EnsureInitialSection()
@@ -58,7 +56,6 @@ public partial class AppShellViewModel : ReactiveObject, IDisposable
 
     public IShell Shell { get; }
     public ReactiveCommand<Unit, Maybe<Result<FleetApiClient>>> ReconnectCommand { get; }
-    public ReactiveCommand<Unit, Maybe<Result<FleetApiClient>>> LogoutCommand { get; }
     public string? BackendDisplayVersion => VersionDisplay.VisibleWithPrefix(BackendVersion);
 
     public void Dispose() => _disposables.Dispose();

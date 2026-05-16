@@ -3,6 +3,48 @@ using System.Xml.Linq;
 public class ProjectDetailViewLayoutTests
 {
     [Fact]
+    public void AppShellView_ShouldNotExposeLogoutAsAGlobalAction()
+    {
+        var document = XDocument.Load(ProjectFilePath("Shell", "AppShellView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        document.Descendants(axaml + "EnhancedButton")
+            .Select(button => button.Attribute("Command")?.Value)
+            .Should()
+            .NotContain("{Binding LogoutCommand}");
+
+        document.ToString().Should().NotContain("mdi-logout");
+    }
+
+    [Fact]
+    public void SettingsView_ShouldExposeLogoutAction()
+    {
+        var document = XDocument.Load(ProjectFilePath("Views", "SettingsView.axaml"));
+        XNamespace axaml = "https://github.com/avaloniaui";
+
+        document.Root!.Attribute(XName.Get("DataType", "http://schemas.microsoft.com/winfx/2006/xaml"))!
+            .Value.Should().Be("vm:SettingsViewModel");
+
+        document.Descendants(axaml + "EnhancedButton")
+            .Where(button => button.Attribute("Command")?.Value == "{Binding LogoutCommand}")
+            .Should()
+            .ContainSingle()
+            .Which.Attribute("Content")?.Value.Should().Be("Sign out");
+
+        document.ToString().Should().Contain("mdi-logout");
+    }
+
+    [Fact]
+    public void SettingsViewModel_ShouldBeAStandaloneSection()
+    {
+        var source = File.ReadAllText(ProjectFilePath("ViewModels", "SettingsViewModel.cs"));
+
+        source.Should().Contain("[Section(name: \"Settings\", icon: \"mdi-cog-outline\", sortIndex: 4)]");
+        source.Should().Contain("LogoutCommand = ReactiveCommand.CreateFromTask(bootstrapper.Logout)");
+        source.Should().Contain("new SectionHeader(\"Settings\"");
+    }
+
+    [Fact]
     public void ProjectDetailView_ShouldUseTheFullScreenForJobHistory()
     {
         var document = XDocument.Load(ProjectFilePath("Views", "ProjectDetailView.axaml"));
