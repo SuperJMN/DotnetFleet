@@ -5,6 +5,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <ApplicationTitle>DotnetDeployer Fleet</ApplicationTitle>
+    <Title>DotnetDeployer Fleet</Title>
+    <Product>DotnetDeployer Fleet</Product>
+    <AssemblyTitle>DotnetDeployer Fleet</AssemblyTitle>
+    <Description>Coordinate DotnetDeployer builds and deployments across remote workers</Description>
     <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
