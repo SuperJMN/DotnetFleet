@@ -9,7 +9,7 @@ github:
     name: GITHUB_TOKEN
   outputDir: artifacts
   packages:
-    - project: src/DotnetFleet.Desktop/DotnetFleet.Desktop.csproj
+    - project: src/DotnetDeployer.Fleet.Desktop/DotnetDeployer.Fleet.Desktop.csproj
       formats:
         - type: appimage
           arch: [x64, arm64]
@@ -19,7 +19,7 @@ github:
           arch: [x64]
         - type: dmg
           arch: [x64, arm64]
-    - project: src/DotnetFleet.Android/DotnetFleet.Android.csproj
+    - project: src/DotnetDeployer.Fleet.Android/DotnetDeployer.Fleet.Android.csproj
       formats:
         - type: Apk
           arch: [arm64]

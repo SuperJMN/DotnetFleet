@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>DotnetFleet.Tool</RootNamespace>
+    <RootNamespace>DotnetDeployer.Fleet.Tool</RootNamespace>
     <AssemblyName>DotnetDeployer.Fleet.Tool</AssemblyName>
 
     <PackAsTool>true</PackAsTool>
@@ -19,18 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\DotnetFleet.Tool\**\*.cs"
-             Exclude="..\DotnetFleet.Tool\bin\**;..\DotnetFleet.Tool\obj\**"
-             LinkBase="DotnetFleet.Tool" />
-  </ItemGroup>
-
-  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="System.CommandLine" />
-    <PackageReference Include="Serilog" />
-    <PackageReference Include="Serilog.Sinks.Console" />
-    <PackageReference Include="Serilog.Extensions.Hosting" />
-    <PackageReference Include="Makaretu.Dns.Multicast.New" />
   </ItemGroup>
 
   <ItemGroup>
@@ -41,7 +30,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DotnetFleet.Coordinator\DotnetFleet.Coordinator.csproj" />
-    <ProjectReference Include="..\DotnetFleet.Worker\DotnetFleet.Worker.csproj" />
+    <ProjectReference Include="..\DotnetDeployer.Fleet.Tooling\DotnetDeployer.Fleet.Tooling.csproj" />
   </ItemGroup>
 </Project>

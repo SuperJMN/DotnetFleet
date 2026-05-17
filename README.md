@@ -142,7 +142,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 Or build from source:
 
 ```bash
-cd src/DotnetFleet.Desktop
+cd src/DotnetDeployer.Fleet.Desktop
 dotnet run
 ```
 
@@ -551,7 +551,7 @@ All settings can be provided via CLI flags, `appsettings.json`, or **environment
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│              DotnetFleet.Coordinator                 │
+│              DotnetDeployer.Fleet.Coordinator       │
 │                                                     │
 │  ASP.NET Core Minimal API   • job queue & polling   │
 │  EF Core / SQLite           • repo-cache metadata   │
@@ -562,7 +562,7 @@ All settings can be provided via CLI flags, `appsettings.json`, or **environment
         │                              │
         ▼                              ▼
 ┌──────────────────────────┐   ┌──────────────────────────┐
-│ DotnetFleet (Avalonia)   │   │ DotnetFleet.Worker × N   │
+│ DotnetDeployer.Fleet.App │   │ DotnetDeployer.Fleet.Worker × N │
 │                          │   │                          │
 │ Login → Projects →       │   │ register → login → poll  │
 │ Trigger Deploy →         │   │ → clone/fetch → run dnx  │
@@ -570,7 +570,7 @@ All settings can be provided via CLI flags, `appsettings.json`, or **environment
 └──────────────────────────┘   └──────────────────────────┘
 ```
 
-Coordinator and Workers are **separate processes**. The implementation assemblies still use the `DotnetFleet.*` names for compatibility, while the product and NuGet entrypoint are `DotnetDeployer.Fleet`.
+Coordinator and Workers are **separate processes**. The primary implementation assemblies now use the `DotnetDeployer.Fleet.*` names; `DotnetFleet.Tool` remains only as a compatibility NuGet package for existing installs.
 
 ### Components
 
@@ -578,14 +578,16 @@ Coordinator and Workers are **separate processes**. The implementation assemblie
 |---|---|
 | `DotnetDeployer.Fleet.Tool` | **CLI tool** (`fleet`) — install via `dotnet tool install -g DotnetDeployer.Fleet.Tool` |
 | `DotnetFleet.Tool` | Compatibility CLI package for existing installs |
-| `DotnetFleet.Core` | Domain models, interfaces, enums |
-| `DotnetFleet.Coordinator` | ASP.NET Core API + queue + polling + EF Core SQLite |
-| `DotnetFleet.Worker` | Standalone Generic Host: git clone/fetch + `dnx dotnetdeployer.tool -y` |
-| `DotnetFleet.Api.Client` | Typed HTTP client used by the Desktop App |
-| `DotnetFleet` | Avalonia 12 shared ViewModels + Views |
-| `DotnetFleet.Desktop` | Desktop host (Windows / Linux / macOS) |
-| `DotnetFleet.Browser` | WebAssembly host (optional) |
-| `DotnetFleet.Tests` | xUnit unit tests |
+| `DotnetDeployer.Fleet.Tooling` | Shared CLI implementation used by both tool packages |
+| `DotnetDeployer.Fleet.Core` | Domain models, interfaces, enums |
+| `DotnetDeployer.Fleet.Coordinator` | ASP.NET Core API + queue + polling + EF Core SQLite |
+| `DotnetDeployer.Fleet.Worker` | Standalone Generic Host: git clone/fetch + `dnx dotnetdeployer.tool -y` |
+| `DotnetDeployer.Fleet.Api.Client` | Typed HTTP client used by the Desktop App |
+| `DotnetDeployer.Fleet.App` | Avalonia 12 shared ViewModels + Views |
+| `DotnetDeployer.Fleet.Desktop` | Desktop host (Windows / Linux / macOS) |
+| `DotnetDeployer.Fleet.Browser` | WebAssembly host (optional) |
+| `DotnetDeployer.Fleet.Android` | Android host |
+| `DotnetDeployer.Fleet.Tests` | xUnit unit tests |
 
 ### Worker Lifecycle
 
@@ -643,17 +645,17 @@ All worker traffic flows over plain HTTP/JSON. There is no direct DB or queue ac
 
 ```bash
 # Coordinator
-cd src/DotnetFleet.Coordinator
+cd src/DotnetDeployer.Fleet.Coordinator
 dotnet run
 
 # Worker (separate terminal)
-cd src/DotnetFleet.Worker
+cd src/DotnetDeployer.Fleet.Worker
 export Worker__CoordinatorBaseUrl=http://localhost:5000
 export Worker__RegistrationToken=change-me
 dotnet run
 
 # Desktop App
-cd src/DotnetFleet.Desktop
+cd src/DotnetDeployer.Fleet.Desktop
 dotnet run
 ```
 

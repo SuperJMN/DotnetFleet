@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DotnetDeployer.Fleet.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="AvaloniaTerminal" />
+    <PackageReference Include="ReactiveUI" />
+    <PackageReference Include="ReactiveUI.Avalonia" />
+    <PackageReference Include="DynamicData" />
+    <PackageReference Include="Zafiro.Avalonia" />
+    <PackageReference Include="Zafiro.Avalonia.Generators" PrivateAssets="all" />
+    <PackageReference Include="Zafiro.Avalonia.Dialogs" />
+    <PackageReference Include="Zafiro.Avalonia.Icons.Optris" />
+    <PackageReference Include="Zafiro.UI" />
+    <PackageReference Include="Optris.Icons.Avalonia.MaterialDesign" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="CSharpFunctionalExtensions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Xaml.Behaviors.Avalonia" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DotnetDeployer.Fleet.Core\DotnetDeployer.Fleet.Core.csproj" />
+    <ProjectReference Include="..\DotnetDeployer.Fleet.Api.Client\DotnetDeployer.Fleet.Api.Client.csproj" />
+  </ItemGroup>
+</Project>

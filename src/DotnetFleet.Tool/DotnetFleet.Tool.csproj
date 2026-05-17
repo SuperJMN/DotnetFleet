@@ -5,8 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>DotnetFleet.Tool</RootNamespace>
+    <AssemblyName>DotnetFleet.Tool</AssemblyName>
 
-    <!-- NuGet Tool packaging -->
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>fleet</ToolCommandName>
     <PackageId>DotnetFleet.Tool</PackageId>
@@ -15,22 +15,11 @@
     <PackageTags>ci;cd;deploy;fleet;dotnet</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/SuperJMN/DotnetDeployer.Fleet</RepositoryUrl>
-    <!-- Coordinator and Worker both ship appsettings.json; allow last-writer-wins during pack/publish -->
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Required to host ASP.NET Core (Coordinator) from a non-Web SDK project -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="System.CommandLine" />
-    <PackageReference Include="Serilog" />
-    <PackageReference Include="Serilog.Sinks.Console" />
-    <PackageReference Include="Serilog.Extensions.Hosting" />
-    <PackageReference Include="Makaretu.Dns.Multicast.New" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <InternalsVisibleTo Include="DotnetFleet.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -41,7 +30,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DotnetFleet.Coordinator\DotnetFleet.Coordinator.csproj" />
-    <ProjectReference Include="..\DotnetFleet.Worker\DotnetFleet.Worker.csproj" />
+    <ProjectReference Include="..\DotnetDeployer.Fleet.Tooling\DotnetDeployer.Fleet.Tooling.csproj" />
   </ItemGroup>
 </Project>

@@ -1,17 +1,18 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/DotnetFleet.Api.Client/DotnetFleet.Api.Client.csproj" />
-    <Project Path="src/DotnetFleet.Browser/DotnetFleet.Browser.csproj" />
-    <Project Path="src/DotnetFleet.Android/DotnetFleet.Android.csproj" />
+    <Project Path="src/DotnetDeployer.Fleet.Api.Client/DotnetDeployer.Fleet.Api.Client.csproj" />
+    <Project Path="src/DotnetDeployer.Fleet.Browser/DotnetDeployer.Fleet.Browser.csproj" />
+    <Project Path="src/DotnetDeployer.Fleet.Android/DotnetDeployer.Fleet.Android.csproj" />
     <Project Path="src/DotnetDeployer.Fleet.Tool/DotnetDeployer.Fleet.Tool.csproj" />
-    <Project Path="src/DotnetFleet.Coordinator/DotnetFleet.Coordinator.csproj" />
-    <Project Path="src/DotnetFleet.Core/DotnetFleet.Core.csproj" />
-    <Project Path="src/DotnetFleet.Desktop/DotnetFleet.Desktop.csproj" />
-    <Project Path="src/DotnetFleet.Worker/DotnetFleet.Worker.csproj" />
+    <Project Path="src/DotnetDeployer.Fleet.Coordinator/DotnetDeployer.Fleet.Coordinator.csproj" />
+    <Project Path="src/DotnetDeployer.Fleet.Core/DotnetDeployer.Fleet.Core.csproj" />
+    <Project Path="src/DotnetDeployer.Fleet.Desktop/DotnetDeployer.Fleet.Desktop.csproj" />
+    <Project Path="src/DotnetDeployer.Fleet.Tooling/DotnetDeployer.Fleet.Tooling.csproj" />
+    <Project Path="src/DotnetDeployer.Fleet.Worker/DotnetDeployer.Fleet.Worker.csproj" />
     <Project Path="src/DotnetFleet.Tool/DotnetFleet.Tool.csproj" />
-    <Project Path="src/DotnetFleet/DotnetFleet.csproj" />
+    <Project Path="src/DotnetDeployer.Fleet.App/DotnetDeployer.Fleet.App.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/DotnetFleet.Tests/DotnetFleet.Tests.csproj" />
+    <Project Path="tests/DotnetDeployer.Fleet.Tests/DotnetDeployer.Fleet.Tests.csproj" />
   </Folder>
 </Solution>

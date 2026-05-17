@@ -1,0 +1,171 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotnetDeployer.Fleet.App.ViewModels"
+             xmlns:terminal="using:AvaloniaTerminal"
+             x:Class="DotnetDeployer.Fleet.App.Views.JobDetailView"
+             x:DataType="vm:JobDetailViewModel">
+
+    <Interaction.Behaviors>
+        <DataContextChangedTrigger>
+            <InvokeCommandAction Command="{Binding RefreshCommand}" />
+        </DataContextChangedTrigger>
+    </Interaction.Behaviors>
+
+    <DockPanel Margin="16">
+
+        <!-- Error banner: shown when the job has an ErrorMessage (Failed/Cancelled). -->
+        <Border DockPanel.Dock="Top"
+                IsVisible="{Binding HasError}"
+                Background="#3A1F1F"
+                BorderBrush="#8B2C2C"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="12"
+                Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="❌" FontSize="18" VerticalAlignment="Top" />
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Job error" FontWeight="SemiBold" Foreground="#FF6B6B" />
+                    <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                CornerRadius="4"
+                Padding="10,6"
+                Margin="0,0,0,8">
+            <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
+                <ContentControl Content="{Icon mdi-timer-outline}"
+                                IconOptions.Size="14"
+                                VerticalAlignment="Center" />
+                <TextBlock Text="Elapsed:" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Opacity="0.8" />
+                <TextBlock Text="{Binding ElapsedText}"
+                           FontWeight="SemiBold" VerticalAlignment="Center" />
+            </FlexPanel>
+        </Border>
+
+        <!-- Current phase badge: shown while a phase is in flight -->
+        <Border DockPanel.Dock="Top"
+                IsVisible="{Binding HasCurrentPhase}"
+                Background="#1F2A3A"
+                BorderBrush="#3A5A8A"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="10,6"
+                Margin="0,0,0,8">
+            <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
+                <TextBlock Text="🔧" FontSize="14" VerticalAlignment="Center" />
+                <TextBlock Text="Current phase:" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Opacity="0.8" />
+                <TextBlock Text="{Binding CurrentPhaseDisplay}"
+                           FontWeight="SemiBold" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+            </FlexPanel>
+        </Border>
+
+        <TextBlock DockPanel.Dock="Top"
+                   Text="Phase status"
+                   FontSize="14"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,8" />
+
+        <Expander DockPanel.Dock="Top"
+                  Header="Package artifacts"
+                  IsExpanded="True"
+                  Margin="0,0,0,8"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Stretch"
+                  IsVisible="{Binding HasArtifacts}">
+            <ItemsControl ItemsSource="{Binding Artifacts}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Padding="10,6" Margin="0,2"
+                                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                CornerRadius="4">
+                            <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="10">
+                                <TextBlock Grid.Column="0" Text="{Binding FileName}"
+                                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1" Text="{Binding SizeText}"
+                                           Opacity="0.65" VerticalAlignment="Center" />
+                                <EnhancedButton Grid.Column="2" Content="Save"
+                                                Icon="{Icon mdi-download}"
+                                                Command="{Binding SaveCommand}"
+                                                Grid.RowSpan="2" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Sha256Text}"
+                                           FontFamily="Consolas,Courier New,monospace"
+                                           FontSize="11" Opacity="0.55" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Expander>
+
+        <Grid>
+            <ScrollViewer IsVisible="{Binding !IsDetailedLogVisible}"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto">
+                <Grid>
+                    <TreeView ItemsSource="{Binding Phases}"
+                              IsVisible="{Binding HasPhases}">
+                        <TreeView.Styles>
+                            <Style Selector="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="True" />
+                            </Style>
+                        </TreeView.Styles>
+                        <TreeView.ItemTemplate>
+                            <TreeDataTemplate x:DataType="vm:JobPhaseRowContainer" ItemsSource="{Binding Content.Children}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
+                                    <TextBlock Grid.Column="0" Text="{Binding Content.Icon}" Margin="0,0,8,0" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Content.DisplayName}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Content.DurationText}"
+                                               Opacity="0.6" FontSize="11" Margin="8,0,0,0" />
+                                </Grid>
+                            </TreeDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                    <TextBlock Text="No phase events yet."
+                               Opacity="0.6"
+                               IsVisible="{Binding !HasPhases}" />
+                </Grid>
+            </ScrollViewer>
+
+            <DockPanel IsVisible="{Binding IsDetailedLogVisible}">
+                <!-- Toolbar: search + severity filter (wraps on narrow widths) -->
+                <Border DockPanel.Dock="Top"
+                        Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                        Padding="8" Margin="0,0,0,8" CornerRadius="4">
+                    <FlexPanel Wrap="Wrap" Gap="8" AlignItems="Center">
+                        <TextBox Name="SearchBox"
+                                 PlaceholderText="Search…" MinWidth="180"
+                                 FlexPanel.Grow="1"
+                                 Text="{Binding SearchText}" />
+                        <TextBlock VerticalAlignment="Center" FontSize="11" Opacity="0.7"
+                                   Text="{Binding SearchResultText}" />
+                        <EnhancedButton Icon="{Icon mdi-chevron-down}" Padding="6,4"
+                                        Command="{Binding NextSearchResultCommand}"
+                                        ToolTip.Tip="Next match" />
+                        <ComboBox ItemsSource="{Binding AvailableSeverities}"
+                                  SelectedItem="{Binding MinSeverity}"
+                                  MinWidth="120"
+                                  ToolTip.Tip="Minimum severity to show" />
+                        <EnhancedButton Content="Copy All" Icon="{Icon mdi-content-copy}"
+                                        Command="{Binding CopyLogsCommand}"
+                                        ToolTip.Tip="Copy all log lines to clipboard" />
+                    </FlexPanel>
+                </Border>
+
+                <!-- Terminal log viewer (LAST child = fills remaining space) -->
+                <terminal:TerminalControl Name="LogTerminal"
+                                          FontFamily="Consolas,Courier New,monospace"
+                                          FontSize="12" />
+            </DockPanel>
+        </Grid>
+
+    </DockPanel>
+
+</UserControl>

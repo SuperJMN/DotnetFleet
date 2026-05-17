@@ -51,9 +51,9 @@ wait_for_url() {
 echo "==> Build (release)..."
 dotnet build "$ROOT/DotnetDeployer.Fleet.slnx" -c Release --nologo -v minimal
 
-COORD_DLL="$ROOT/src/DotnetFleet.Coordinator/bin/Release/net10.0/DotnetFleet.Coordinator.dll"
-WORKER_DLL="$ROOT/src/DotnetFleet.Worker/bin/Release/net10.0/DotnetFleet.Worker.dll"
-DESKTOP_DLL="$ROOT/src/DotnetFleet.Desktop/bin/Release/net10.0/DotnetFleet.Desktop.dll"
+COORD_DLL="$ROOT/src/DotnetDeployer.Fleet.Coordinator/bin/Release/net10.0/DotnetDeployer.Fleet.Coordinator.dll"
+WORKER_DLL="$ROOT/src/DotnetDeployer.Fleet.Worker/bin/Release/net10.0/DotnetDeployer.Fleet.Worker.dll"
+DESKTOP_DLL="$ROOT/src/DotnetDeployer.Fleet.Desktop/bin/Release/net10.0/DotnetDeployer.Fleet.Desktop.dll"
 for d in "$COORD_DLL" "$WORKER_DLL" "$DESKTOP_DLL"; do
   [[ -f "$d" ]] || { echo "!! Falta $d (build falló?)"; exit 1; }
 done
@@ -65,7 +65,7 @@ COORD_PORT="${COORDINATOR_URL##*:}"
 COORD_PORT="${COORD_PORT%%/*}"
 if ss -ltn 2>/dev/null | grep -qE "[:.]${COORD_PORT}\b"; then
   echo "!! El puerto $COORD_PORT ya está en uso. Detén el proceso anterior antes de relanzar."
-  echo "   Pista: pgrep -af DotnetFleet"
+  echo "   Pista: pgrep -af DotnetDeployer.Fleet"
   exit 1
 fi
 echo "==> Coordinator → $COORDINATOR_URL  (workdir: $COORD_DIR, log: $LOG_DIR/coordinator.log)"
